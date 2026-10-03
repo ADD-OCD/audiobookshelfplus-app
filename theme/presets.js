@@ -80,7 +80,9 @@ const KEY_CAP_PRESSED = Object.freeze({ 'background-image': 'none', 'box-shadow'
 // of a fixed color. It is lit from the upper left by a soft sheen and edged in two steps: a lit/dark inner bevel with
 // a faint second highlight line, and a dark outer ring (the channel the key sits in) with a short drop shadow. Every
 // layer is background or shadow paint on the key's existing box, so size, position and hit area cannot change.
-// Pressed: the sheen and drop shadow go, the ring stays, and the face is cut in (inverted bevel plus an inner shade)
+// Pressed: the sheen and drop shadow go, the ring stays, and the face is cut in (inverted bevel plus an inner shade).
+// Phase 4B painted these sets on each key's own box; since Phase 4J the keys are fixed-size faces (below) built from the
+// same sheen, bevel and ring layers, so no rule applies PLAYER_KEY itself any more: it stays the family's reference finish
 const PLAYER_KEY_FACE = 'rgb(var(--color-recessed) / 0.5)'
 // The collapsed player's deck is already close to the recessed color, so its face goes deeper to keep the same step
 const PLAYER_KEY_FACE_MINI = 'rgb(var(--color-recessed) / 0.85)'
@@ -154,6 +156,9 @@ const TRANSPORT_KEY = Object.freeze({
   'box-shadow': `${KEY_FACE_BEVEL}, ${TRANSPORT_KEY_RING}, 0 2px 4px rgb(0 0 0 / 0.5)`
 })
 const TRANSPORT_KEY_PRESSED = Object.freeze({ 'background-color': 'rgb(var(--color-recessed) / 0.84)', 'background-image': 'none', 'box-shadow': `${keyPressedBevel(0.6)}, ${TRANSPORT_KEY_RING}` })
+// Collapsed player: its deck is already close to the recessed color, so the face goes deeper (as the primary's does)
+const TRANSPORT_KEY_MINI = Object.freeze({ ...TRANSPORT_KEY, 'background-color': PLAYER_KEY_FACE_MINI })
+const TRANSPORT_KEY_PRESSED_MINI = Object.freeze({ ...TRANSPORT_KEY_PRESSED, 'background-color': 'rgb(var(--color-recessed) / 0.94)' })
 // Unavailable key: a sunken socket in the same place, unavailable by shape and luminance rather than color. A flat, darker
 // face cut into the deck (dark inner edge, inner shade, a faint lit lip below), no raised bevel, ring or drop, and a
 // strongly dimmed legend
@@ -206,6 +211,9 @@ const QUEUE_BADGE = Object.freeze({ top: 'calc(50% + 4px)', left: 'calc(50% + 6p
 // at 1.0 the arrow's ink matches the chapter glyph's, about 18.5px)
 const JUMP_GLYPH = Object.freeze({ transform: 'translateY(-0.5px) scale(0.82)', 'transform-origin': '50% 100%' })
 const JUMP_DURATION = Object.freeze({ transform: 'translateY(-3px)', 'font-weight': '700' })
+// The collapsed jumps (no duration) at the same fixed scale idea in their 34x34 faces: 0.78, 1px lower to center the arrow's
+// ink (measured at 1.3: 23.2x26.3 in the face, at least 3.2px from every edge; at 1.0 about 18x20)
+const MINI_JUMP_GLYPH = Object.freeze({ transform: 'translateY(1px) scale(0.78)' })
 // Selected equipment key: pressed in (inset bevel and inner shade, so it reads as a different physical state,
 // not just a color) with an accent ring inside the edge
 const SELECTED_KEY = Object.freeze({
@@ -316,6 +324,9 @@ const PRIMITIVES = Object.freeze({
   READOUT_HOST,
   READOUT_WINDOW,
   SLEEP_READOUT_CENTER,
+  TRANSPORT_KEY_MINI,
+  TRANSPORT_KEY_PRESSED_MINI,
+  MINI_JUMP_GLYPH,
   METADATA_READOUT,
   METADATA_READOUT_LAYOUT,
   METADATA_READOUT_ABOVE_TOTAL_TRACK,
@@ -409,8 +420,6 @@ const EQUIPMENT_RULES = [
   // key on their own box (pressed cuts it in). A control that is currently unavailable (key-disabled) has no cap at
   // all, so it reads flat/unavailable by shape, not only by its dimmed glyph. Readouts (speed, sleep countdown)
   // and the round play button are not player keys
-  ['#streamContainer:not(.fullscreen) #playerControls .player-key:not(.key-disabled)', { ...PLAYER_KEY, 'background-color': PLAYER_KEY_FACE_MINI }],
-  ['#streamContainer:not(.fullscreen) #playerControls .player-key:not(.key-disabled):active', PLAYER_KEY_PRESSED],
   // Full-player transport (Phase 4J): chapter start/end and both jumps are 46x50 faces in the primary key's family, one
   // step below it; pressed cuts the face in, an unavailable key is a sunken socket with a strongly dimmed legend
   ['.fullscreen #playerControls .player-key', KEY_FACE_HOST],
@@ -420,6 +429,13 @@ const EQUIPMENT_RULES = [
   ['.fullscreen #playerControls .player-key.key-disabled', KEY_SOCKET_LEGEND],
   ['.fullscreen #playerControls .jump-icon > .material-symbols', JUMP_GLYPH],
   ['.fullscreen #playerControls .jump-label', JUMP_DURATION],
+  // Collapsed player transport (Phase 4J): both jumps are 34x34 faces of the same family, deeper on the darker deck
+  ['#streamContainer:not(.fullscreen) #playerControls .player-key', KEY_FACE_HOST],
+  ['#streamContainer:not(.fullscreen) #playerControls .player-key::before', { ...KEY_FACE.mini, ...TRANSPORT_KEY_MINI }],
+  ['#streamContainer:not(.fullscreen) #playerControls .player-key:not(.key-disabled):active::before', TRANSPORT_KEY_PRESSED_MINI],
+  ['#streamContainer:not(.fullscreen) #playerControls .player-key.key-disabled::before', KEY_SOCKET],
+  ['#streamContainer:not(.fullscreen) #playerControls .player-key.key-disabled', KEY_SOCKET_LEGEND],
+  ['#streamContainer:not(.fullscreen) #playerControls .jump-icon > .material-symbols', MINI_JUMP_GLYPH],
   // Utility keys (Phase 4J): 44x40 faces, restrained bezel, one neutral legend; chapters without chapters is a socket
   ['#playerContent .utility-key', KEY_FACE_HOST],
   ['#playerContent .utility-key::before', { ...KEY_FACE.utility, ...UTILITY_KEY }],
