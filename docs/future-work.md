@@ -95,6 +95,8 @@ Found in Phase 2C Gate H and re-measured during the Phase 2C final acceptance. A
 
 Any fix is geometry-affecting responsive/accessibility work, so it needs its own authorization and a font-scale pass on the S26 Ultra's One UI font-size steps.
 
+Phase 4J (LLAMA key faces) did not change this geometry. In LLAMA the collapsed forward key's visible 34×34 face now ends 2.26px past the screen at 1.3, where the Phase 4B cap on the key's own box ended 4.76px past it, and the arrow is fully on screen.
+
 ## Error-button text contrast
 
 Found in Phase 2C Gate H; shared by every theme. Error buttons (`ui/Btn` with `color="error"`) carry 3.19:1 white text in Dark and Black and 2.79:1 near-white text in LLAMA, below 4.5:1 (Light uses dark text and passes). Gate H fixed only the LLAMA destructive icon-key glyph (non-text, now 3.25:1). A semantic error-action fill, like `state.success-action`, is the likely shape; it needs its own decision.
@@ -119,7 +121,13 @@ User direction recorded in Phase 4H. Phase 4H completed only the primary Play/Pa
 - **Utility controls:** queue, bookmark, sleep and chapters/list. Physical key treatment and the neutral legend hierarchy.
 - **Top player chrome (a separate, later pass):** collapse, cast, overflow and the DIRECT / playback-method display.
 
-The semantic rule stays: playback and transport legends are amber, utility legends are neutral. Not every control becomes amber. None of this is implemented.
+The semantic rule stays: playback and transport legends are amber, utility legends are neutral. Not every control becomes amber.
+
+Phase 4J implemented the transport, utility and collapsed-transport key faces and the speed and sleep readouts (see "LLAMA control-deck key faces" in `docs/theme-architecture.md`). What remains:
+
+- **Top player chrome:** collapse, cast, overflow and the DIRECT / playback-method display. This is the next, separate pass and is not started.
+- **Primary bezel across the row seam (recorded in Phase 4J, not changed):** the Phase 4H primary key's return ring and drop cross the engraved seam between the transport row and the secondary row.
+- **Legends above font scale 1.3:** the transport legends use a fixed equipment scale that fits the fixed faces at 1.0 and 1.3. Larger One UI font steps would need a true maximum legend size, which CSS cannot express under the WebView's text zoom.
 
 ## Seek handle touch target
 

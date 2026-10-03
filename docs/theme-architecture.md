@@ -474,7 +474,7 @@ Paint only, LLAMA only. Phase 4A measured that the player keys were not short of
 - **Dark key face:** `PLAYER_KEY` fills the key with a translucent `surface.recessed` (50%), so it follows the deck's own gradient and stays darker than whatever it sits on. The collapsed player's deck is already close to that color, so `PLAYER_KEY_FACE_MINI` (85%) keeps the same step there.
 - **Edge depth:** a lit upper-left inner edge with a faint second highlight line, a dark lower-right inner edge, a dark outer ring (the channel the key sits in), a short drop shadow and the existing soft sheen. All of it is background or shadow paint on the key's existing box.
 - **Pressed:** `PLAYER_KEY_PRESSED` drops the sheen and the drop shadow, inverts the inner bevel and cuts in an inner shade, keeping the ring. It reads as engaged without moving anything.
-- **Unavailable:** unchanged. A `key-disabled` key matches none of these rules, so it has no face, ring or legend color, only its dimmed glyph. That keeps it distinct from resting, pressed and available.
+- **Unavailable:** unchanged. A `key-disabled` key matches none of these rules, so it has no face, ring or legend color, only its dimmed glyph. That keeps it distinct from resting, pressed and available. (Phase 4J replaced this with a sunken socket; see "LLAMA control-deck key faces".)
 - **Amber is playback only:** the two jump keys and chapter start/end (`jump-icon`, `next-icon`) take `PLAYBACK_LEGEND`, the played-progress amber, for the glyph and the "10s" label. The utility keys (queue, bookmark, sleep, chapters) keep their neutral glyphs. The round play button is not a player key and is untouched: amber on its silver face measures about 2.9:1 on the lower-lit and 1.8:1 on the upper-lit region, so it would fail the 3:1 icon minimum.
 - **Heavier legends:** the bundled Material Symbols font has only a `FILL` axis (no `wght`). `FILL` leaves the stroke-based transport glyphs unchanged and would make the bookmark solid, which already means "has bookmarks". So the transport glyphs get `PLAYBACK_GLYPH_WEIGHT`, a 0.5px `-webkit-text-stroke` in their own color. It adds ink only, and the utility keys stay at regular weight, which keeps the transport legends the heavier tier. If a device renders the stroke poorly, removing that one primitive restores the regular weight.
 
@@ -600,6 +600,58 @@ Measured on the emulator (412×842 CSS px, Book A paused, same session before an
 Every new contract was mutation-tested (round radius, glyph sizes, amber, face depth, drop, inner shade, return ring).
 
 **Not the final fidelity gate.** Phase 4H covers only the primary control. The rest of the non-widget control area moves closer to the mockup in later, separately authorized passes, listed in `docs/future-work.md` under "LLAMA non-widget control fidelity (after Phase 4H)".
+
+## LLAMA control-deck key faces (Phase 4J)
+
+LLAMA only. Phase 4I compared the non-widget control area with the mockup and found that the secondary keys' face was the glyph box itself (chapter 32×32, jumps 30×44.5, utility 30×30, sleep 28×28), so they read as icons with a background. Phase 4J implements its Prototype C: each key gets a deliberate equipment face, and its legend is mounted inside it. The real app stays authoritative for behavior, order, layout and responsive behavior: no key box, row, control position or spacing changes, and the Phase 4H primary is untouched.
+
+**Face mechanism.** The face is the key's `::before` (`KEY_FACE`), a fixed-size plate centered on the key's unchanged box (`top`/`left` from 50%), drawn under the legend (`z-index: -1` inside the key's own stacking context, `isolation: isolate`). The key only becomes the plate's containing block (`position: relative`, no offsets). A pseudo-element is hit-tested as its element, so the whole visible face is the key's touch target, larger than the old glyph box, with no layout change and no z-index workaround. The face's `content: ''` is the recipe's one quoted value. The presentation security test allows exactly that value on repository-owned `::before` face rules, and a regression test shows that theme data cannot reach it.
+
+**Fixed face tiers (CSS px, never content- or font-driven):**
+
+| Tier                                                    | Face          | Finish                                                                                                                                                                                     |
+| ------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Full transport (chapter start/end, both jumps)          | 46×50         | `TRANSPORT_KEY`: the primary's face, sheen, inner bevel and channel, one step below it: lit return 0.18 (primary 0.3), drop `0 2px 4px` (primary `0 3px 5px`). Amber legend.               |
+| Utility (queue, bookmark, sleep, chapters)              | 44×40         | `UTILITY_KEY`: the same face family with a restrained bezel (inner bevel and channel, no lit return) and the `0 2px 3px` drop. One neutral legend, `UTILITY_LEGEND` (primary text at 0.8). |
+| Collapsed transport (both jumps)                        | 34×34         | `TRANSPORT_KEY_MINI`: the transport finish with the deeper fill of the darker collapsed deck. Amber legend.                                                                                |
+| Primary Play/Pause (Phase 4H, unchanged, for reference) | 65×65 / 40×40 | `PRIMARY_KEY` on the button's own box.                                                                                                                                                     |
+
+- **Pressed:** the Phase 4H model on every tier. The sheen and drop go, the face deepens, the bevel inverts with an inner shade, and the channel (and the transport return) stay. Nothing moves.
+- **Unavailable (`key-disabled`):** a sunken socket (`KEY_SOCKET`) in the same place: a flat, darker face cut into the deck (dark inner edge, inner shade, a faint lit lip below), with no raised bevel, ring or drop, and a strongly dimmed legend (`KEY_SOCKET_LEGEND`, primary text at 0.22). It is unavailable by shape and luminance, not color. A disabled face still belongs to its key; the key's handler already ignores it (as the glyph always did), so a tap there does nothing and no longer falls through to the container. This replaces Phase 4B's "no cap at all".
+- **Semantics:** amber is playback (the four transport keys and the primary), neutral is utility, and green is readout. No key is green or success-colored, and the filled bookmark state is unchanged.
+- **Semantic hooks:** `utility-key` plus `queue-key`, `bookmark-key`, `sleep-key` and `chapters-key`, and `speed-readout`. The inactive sleep icon sits in a flex `span` that is exactly its 28px box and carries the key hooks and the click (an `svg` has no `::before`). The player has no theme-id branch.
+
+**Legends at font scale 1.3 (the Phase 4J stop and its resolution).** Android's font scale reaches the WebView as text zoom. It multiplies every computed font size (rem, px, `vw` and `min()` alike, measured) and ignores `text-size-adjust`, while px and em lengths stay unzoomed. So the fixed faces stay fixed and the legends grow. At 1.3 the full jump legend (arrow plus duration, 29.7×49.1 CSS px) crossed the 46×50 face, and the collapsed arrow (29.7×33.9) crossed the 34×34 face. Enlarging the transport faces to 46×56 was rejected: the key is the fixed hardware, and the legend has a maximum printed size. A font-size cap is not possible here, and a smaller legend font would also shrink the key's box and move the row. The legends are therefore drawn at a fixed equipment scale with transforms, which move no box:
+
+- **Full jumps (`JUMP_GLYPH`, `JUMP_DURATION`):** the arrow at 0.82 toward its duration. The duration keeps its size, becomes bold and stays dynamic (the jump settings, never a fixed "10s"), and the two are centered as one legend. At 1.3 the ink is 24.4×41.9, at least 3.6px from every face edge (4.4 top, 3.6 bottom). At 1.0 it is 18.7×32 (9px clear), and the arrow's ink then matches the chapter glyph's (about 18.5px). The arrow is about 18% smaller at 1.0 than before this phase: that is the cost of a fixed legend scale that also fits 1.3.
+- **Collapsed jumps (`MINI_JUMP_GLYPH`):** 0.78, 1px lower. At 1.3 the ink is 23.2×26.3, 4.5 top / 3.2 bottom in the face. At 1.0 it is about 18×20.
+- **Chapter steps:** keep their 2rem glyph. A 2.25rem glyph cannot keep its box at 1.3 (the box is sized in em, which text zoom does not scale, so the row moved), so it was dropped.
+- **Above 1.3:** a fixed scale is a fixed fraction of a zoomed legend. Larger One UI font steps were not part of this phase.
+
+**Readouts (C2).** Playback speed and the running sleep countdown are information, not keys. Each is a recessed display window (`READOUT_WINDOW`) drawn by its text's own `::before`: recessed fill, recessed-well edges and a dark rim, never a raised face and never amber. The existing phosphor green text sits inside (12.3:1). The window follows its text (value and font scale), takes no taps (`pointer-events: none`), and each readout keeps its own click. The countdown text is wider than its 28px box and used to overflow to the right. A transform centers it on the sleep key's place.
+
+**Queue badge.** The "Q" badge (14px) is anchored 2px inside the face's lower-right corner, not on the corner of the glyph box. The glyph box grows with the font scale while the face does not, and at 1.3 the badge had left the face (1.5px right, 3.5px down). It now has a thin dark ring. The badge stays part of the queue key, so a tap on it opens the queue.
+
+Measured on the emulator (412×842 CSS px, Book A):
+
+- **Contrast (rendered pixels):** amber legend 10.4:1 at rest and 10.9:1 pressed, duration 10.4–10.9:1 (1.0 and 1.3), collapsed amber 11.2:1, utility legend 9.6–9.9:1, readout green 12.3:1. The socket legend is 1.9:1 on purpose.
+- **Hit testing:** every enabled and disabled face resolves to its own key at its center, near-corners and edges, with no overlaps. At 1.3 a key's glyph text (its font ascent and descent) and the jump key's own 57px box still take taps up to 4px above and below the face. That is each key's existing hit area, and no neighbor's: the smallest gap between two keys' hit regions is 5.2px (bookmark and rewind, across the rows), and 7px between the collapsed jumps and the primary.
+- **Collapsed player at 1.3:** the existing responsive defect remains (the controls group is a fixed 128px while its keys grow, so the forward key's box ends past the screen). Its visible face ends 2.26px off-screen, where the Phase 4B cap on the key's own box ended 4.76px off-screen, and the arrow is now complete on screen instead of reaching the edge. So the defect is not worsened, and the enlarged collapsed faces are implemented, not deferred. Fixing the defect itself is still separate responsive work (`docs/future-work.md`, "Font scale 1.3 geometry").
+- **Recorded, not changed:** the Phase 4H primary key's return ring and drop cross the engraved seam between the transport row and the secondary row (the primary is 65px tall in a 65px control row, and its outer bezel lies outside its box).
+
+`tests/theme-llama.test.mjs` keeps the contract:
+
+- the exact px tiers, centered and never font- or content-sized;
+- the face as part of its key (no pointer-events opt-out, `z-index: -1` inside the key's isolation, no other z-index);
+- the hooks and the layout-neutral sleep wrapper, with no theme-id branch;
+- the transport family one step below the primary, and the pressed and socket states;
+- the fixed legend scale (transforms only), dynamic durations and the 2rem chapter glyph;
+- the neutral utility legend and the badge inside the face;
+- the recessed green readouts;
+- contrast;
+- LLAMA-only compiled CSS, and the frozen primary.
+
+Twenty mutations of these contracts (face size, em-sized face, amber, neutral utility, success green, readout green, raised readout, primary ring and glyph, unscoped rule, Dark getting the recipe, raised socket, undimmed socket legend, pointer-events, z-index, isolation, font-size legend, widened content exception, a hard-coded "10s", the sleep click back on the svg) all fail the suite.
 
 ## Content-derived color (intentionally not tokens)
 
