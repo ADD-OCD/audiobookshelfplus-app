@@ -66,23 +66,26 @@
       <div v-if="showFullscreen" class="absolute bottom-4 left-0 right-0 w-full pb-4 pt-2 mx-auto px-6" style="max-width: 414px">
         <div class="flex items-center justify-between pointer-events-auto">
           <!-- Optional queue icon: list glyph with a bordered "Q" badge, matches the chapters icon style -->
-          <div v-if="playerSettings.showQueueIcon" class="player-key relative cursor-pointer" @click="$emit('showQueue')">
+          <div v-if="playerSettings.showQueueIcon" class="player-key utility-key queue-key relative cursor-pointer" @click="$emit('showQueue')">
             <span class="material-symbols text-3xl text-fg-muted">format_list_bulleted</span>
             <span class="absolute -bottom-1 -right-1 flex items-center justify-center rounded-full border border-fg-muted bg-bg text-fg-muted" style="width: 14px; height: 14px; font-size: 9px; line-height: 1">Q</span>
           </div>
-          <span v-if="!isPodcast && serverLibraryItemId && socketConnected" class="player-key material-symbols text-3xl text-fg-muted cursor-pointer" :class="{ fill: bookmarks.length }" @click="$emit('showBookmarks')">bookmark</span>
+          <span v-if="!isPodcast && serverLibraryItemId && socketConnected" class="player-key utility-key bookmark-key material-symbols text-3xl text-fg-muted cursor-pointer" :class="{ fill: bookmarks.length }" @click="$emit('showBookmarks')">bookmark</span>
           <!-- hidden for podcasts but still using this as a placeholder -->
           <span v-else class="material-symbols text-3xl text-white text-opacity-0">bookmark</span>
 
-          <span class="font-mono text-fg-muted cursor-pointer" style="font-size: 1.35rem" @click="$emit('selectPlaybackSpeed')">{{ currentPlaybackRate }}x</span>
-          <svg v-if="!sleepTimerRunning" xmlns="http://www.w3.org/2000/svg" class="player-key h-7 w-7 text-fg-muted cursor-pointer" fill="none" viewBox="0 0 24 24" stroke="currentColor" @click.stop="$emit('showSleepTimer')">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-          </svg>
+          <span class="speed-readout font-mono text-fg-muted cursor-pointer" style="font-size: 1.35rem" @click="$emit('selectPlaybackSpeed')">{{ currentPlaybackRate }}x</span>
+          <!-- Sleep key: the wrapper is the key (flex, so it is exactly the icon's box); the icon is its legend -->
+          <span v-if="!sleepTimerRunning" class="player-key utility-key sleep-key flex cursor-pointer" @click.stop="$emit('showSleepTimer')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-fg-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+          </span>
           <div v-else class="h-7 w-7 flex items-center justify-around cursor-pointer" @click.stop="$emit('showSleepTimer')">
             <p class="sleep-readout text-xl font-mono text-success">{{ sleepTimeRemainingPretty }}</p>
           </div>
 
-          <span class="player-key material-symbols text-3xl text-fg cursor-pointer" :class="chapters.length ? 'text-opacity-75' : 'text-opacity-10 key-disabled'" @click="clickChaptersBtn">format_list_bulleted</span>
+          <span class="player-key utility-key chapters-key material-symbols text-3xl text-fg cursor-pointer" :class="chapters.length ? 'text-opacity-75' : 'text-opacity-10 key-disabled'" @click="clickChaptersBtn">format_list_bulleted</span>
         </div>
       </div>
       <div v-else class="w-full h-full absolute top-0 left-0 pointer-events-none" style="background: var(--gradient-minimized-audio-player)" />

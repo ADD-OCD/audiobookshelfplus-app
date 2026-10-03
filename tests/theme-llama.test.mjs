@@ -406,16 +406,17 @@ test('Gate B semantic hooks: player keys, unavailable state and sleep readout ar
   assert.equal((template.match(/class="player-key /g) || []).length, 8)
   assert.equal((template.match(/class="player-key [^"]*next-icon/g) || []).length, 2)
   assert.equal((template.match(/class="player-key [^"]*jump-icon/g) || []).length, 2)
-  assert.match(template, /v-if="playerSettings\.showQueueIcon" class="player-key relative cursor-pointer"/)
-  assert.match(template, /class="player-key material-symbols text-3xl text-fg-muted cursor-pointer" :class="\{ fill: bookmarks\.length \}"/)
-  assert.match(template, /<svg v-if="!sleepTimerRunning" xmlns="http:\/\/www\.w3\.org\/2000\/svg" class="player-key h-7 w-7/)
-  assert.match(template, /class="player-key material-symbols text-3xl text-fg cursor-pointer" :class="chapters\.length \? 'text-opacity-75' : 'text-opacity-10 key-disabled'"/)
+  // The four secondary-row keys also carry the utility hooks (Phase 4J); the sleep key is the icon's wrapper
+  assert.match(template, /v-if="playerSettings\.showQueueIcon" class="player-key utility-key queue-key relative cursor-pointer"/)
+  assert.match(template, /class="player-key utility-key bookmark-key material-symbols text-3xl text-fg-muted cursor-pointer" :class="\{ fill: bookmarks\.length \}"/)
+  assert.match(template, /<span v-if="!sleepTimerRunning" class="player-key utility-key sleep-key flex cursor-pointer" @click\.stop="\$emit\('showSleepTimer'\)">\s*<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" class="h-7 w-7 text-fg-muted"/)
+  assert.match(template, /class="player-key utility-key chapters-key material-symbols text-3xl text-fg cursor-pointer" :class="chapters\.length \? 'text-opacity-75' : 'text-opacity-10 key-disabled'"/)
   // Unavailable keys are marked together with the existing dimmed glyph state, never instead of it
   assert.equal((template.match(/'text-opacity-10 key-disabled'/g) || []).length, 5)
   assert.doesNotMatch(template, /'text-opacity-10'/)
   // The invisible podcast placeholder, the speed readout and the round play button are not keys
   assert.match(template, /<span v-else class="material-symbols text-3xl text-white text-opacity-0">bookmark<\/span>/)
-  assert.match(template, /<span class="font-mono text-fg-muted cursor-pointer" style="font-size: 1\.35rem"/)
+  assert.match(template, /<span class="speed-readout font-mono text-fg-muted cursor-pointer" style="font-size: 1\.35rem"/)
   assert.doesNotMatch(template, /player-key[^"]*play-btn|play-btn[^"]*player-key/)
   assert.match(template, /<p class="sleep-readout text-xl font-mono text-success">/)
   // The geometry the hooks sit on is unchanged: 120px mini-player, 200px fullscreen panel, control sizes
@@ -495,7 +496,8 @@ test('Gate C rules: paint only, built from the shared primitives, under the LLAM
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
   const rule = (s) => rules[`${root} ${s}`]
-  const gateC = Object.entries(rules).filter(([s]) => /queue-current|queue-row|playback-option-panel|speed-readout|\.modal \.sleep-readout|bookmark/.test(s))
+  // The overlays' rules only: the player's own speed readout and bookmark key (#playerContent) are Phase 4J's
+  const gateC = Object.entries(rules).filter(([s]) => !s.includes('#playerContent') && /queue-current|queue-row|playback-option-panel|speed-readout|\.modal \.sleep-readout|bookmark/.test(s))
   assert.ok(gateC.length >= 14, `${gateC.length} rules`)
   for (const [selector, declarations] of gateC) {
     assert.ok(selector.startsWith(`${root} .modal `), selector)
@@ -957,7 +959,7 @@ test('Phase 4B amber is playback only: both jumps and chapter start/end; utility
   const template = player.slice(0, player.indexOf('</template>'))
   assert.equal((template.match(/jump-icon/g) || []).length, 2)
   assert.equal((template.match(/next-icon/g) || []).length, 2)
-  for (const utility of [/showQueueIcon" class="[^"]*"/, /class="player-key material-symbols text-3xl text-fg-muted[^"]*"/, /<svg v-if="!sleepTimerRunning"[^>]*class="[^"]*"/, /class="player-key material-symbols text-3xl text-fg cursor-pointer"/]) {
+  for (const utility of [/showQueueIcon" class="[^"]*"/, /class="player-key utility-key bookmark-key [^"]*"/, /<span v-if="!sleepTimerRunning"[^>]*class="[^"]*"/, /class="player-key utility-key chapters-key [^"]*"/]) {
     const m = template.match(utility)
     assert.ok(m, String(utility))
     assert.doesNotMatch(m[0], /jump-icon|next-icon/, m[0])

@@ -344,7 +344,7 @@ const EQUIPMENT_RULES = [
   // Phosphor-green readouts: timestamps, playback speed and the playback-method label (titles stay neutral)
   ['#playerTrack p.font-mono', { color: 'rgb(var(--color-accent))' }],
   ['.total-track p.font-mono', { color: 'rgb(var(--color-accent))' }],
-  ['#playerContent span.font-mono', { color: 'rgb(var(--color-accent))' }],
+  ['#playerContent .speed-readout', { color: 'rgb(var(--color-accent))' }],
   ['#streamContainer p.tracking-widest', { color: 'rgb(var(--color-accent) / 0.85)' }],
   // Full-player metadata readout (title/chapter and author): recessed display in a bezel plate, plus its authorized
   // metadata-only layout. The collapsed player's block (no .fullscreen) is untouched
