@@ -163,6 +163,20 @@ const KEY_SOCKET = Object.freeze({
   'box-shadow': 'inset 0 0 0 1px rgb(var(--color-edge-dark)), inset 0 2px 4px rgb(0 0 0 / 0.5), 0 1px 0 rgb(var(--color-edge-light) / 0.14)'
 })
 const KEY_SOCKET_LEGEND = Object.freeze({ color: 'rgb(var(--color-fg) / 0.22)' })
+// Utility keys (queue, bookmark, sleep, chapters): the same face family with a restrained bezel, the inner bevel and the dark
+// channel only (no lit return) and the player keys' short drop, on a slightly smaller, lower face. One neutral legend for
+// all four (the primary text at 0.8, never amber or the success green): they are not playback controls
+const UTILITY_KEY = Object.freeze({
+  'background-color': 'rgb(var(--color-recessed) / 0.6)',
+  'background-image': PLAYER_KEY_SHEEN,
+  'box-shadow': `${KEY_FACE_BEVEL}, ${PLAYER_KEY_RING}, 0 2px 3px rgb(0 0 0 / 0.5)`
+})
+const UTILITY_KEY_PRESSED = Object.freeze({ 'background-color': 'rgb(var(--color-recessed) / 0.8)', 'background-image': 'none', 'box-shadow': `${keyPressedBevel(0.55)}, ${PLAYER_KEY_RING}` })
+const UTILITY_LEGEND = Object.freeze({ color: 'rgb(var(--color-fg) / 0.8)' })
+// The queue key's "Q" badge sits in the face's lower-right corner, 2px inside it, instead of on the corner of the glyph box
+// (which grows with the font scale while the face does not, so at 1.3 the badge left the face). Same 14px badge, with a
+// thin dark ring that seats it on the face
+const QUEUE_BADGE = Object.freeze({ top: 'calc(50% + 4px)', left: 'calc(50% + 6px)', bottom: 'auto', right: 'auto', 'box-shadow': '0 0 0 1px rgb(var(--color-edge-dark))' })
 // Transport legends inside the faces: a printed legend has a fixed equipment scale, so it stays inside the fixed face at
 // font scale 1.3. CSS cannot cap it by font size: the WebView's text zoom multiplies every computed font size (rem, px, vw,
 // min() alike) and ignores text-size-adjust, and a smaller glyph font would also shrink the key's box and move the row. So
@@ -276,6 +290,10 @@ const PRIMITIVES = Object.freeze({
   KEY_SOCKET_LEGEND,
   JUMP_GLYPH,
   JUMP_DURATION,
+  UTILITY_KEY,
+  UTILITY_KEY_PRESSED,
+  UTILITY_LEGEND,
+  QUEUE_BADGE,
   METADATA_READOUT,
   METADATA_READOUT_LAYOUT,
   METADATA_READOUT_ABOVE_TOTAL_TRACK,
@@ -369,8 +387,6 @@ const EQUIPMENT_RULES = [
   // key on their own box (pressed cuts it in). A control that is currently unavailable (key-disabled) has no cap at
   // all, so it reads flat/unavailable by shape, not only by its dimmed glyph. Readouts (speed, sleep countdown)
   // and the round play button are not player keys
-  ['#playerContent .utility-key:not(.key-disabled)', PLAYER_KEY],
-  ['#playerContent .utility-key:not(.key-disabled):active', PLAYER_KEY_PRESSED],
   ['#streamContainer:not(.fullscreen) #playerControls .player-key:not(.key-disabled)', { ...PLAYER_KEY, 'background-color': PLAYER_KEY_FACE_MINI }],
   ['#streamContainer:not(.fullscreen) #playerControls .player-key:not(.key-disabled):active', PLAYER_KEY_PRESSED],
   // Full-player transport (Phase 4J): chapter start/end and both jumps are 46x50 faces in the primary key's family, one
@@ -382,6 +398,16 @@ const EQUIPMENT_RULES = [
   ['.fullscreen #playerControls .player-key.key-disabled', KEY_SOCKET_LEGEND],
   ['.fullscreen #playerControls .jump-icon > .material-symbols', JUMP_GLYPH],
   ['.fullscreen #playerControls .jump-label', JUMP_DURATION],
+  // Utility keys (Phase 4J): 44x40 faces, restrained bezel, one neutral legend; chapters without chapters is a socket
+  ['#playerContent .utility-key', KEY_FACE_HOST],
+  ['#playerContent .utility-key::before', { ...KEY_FACE.utility, ...UTILITY_KEY }],
+  ['#playerContent .utility-key:not(.key-disabled):active::before', UTILITY_KEY_PRESSED],
+  ['#playerContent .utility-key.key-disabled::before', KEY_SOCKET],
+  ['#playerContent .utility-key.key-disabled', KEY_SOCKET_LEGEND],
+  ['#playerContent .utility-key:not(.key-disabled)', UTILITY_LEGEND],
+  ['#playerContent .utility-key:not(.key-disabled) > .material-symbols', UTILITY_LEGEND],
+  ['#playerContent .utility-key:not(.key-disabled) > svg', UTILITY_LEGEND],
+  ['#playerContent .queue-key > span.absolute', QUEUE_BADGE],
   // Playback legends: only the transport keys (both jumps, chapter start/end) take the amber; the utility keys
   // (queue, bookmark, sleep, chapters) keep their neutral glyphs. An unavailable key is excluded and keeps its dimmed glyph
   ['#playerContent .jump-icon:not(.key-disabled)', PLAYBACK_LEGEND],

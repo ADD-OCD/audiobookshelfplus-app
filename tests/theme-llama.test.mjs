@@ -1057,7 +1057,10 @@ const READOUT_LAYOUT_PROPERTIES = {
   '.fullscreen #playerControls .player-key': ['position'],
   '.fullscreen #playerControls .player-key::before': FACE_PLATE,
   '.fullscreen #playerControls .jump-icon > .material-symbols': ['transform', 'transform-origin'],
-  '.fullscreen #playerControls .jump-label': ['transform', 'font-weight']
+  '.fullscreen #playerControls .jump-label': ['transform', 'font-weight'],
+  '#playerContent .utility-key': ['position'],
+  '#playerContent .utility-key::before': FACE_PLATE,
+  '#playerContent .queue-key > span.absolute': ['top', 'left', 'bottom', 'right']
 }
 
 test('Phase 4E readout is a recessed well in a bezel plate: frozen, paint-only, from the shared primitives', () => {
