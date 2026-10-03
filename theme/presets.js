@@ -127,6 +127,52 @@ const PLAYBACK_LEGEND = Object.freeze({ color: 'rgb(var(--color-track-cursor))' 
 // glyphs unchanged), so the transport glyphs get a hairline stroke in their own color. It adds ink, never layout, and
 // the utility keys stay at the font's regular weight, which keeps the transport legends the heavier tier
 const PLAYBACK_GLYPH_WEIGHT = Object.freeze({ '-webkit-text-stroke': '0.5px currentColor' })
+
+// --- Phase 4J: control-deck key faces ---
+// A secondary key's face is painted by its ::before: a fixed-size plate centered on the key's unchanged box, so the glyph
+// (and a jump's duration) is a legend mounted inside a deliberate key rather than an icon with a background. The tiers
+// are fixed CSS px, never content- or font-driven (the system font scale zooms the legends, not px lengths): 46x50
+// full-player transport, 44x40 utility, 34x34 collapsed transport. The face is part of the key: it is drawn under the
+// legend (z-index -1 inside the key's own stacking context) and takes the key's taps, so the whole visible face is
+// interactive without moving or resizing any box. It is centered from 50% of the key's box, which makes the key its
+// containing block (position: relative, no offsets: nothing moves). The face's content is the empty string, the one
+// quoted value in the recipe
+const KEY_FACE_HOST = Object.freeze({ position: 'relative', isolation: 'isolate' })
+const KEY_FACE_CONTENT = "''"
+const keyFace = (width, height) => Object.freeze({ content: KEY_FACE_CONTENT, position: 'absolute', top: `calc(50% - ${height / 2}px)`, left: `calc(50% - ${width / 2}px)`, width: `${width}px`, height: `${height}px`, 'z-index': '-1', 'border-radius': RADIUS.key })
+const KEY_FACE = Object.freeze({ transport: keyFace(46, 50), utility: keyFace(44, 40), mini: keyFace(34, 34) })
+// Face finish, the Phase 4H primary key's family: the same dark recessed face, sheen and inner bevel (lit edge, faint second
+// highlight, dark edge) and the same pressed model (sheen and drop go, the face deepens, the bevel inverts with an inner
+// shade, the channel stays). Secondary transport is one step below the primary: a weaker lit return ring (0.18, primary
+// 0.3) and a shorter drop (0 2px 4px, primary 0 3px 5px), on a smaller face
+const KEY_FACE_BEVEL = 'inset 1px 1px 0 rgb(var(--color-edge-light) / 0.6), inset 2px 2px 0 rgb(var(--color-edge-light) / 0.12), inset -1px -1px 0 rgb(var(--color-edge-dark))'
+const keyPressedBevel = (shade) => `inset 1px 1px 0 rgb(var(--color-edge-dark)), inset -1px -1px 0 rgb(var(--color-edge-light) / 0.3), inset 0 3px 6px rgb(0 0 0 / ${shade})`
+const TRANSPORT_KEY_RING = `${PLAYER_KEY_RING}, 0 0 0 2px rgb(var(--color-edge-light) / 0.18)`
+const TRANSPORT_KEY = Object.freeze({
+  'background-color': 'rgb(var(--color-recessed) / 0.66)',
+  'background-image': PLAYER_KEY_SHEEN,
+  'box-shadow': `${KEY_FACE_BEVEL}, ${TRANSPORT_KEY_RING}, 0 2px 4px rgb(0 0 0 / 0.5)`
+})
+const TRANSPORT_KEY_PRESSED = Object.freeze({ 'background-color': 'rgb(var(--color-recessed) / 0.84)', 'background-image': 'none', 'box-shadow': `${keyPressedBevel(0.6)}, ${TRANSPORT_KEY_RING}` })
+// Unavailable key: a sunken socket in the same place, unavailable by shape and luminance rather than color. A flat, darker
+// face cut into the deck (dark inner edge, inner shade, a faint lit lip below), no raised bevel, ring or drop, and a
+// strongly dimmed legend
+const KEY_SOCKET = Object.freeze({
+  'background-color': 'rgb(var(--color-recessed) / 0.4)',
+  'background-image': 'none',
+  'box-shadow': 'inset 0 0 0 1px rgb(var(--color-edge-dark)), inset 0 2px 4px rgb(0 0 0 / 0.5), 0 1px 0 rgb(var(--color-edge-light) / 0.14)'
+})
+const KEY_SOCKET_LEGEND = Object.freeze({ color: 'rgb(var(--color-fg) / 0.22)' })
+// Transport legends inside the faces: a printed legend has a fixed equipment scale, so it stays inside the fixed face at
+// font scale 1.3. CSS cannot cap it by font size: the WebView's text zoom multiplies every computed font size (rem, px, vw,
+// min() alike) and ignores text-size-adjust, and a smaller glyph font would also shrink the key's box and move the row. So
+// the legend is drawn at a fixed scale with transforms, which move nothing. The chapter steps keep their 2rem glyph (a
+// larger one cannot keep its box at 1.3: text zoom scales font sizes but not em lengths). The jump arrow is drawn at 0.82
+// toward its duration, which keeps its own size and weight (bold) so the dynamic duration stays readable, and the two sit
+// as one legend centered in the face (measured ink at 1.3: 24.4x41.9 in the 46x50 face, at least 3.6px from every edge;
+// at 1.0 the arrow's ink matches the chapter glyph's, about 18.5px)
+const JUMP_GLYPH = Object.freeze({ transform: 'translateY(-0.5px) scale(0.82)', 'transform-origin': '50% 100%' })
+const JUMP_DURATION = Object.freeze({ transform: 'translateY(-3px)', 'font-weight': '700' })
 // Selected equipment key: pressed in (inset bevel and inner shade, so it reads as a different physical state,
 // not just a color) with an accent ring inside the edge
 const SELECTED_KEY = Object.freeze({
@@ -222,6 +268,14 @@ const PRIMITIVES = Object.freeze({
   PLAYER_KEY_FACE_MINI,
   PLAYBACK_LEGEND,
   PLAYBACK_GLYPH_WEIGHT,
+  KEY_FACE_HOST,
+  KEY_FACE,
+  TRANSPORT_KEY,
+  TRANSPORT_KEY_PRESSED,
+  KEY_SOCKET,
+  KEY_SOCKET_LEGEND,
+  JUMP_GLYPH,
+  JUMP_DURATION,
   METADATA_READOUT,
   METADATA_READOUT_LAYOUT,
   METADATA_READOUT_ABOVE_TOTAL_TRACK,
@@ -315,9 +369,19 @@ const EQUIPMENT_RULES = [
   // key on their own box (pressed cuts it in). A control that is currently unavailable (key-disabled) has no cap at
   // all, so it reads flat/unavailable by shape, not only by its dimmed glyph. Readouts (speed, sleep countdown)
   // and the round play button are not player keys
-  ['#playerContent .player-key:not(.key-disabled)', PLAYER_KEY],
-  ['#playerContent .player-key:not(.key-disabled):active', PLAYER_KEY_PRESSED],
-  ['#streamContainer:not(.fullscreen) #playerContent .player-key:not(.key-disabled)', { 'background-color': PLAYER_KEY_FACE_MINI }],
+  ['#playerContent .utility-key:not(.key-disabled)', PLAYER_KEY],
+  ['#playerContent .utility-key:not(.key-disabled):active', PLAYER_KEY_PRESSED],
+  ['#streamContainer:not(.fullscreen) #playerControls .player-key:not(.key-disabled)', { ...PLAYER_KEY, 'background-color': PLAYER_KEY_FACE_MINI }],
+  ['#streamContainer:not(.fullscreen) #playerControls .player-key:not(.key-disabled):active', PLAYER_KEY_PRESSED],
+  // Full-player transport (Phase 4J): chapter start/end and both jumps are 46x50 faces in the primary key's family, one
+  // step below it; pressed cuts the face in, an unavailable key is a sunken socket with a strongly dimmed legend
+  ['.fullscreen #playerControls .player-key', KEY_FACE_HOST],
+  ['.fullscreen #playerControls .player-key::before', { ...KEY_FACE.transport, ...TRANSPORT_KEY }],
+  ['.fullscreen #playerControls .player-key:not(.key-disabled):active::before', TRANSPORT_KEY_PRESSED],
+  ['.fullscreen #playerControls .player-key.key-disabled::before', KEY_SOCKET],
+  ['.fullscreen #playerControls .player-key.key-disabled', KEY_SOCKET_LEGEND],
+  ['.fullscreen #playerControls .jump-icon > .material-symbols', JUMP_GLYPH],
+  ['.fullscreen #playerControls .jump-label', JUMP_DURATION],
   // Playback legends: only the transport keys (both jumps, chapter start/end) take the amber; the utility keys
   // (queue, bookmark, sleep, chapters) keep their neutral glyphs. An unavailable key is excluded and keeps its dimmed glyph
   ['#playerContent .jump-icon:not(.key-disabled)', PLAYBACK_LEGEND],
@@ -521,4 +585,4 @@ function presentationMediaRules(themes) {
 
 const builtinPresentationMediaRules = () => presentationMediaRules(engine.THEMES)
 
-module.exports = { presentationRules, builtinPresentationRules, presentationMediaRules, builtinPresentationMediaRules, equipmentDerivedDeclarations, EQUIPMENT_RULES, EQUIPMENT_MEDIA_RULES, PRIMITIVES }
+module.exports = { KEY_FACE_CONTENT, presentationRules, builtinPresentationRules, presentationMediaRules, builtinPresentationMediaRules, equipmentDerivedDeclarations, EQUIPMENT_RULES, EQUIPMENT_MEDIA_RULES, PRIMITIVES }

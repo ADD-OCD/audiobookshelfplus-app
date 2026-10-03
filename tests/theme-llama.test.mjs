@@ -321,7 +321,8 @@ test('Gate A rules compile through Tailwind with their exact values; standard th
 
 // --- Phase 2C Gate B: full player and mini-player equipment fidelity (paint only) ---
 
-const GATE_B = ['.fullscreen .cover-wrapper', '.fullscreen #playerContent', '.fullscreen #playerControls', '#streamContainer:not(.fullscreen) #playerTrack', '#playerContent .player-key:not(.key-disabled)', '#playerContent .player-key:not(.key-disabled):active', '#playerContent .sleep-readout', '#playerTrack .bg-track-cursor.bg-yellow-300']
+// The player keys' own rules are Phase 4J key faces (tested below); Gate B keeps the deck, seams, readouts and seek states
+const GATE_B = ['.fullscreen .cover-wrapper', '.fullscreen #playerContent', '.fullscreen #playerControls', '#streamContainer:not(.fullscreen) #playerTrack', '#playerContent .sleep-readout', '#playerTrack .bg-track-cursor.bg-yellow-300']
 
 test('Gate B player rules are paint only, built from the shared primitives', () => {
   const P = presets.PRIMITIVES
@@ -343,9 +344,6 @@ test('Gate B player rules are paint only, built from the shared primitives', () 
   // Seams: transport vs secondary row (fullscreen), panel vs seek region (mini)
   assert.deepEqual(rule('.fullscreen #playerControls'), { 'box-shadow': P.ENGRAVED_SEPARATOR })
   assert.deepEqual(rule('#streamContainer:not(.fullscreen) #playerTrack'), { 'box-shadow': P.ENGRAVED_SEPARATOR_TOP })
-  // Keys: the player-key primitive (dark face, Phase 4B); pressed cuts it in; unavailable keys get no cap
-  assert.deepEqual(rule('#playerContent .player-key:not(.key-disabled)'), { ...P.PLAYER_KEY })
-  assert.deepEqual(rule('#playerContent .player-key:not(.key-disabled):active'), { ...P.PLAYER_KEY_PRESSED })
   // Recessed displays keep their content-box well and squared radius, now with a recessed face
   for (const s of ['.fullscreen #playerTrack', '.fullscreen .total-track']) {
     assert.equal(rule(s)['background-image'], P.RECESSED_FACE, s)
@@ -440,7 +438,7 @@ test('Gate B rules compile through Tailwind under the LLAMA root only', async ()
     return css.slice(i, css.indexOf('}', i))
   }
   const root = "html[data-theme='llama']"
-  assert.match(block(`${root} #playerContent .player-key:not(.key-disabled)`), /border-radius: 4px;[\s\S]*background-image: linear-gradient/)
+  assert.match(block(`${root} .fullscreen #playerControls .player-key::before`), /border-radius: 4px;[\s\S]*background-image: linear-gradient/)
   assert.match(block(`${root} #playerContent .sleep-readout`), /color: rgb\(var\(--color-accent\)\)/)
   assert.match(block(`${root} #playerTrack .bg-track-cursor.bg-yellow-300`), /background-image: repeating-linear-gradient/)
   assert.match(block(`${root} #playerTrack .seek-dragging > .bg-track-cursor.bg-yellow-300`), /background-image: none/)
@@ -861,7 +859,8 @@ test('Gate H: the LLAMA destructive key glyph is pure white (non-text contrast),
 
 const PAINT_ONLY = /^(background-color|background-image|box-shadow|border-radius|color|-webkit-text-stroke)$/
 const GEOMETRY_PROPERTY = /^(width|height|min-|max-|padding|margin|border(-width|-style)?$|top|right|bottom|left|inset|position|display|flex|gap|transform|translate|scale|line-height|font|letter-spacing|text-|overflow|z-index)/
-const KEY_SELECTORS = ['#playerContent .player-key:not(.key-disabled)', '#playerContent .player-key:not(.key-disabled):active']
+// The full-player transport key faces (Phase 4J ::before plates): resting and pressed
+const KEY_SELECTORS = ['.fullscreen #playerControls .player-key::before', '.fullscreen #playerControls .player-key:not(.key-disabled):active::before']
 const LEGEND_SELECTORS = ['#playerContent .jump-icon:not(.key-disabled)', '#playerContent .next-icon:not(.key-disabled)']
 const PRIMARY_LEGEND_SELECTORS = ['#playerControls .play-btn .material-symbols', '#playerControls .play-btn .la-ball-spin-clockwise']
 
@@ -917,10 +916,11 @@ test('Phase 4B player keys are a dedicated, frozen, paint-only primitive; the sh
   assert.ok(parseFloat(P.PLAYBACK_GLYPH_WEIGHT['-webkit-text-stroke']) <= 0.6)
 })
 
-test('Phase 4B rules are LLAMA-only paint: Dark, Black and Light get nothing', () => {
+test('Phase 4B legends are LLAMA-only paint: Dark, Black and Light get nothing', () => {
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
-  for (const s of [...KEY_SELECTORS, ...LEGEND_SELECTORS]) {
+  // The key faces themselves are Phase 4J (fixed-size ::before plates, tested below); the legends stay paint only
+  for (const s of LEGEND_SELECTORS) {
     const declarations = rules[`${root} ${s}`]
     assert.ok(declarations, s)
     for (const property of Object.keys(declarations)) {
@@ -928,8 +928,6 @@ test('Phase 4B rules are LLAMA-only paint: Dark, Black and Light get nothing', (
       assert.doesNotMatch(property, GEOMETRY_PROPERTY, `${s}: ${property}`)
     }
   }
-  // The collapsed player's deeper key face is one more paint-only rule on the same hook
-  assert.deepEqual(rules[`${root} #streamContainer:not(.fullscreen) #playerContent .player-key:not(.key-disabled)`], { 'background-color': presets.PRIMITIVES.PLAYER_KEY_FACE_MINI })
   // No selector with a player hook can escape the LLAMA root (a comma list would leave a second selector unscoped)
   for (const selector of Object.keys(rules)) {
     if (/player-key|jump-icon|next-icon/.test(selector)) {
@@ -970,17 +968,24 @@ test('Phase 4B amber is playback only: both jumps and chapter start/end; utility
   assert.ok(!Object.keys(rules).some((s) => /play-btn/.test(s) && /player-key/.test(s)))
 })
 
-test('Phase 4B states stay distinct: unavailable keys get no cap and no legend; pressed differs from resting', () => {
+test('Phase 4B states stay distinct: unavailable keys get no legend amber; pressed differs from resting', () => {
+  const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
-  // Every key and legend rule excludes the unavailable state, so a key-disabled key keeps no face, ring or amber, only its dimmed glyph
-  for (const s of [...KEY_SELECTORS, ...LEGEND_SELECTORS]) assert.ok(s.includes(':not(.key-disabled)'), s)
-  assert.ok(!Object.keys(rules).some((s) => s.includes('.key-disabled') && !s.includes(':not(.key-disabled)')), 'no rule paints a key-disabled key')
+  // Every legend rule and the pressed face exclude the unavailable state: a key-disabled key keeps no amber and never presses
+  for (const s of [...LEGEND_SELECTORS, KEY_SELECTORS[1]]) assert.ok(s.includes(':not(.key-disabled)'), s)
+  // Phase 4J: an unavailable key is a sunken socket with a dimmed legend; those are the only rules that target it
+  const disabled = Object.keys(rules).filter((s) => s.includes('.key-disabled') && !s.includes(':not(.key-disabled)'))
+  const socketRules = [JSON.stringify({ ...P.KEY_SOCKET }), JSON.stringify({ ...P.KEY_SOCKET_LEGEND })]
+  for (const s of disabled) assert.ok(socketRules.includes(JSON.stringify(rules[s])), s)
+  assert.ok(disabled.length >= 2)
   const resting = rules[`${root} ${KEY_SELECTORS[0]}`]
   const pressed = rules[`${root} ${KEY_SELECTORS[1]}`]
   assert.notEqual(resting['box-shadow'], pressed['box-shadow'])
   assert.notEqual(resting['background-image'], pressed['background-image'])
-  assert.ok(!('background-color' in pressed), 'pressed keeps the same face fill; only the finish changes')
+  // Pressed deepens the same recessed face (higher alpha), never changes its color family
+  const alpha = (v) => Number(v.match(/^rgb\(var\(--color-recessed\) \/ (0\.\d+)\)$/)[1])
+  assert.ok(alpha(pressed['background-color']) > alpha(resting['background-color']))
 })
 
 test('Phase 4B contrast: the key face is darker than its deck, the legend and glyphs clear AA on it', () => {
@@ -1022,8 +1027,8 @@ test('Phase 4B rules compile through Tailwind under the LLAMA root only', async 
     return css.slice(i, css.indexOf('}', i))
   }
   const root = "html[data-theme='llama']"
-  assert.match(block(`${root} #playerContent .player-key:not(.key-disabled)`), /background-color: rgb\(var\(--color-recessed\) \/ 0\.\d+\)/)
-  assert.match(block(`${root} #playerContent .player-key:not(.key-disabled):active`), /background-image: none/)
+  assert.match(block(`${root} ${KEY_SELECTORS[0]}`), /background-color: rgb\(var\(--color-recessed\) \/ 0\.\d+\)/)
+  assert.match(block(`${root} ${KEY_SELECTORS[1]}`), /background-image: none/)
   for (const s of LEGEND_SELECTORS) assert.match(block(`${root} ${s}`), /color: rgb\(var\(--color-track-cursor\)\)/, s)
   assert.match(block(`${root} #playerContent .jump-icon:not(.key-disabled) > .material-symbols`), /-webkit-text-stroke: 0\.5px currentColor/)
   assert.match(block(`${root} #playerContent .next-icon:not(.key-disabled)`), /-webkit-text-stroke: 0\.5px currentColor/)
@@ -1041,7 +1046,19 @@ const READOUT_ABOVE_TOTAL_TRACK = '.fullscreen .total-track ~ .title-author-text
 // Phase 4H adds the primary glyph size (inside the unchanged Play/Pause box) as the recipe's only other geometry
 const PRIMARY_GLYPH_FULL = '.fullscreen #playerControls .play-btn .material-symbols'
 const PRIMARY_GLYPH_MINI = '#streamContainer:not(.fullscreen) #playerControls .play-btn .material-symbols'
-const READOUT_LAYOUT_PROPERTIES = { [READOUT]: ['left', 'width', 'padding', 'bottom'], [READOUT_ABOVE_TOTAL_TRACK]: ['bottom'], [PRIMARY_GLYPH_FULL]: ['font-size'], [PRIMARY_GLYPH_MINI]: ['font-size'] }
+// Phase 4J adds the key faces' internal geometry (the face plate positioned on its key, the key as its containing block)
+// and the transport legends' fixed scale (transforms, which move no box)
+const FACE_PLATE = ['position', 'top', 'left', 'width', 'height', 'z-index']
+const READOUT_LAYOUT_PROPERTIES = {
+  [READOUT]: ['left', 'width', 'padding', 'bottom'],
+  [READOUT_ABOVE_TOTAL_TRACK]: ['bottom'],
+  [PRIMARY_GLYPH_FULL]: ['font-size'],
+  [PRIMARY_GLYPH_MINI]: ['font-size'],
+  '.fullscreen #playerControls .player-key': ['position'],
+  '.fullscreen #playerControls .player-key::before': FACE_PLATE,
+  '.fullscreen #playerControls .jump-icon > .material-symbols': ['transform', 'transform-origin'],
+  '.fullscreen #playerControls .jump-label': ['transform', 'font-weight']
+}
 
 test('Phase 4E readout is a recessed well in a bezel plate: frozen, paint-only, from the shared primitives', () => {
   const P = presets.PRIMITIVES
