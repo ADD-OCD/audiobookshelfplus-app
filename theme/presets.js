@@ -176,6 +176,25 @@ const UTILITY_LEGEND = Object.freeze({ color: 'rgb(var(--color-fg) / 0.8)' })
 // The queue key's "Q" badge sits in the face's lower-right corner, 2px inside it, instead of on the corner of the glyph box
 // (which grows with the font scale while the face does not, so at 1.3 the badge left the face). Same 14px badge, with a
 // thin dark ring that seats it on the face
+// Readouts in the secondary row (speed, running sleep countdown): information, not keys. Each is a recessed display window
+// drawn by the text's own ::before (never a raised face, never amber), the phosphor green text inside it. The window
+// follows its text (a readout's value and the font scale size it, unlike a key), sits under the text and takes no taps
+// (the text keeps its own click). The running countdown is centered on the sleep key's place: its text is wider than the
+// 28px box it sits in and used to overflow to the right (a transform, so no box moves)
+const READOUT_HOST = Object.freeze({ position: 'relative', isolation: 'isolate' })
+const readoutWindow = (inset) =>
+  Object.freeze({
+    content: KEY_FACE_CONTENT,
+    position: 'absolute',
+    inset,
+    'z-index': '-1',
+    'pointer-events': 'none',
+    'border-radius': RADIUS.key,
+    'background-color': 'rgb(var(--color-recessed))',
+    'box-shadow': `${RECESSED_WELL}, 0 0 0 1px rgb(var(--color-edge-dark)), 0 1px 0 1px rgb(var(--color-edge-light) / 0.2)`
+  })
+const READOUT_WINDOW = Object.freeze({ speed: readoutWindow('2px -8px'), sleep: readoutWindow('1px -6px') })
+const SLEEP_READOUT_CENTER = Object.freeze({ transform: 'translateX(calc(14px - 50%))' })
 const QUEUE_BADGE = Object.freeze({ top: 'calc(50% + 4px)', left: 'calc(50% + 6px)', bottom: 'auto', right: 'auto', 'box-shadow': '0 0 0 1px rgb(var(--color-edge-dark))' })
 // Transport legends inside the faces: a printed legend has a fixed equipment scale, so it stays inside the fixed face at
 // font scale 1.3. CSS cannot cap it by font size: the WebView's text zoom multiplies every computed font size (rem, px, vw,
@@ -294,6 +313,9 @@ const PRIMITIVES = Object.freeze({
   UTILITY_KEY_PRESSED,
   UTILITY_LEGEND,
   QUEUE_BADGE,
+  READOUT_HOST,
+  READOUT_WINDOW,
+  SLEEP_READOUT_CENTER,
   METADATA_READOUT,
   METADATA_READOUT_LAYOUT,
   METADATA_READOUT_ABOVE_TOTAL_TRACK,
@@ -408,6 +430,11 @@ const EQUIPMENT_RULES = [
   ['#playerContent .utility-key:not(.key-disabled) > .material-symbols', UTILITY_LEGEND],
   ['#playerContent .utility-key:not(.key-disabled) > svg', UTILITY_LEGEND],
   ['#playerContent .queue-key > span.absolute', QUEUE_BADGE],
+  // Readouts (Phase 4J): speed and the running sleep countdown are recessed green windows, not keys
+  ['.fullscreen #playerContent .speed-readout', READOUT_HOST],
+  ['.fullscreen #playerContent .speed-readout::before', READOUT_WINDOW.speed],
+  ['.fullscreen #playerContent .sleep-readout', { ...READOUT_HOST, ...SLEEP_READOUT_CENTER }],
+  ['.fullscreen #playerContent .sleep-readout::before', READOUT_WINDOW.sleep],
   // Playback legends: only the transport keys (both jumps, chapter start/end) take the amber; the utility keys
   // (queue, bookmark, sleep, chapters) keep their neutral glyphs. An unavailable key is excluded and keeps its dimmed glyph
   ['#playerContent .jump-icon:not(.key-disabled)', PLAYBACK_LEGEND],
