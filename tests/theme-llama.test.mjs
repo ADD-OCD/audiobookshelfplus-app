@@ -1590,7 +1590,8 @@ test('Control deck hooks: semantic classes on the keys, readouts, utility row an
   assert.match(template, /class="chrome-key collapse-key [^"]*"[^>]*@click="collapseFullscreen"/)
   assert.match(template, /class="chrome-key cast-key [^"]*"[^>]*@click="castClick"/)
   assert.match(template, /class="chrome-key menu-key [^"]*"[^>]*@click="showMoreMenuDialog = true"/)
-  // Presentation lives in the theme recipe only (the one $theme read is the token-driven cover-color policy)
+  // Presentation lives in the theme recipe only (the one $theme read feeds the token-driven cover-color and layout
+  // projections, theme/coverPresentation.js and theme/playerLayout.js)
   assert.doesNotMatch(player, /llama|data-theme|themeId|theme\.id\b/i)
   assert.equal((player.match(/\$theme\b/g) || []).length, 1)
 })

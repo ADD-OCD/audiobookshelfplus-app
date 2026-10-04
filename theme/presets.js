@@ -11,6 +11,7 @@
  * CommonJS on purpose: used by tailwind.config.js at build time.
  */
 const engine = require('./engine')
+const playerLayout = require('./playerLayout')
 
 const WHITE = [255, 255, 255]
 const BLACK = [0, 0, 0]
@@ -314,6 +315,31 @@ const METADATA_READOUT_COMPACT = Object.freeze({
 const METADATA_READOUT_LANDSCAPE_QUERY = '(orientation: landscape)'
 const METADATA_READOUT_LANDSCAPE = Object.freeze({ 'margin-left': '24px', 'max-width': 'calc(50% - 135px)' })
 
+// Phase 6B faceplate paint. The geometry (module budgets, artwork size, the plates' boxes) is theme/playerLayout.js and
+// the player's own stylesheet; the recipe only paints the hook classes and plates the layout projection adds.
+// A module plate is raised hardware the readouts and keys sit in: the deck color with the chassis sheen, the raised
+// bevel, a dark seam around it and the panel drop
+const FACEPLATE_PLATE = Object.freeze({
+  'background-color': 'rgb(var(--color-bg))',
+  'background-image': CHASSIS_SHEEN,
+  'border-radius': RADIUS.key,
+  'box-shadow': `${RAISED_BEVEL}, 0 0 0 1px rgb(var(--color-edge-dark)), 0 3px 8px rgb(0 0 0 / 0.45)`
+})
+// The top chrome plate carries navigation, not equipment: a quieter lit edge
+const FACEPLATE_TOP_PLATE = Object.freeze({
+  'box-shadow': 'inset 1px 1px 0 rgb(var(--color-edge-light) / 0.4), inset -1px -1px 0 rgb(var(--color-edge-dark)), 0 0 0 1px rgb(var(--color-edge-dark)), 0 3px 8px rgb(0 0 0 / 0.45)'
+})
+// Artwork bay: a bezel drawn outside the artwork with spread shadows only (no layout, no crop): a dark seam at the art,
+// the deck-colored bezel with a lit upper-left lip and a dark lower-right lip, a dark outer ring and a soft drop. Its
+// width is the layout tier's (playerLayout.TIERS), which also reserves the room for it
+const artworkBay = (n) =>
+  Object.freeze({
+    'box-shadow': `0 0 0 1px rgb(var(--color-edge-dark)), 0 0 0 ${n}px rgb(var(--color-bg)), -1px -1px 0 ${n}px rgb(var(--color-edge-light) / 0.45), 1px 1px 0 ${n}px rgb(var(--color-edge-dark)), 0 0 0 ${n + playerLayout.FACEPLATE.bezelRing}px rgb(var(--color-edge-dark) / 0.9), 0 4px 10px ${n}px rgb(0 0 0 / 0.45)`
+  })
+const ARTWORK_BAY = Object.freeze({ regular: artworkBay(playerLayout.TIERS.regular.bezel), compact: artworkBay(playerLayout.TIERS.compact.bezel) })
+// The deck becomes chassis behind its console plate: no panel paint of its own
+const FACEPLATE_DECK = Object.freeze({ 'background-color': 'rgb(var(--color-primary))', 'background-image': 'none', 'box-shadow': 'none' })
+
 const PRIMITIVES = Object.freeze({
   RADIUS,
   ELEVATION,
@@ -368,7 +394,11 @@ const PRIMITIVES = Object.freeze({
   METADATA_READOUT_LAYOUT,
   METADATA_READOUT_ABOVE_TOTAL_TRACK,
   METADATA_READOUT_COMPACT,
-  METADATA_READOUT_LANDSCAPE
+  METADATA_READOUT_LANDSCAPE,
+  FACEPLATE_PLATE,
+  FACEPLATE_TOP_PLATE,
+  ARTWORK_BAY,
+  FACEPLATE_DECK
 })
 
 const EQUIPMENT_RULES = [
@@ -449,6 +479,14 @@ const EQUIPMENT_RULES = [
   // Fullscreen transport deck: the existing bottom player panel becomes a raised chassis panel (sheen, light
   // top edge, dark seam above it against the artwork zone). Same box; the controls inside are untouched
   ['.fullscreen #playerContent', { 'background-color': 'rgb(var(--color-bg))', 'background-image': CHASSIS_SHEEN, 'box-shadow': `${RAISED_BEVEL}, 0 -1px 0 rgb(var(--color-edge-dark))` }],
+  // Phase 6B faceplate (theme/playerLayout.js): the decorative plates, the artwork bay and the deck as chassis. These
+  // selectors only match the hook classes and plate elements the layout projection adds to the full player
+  ['.player-plate', FACEPLATE_PLATE],
+  ['.player-plate-top', FACEPLATE_TOP_PLATE],
+  ['#streamContainer.faceplate .cover-wrapper', ARTWORK_BAY.regular],
+  ['#streamContainer.faceplate-compact .cover-wrapper', ARTWORK_BAY.compact],
+  ['#streamContainer.faceplate #playerContent', FACEPLATE_DECK],
+  ['#streamContainer.faceplate-flat #playerContent', FACEPLATE_DECK],
   // Panel seam between the primary transport row and the secondary control row
   ['.fullscreen #playerControls', { 'box-shadow': ENGRAVED_SEPARATOR }],
   // Mini-player: seam across the panel above the seek region

@@ -1,10 +1,12 @@
 <template>
   <!-- Main container - only shows when playback session exists, applies fullscreen/platform classes -->
-  <div v-if="playbackSession" id="streamContainer" class="fixed top-0 left-0 layout-wrapper right-0 z-50 pointer-events-none" :class="{ fullscreen: showFullscreen, 'ios-player': $platform === 'ios', 'web-player': $platform === 'web' }">
+  <div v-if="playbackSession" id="streamContainer" class="fixed top-0 left-0 layout-wrapper right-0 z-50 pointer-events-none" :class="[{ fullscreen: showFullscreen, 'ios-player': $platform === 'ios', 'web-player': $platform === 'web' }, faceplateHooks.classes]" :style="faceplateHooks.vars">
     <!-- Fullscreen overlays: colored background and menu overlays -->
     <div v-if="showFullscreen" class="w-full h-full z-10 absolute top-0 left-0 pointer-events-auto" :style="{ backgroundColor: coverChrome.backdrop }">
       <!-- Background gradient for player -->
       <div class="w-full h-full absolute top-0 left-0 pointer-events-none" style="background: var(--gradient-audio-player)" />
+      <!-- Faceplate top chrome plate (theme/playerLayout.js): decorative, never a touch target -->
+      <div v-if="faceplateHooks.plates.top" class="player-plate player-plate-top" aria-hidden="true" />
 
       <!-- Collapse button - minimizes player -->
       <div class="top-4 left-4 absolute cursor-pointer">
@@ -62,6 +64,8 @@
     </div>
 
     <div id="playerContent" class="playerContainer w-full z-20 absolute bottom-0 left-0 right-0 p-2 pointer-events-auto transition-all" :style="{ backgroundColor: showFullscreen ? '' : coverChrome.backdrop }" @click="clickContainer">
+      <!-- Faceplate console plate around the transport and utility banks: decorative, never a touch target -->
+      <div v-if="faceplateHooks.plates.console" class="player-plate player-plate-console" aria-hidden="true" />
       <!-- Top controls bar - fullscreen only: bookmarks, speed, sleep timer, chapters -->
       <div v-if="showFullscreen" class="utility-row absolute bottom-4 left-0 right-0 w-full pb-4 pt-2 mx-auto px-6" style="max-width: 414px">
         <div class="flex items-center justify-between pointer-events-auto">
@@ -114,6 +118,8 @@
 
       <!-- Chapter progress bar -->
       <div id="playerTrack" class="absolute left-0 w-full px-6">
+        <!-- Faceplate seek/time module plate: decorative, drawn behind the recessed well, never a touch target -->
+        <div v-if="faceplateHooks.plates.seek" class="player-plate player-plate-seek" aria-hidden="true" />
         <div class="flex pointer-events-none">
           <p class="font-mono text-fg" style="font-size: 0.8rem" ref="currentTimestamp">0:00</p>
           <div class="flex-grow" />
@@ -148,6 +154,7 @@ import { Dialog } from '@capacitor/dialog'
 import { getAverageColorFromCoverUrl } from '@/utils/coverAverageColor'
 import { normalizePlaybackRate, formatPlaybackRate } from '@/utils/playbackRate'
 import coverPresentation from '@/theme/coverPresentation'
+import playerLayout from '@/theme/playerLayout'
 import WrappingMarquee from '@/assets/WrappingMarquee.js'
 import jumpLabelMixin from '@/mixins/jumpLabel'
 
@@ -218,15 +225,24 @@ export default {
     bookCoverAspectRatio() {
       this.updateScreenSize()
     },
+    // A theme switch or a Chapter Track change can move the artwork (theme/playerLayout.js): re-size it. With a
+    // non-equipment theme the width never changes this way, so this never fires there
+    fullscreenBookCoverWidth() {
+      this.updateScreenSize()
+    },
     title(val) {
       if (this.titleMarquee) this.titleMarquee.init(val)
     }
   },
   computed: {
+    // The validated theme, read once: its presentation tokens drive the cover-color and layout projections below
+    presentationTheme() {
+      return this.$theme.theme
+    },
     // Chrome colors for the theme's presentation.cover-color policy (theme/coverPresentation.js):
     // legacy = tinted from the sampled cover (previous behavior), theme = the theme's own surfaces
     coverChrome() {
-      return coverPresentation.coverColorPresentation(this.$theme.theme, { rgb: this.coverRgb, isLight: this.coverBgIsLight })
+      return coverPresentation.coverColorPresentation(this.presentationTheme, { rgb: this.coverRgb, isLight: this.coverBgIsLight })
     },
     menuItems() {
       const items = []
@@ -303,27 +319,25 @@ export default {
       if (this.showFullscreen) return this.fullscreenBookCoverWidth
       return 46 / this.bookCoverAspectRatio
     },
+    // The full player's layout for the theme's presentation (theme/playerLayout.js): the previous layout for every
+    // theme but the equipment finish, which presents the portrait player as a faceplate of stacked modules
+    fullscreenLayout() {
+      return playerLayout.fullscreenLayout(this.presentationTheme, {
+        width: this.windowWidth,
+        height: this.windowHeight,
+        aspectRatio: this.bookCoverAspectRatio,
+        twoRail: !!(this.playerSettings.useChapterTrack && this.playerSettings.useTotalTrack)
+      })
+    },
     fullscreenBookCoverWidth() {
-      if (this.windowWidth < this.windowHeight) {
-        // Portrait
-        let sideSpace = 20
-        if (this.bookCoverAspectRatio === 1.6) sideSpace += (this.windowWidth - sideSpace) * 0.375
-
-        const availableHeight = this.windowHeight - 400
-        let width = this.windowWidth - sideSpace
-        const totalHeight = width * this.bookCoverAspectRatio
-        if (totalHeight > availableHeight) {
-          width = availableHeight / this.bookCoverAspectRatio
-        }
-        return width
-      } else {
-        // Landscape
-        const heightScale = (this.windowHeight - 200) / 651
-        if (this.bookCoverAspectRatio === 1) {
-          return 260 * heightScale
-        }
-        return 190 * heightScale
-      }
+      return this.fullscreenLayout.coverWidth
+    },
+    // Hook classes, CSS variables and decorative plates, only while the full player is shown (the mini-player and
+    // non-equipment themes get none)
+    faceplateHooks() {
+      if (!this.showFullscreen) return { classes: [], vars: {}, plates: { top: false, console: false, seek: false } }
+      const { classes, vars, plates } = this.fullscreenLayout
+      return { classes, vars, plates }
     },
     showLoadingState() {
       return this.isLoading || this.isCheckingServerProgress
@@ -1313,5 +1327,120 @@ export default {
 }
 .fullscreen #playerControls .play-btn .material-symbols {
   font-size: 2.1rem;
+}
+
+/*
+ * Faceplate layout (theme/playerLayout.js, Phase 6B). Applies only through the hook classes and --faceplate-*
+ * variables the layout projection puts on #streamContainer while the full player is shown; non-equipment themes
+ * and the mini-player get neither, so none of this applies to them. Paint (plates, bezel, colors) is the equipment
+ * recipe's (theme/presets.js); this is geometry and type only.
+ */
+/* Decorative plates: never a touch target */
+.player-plate {
+  position: absolute;
+  pointer-events: none;
+}
+.player-plate-top {
+  left: 8px;
+  right: 8px;
+  top: 12px;
+  height: var(--faceplate-plate-height);
+}
+/* The console plate surrounds the transport and utility banks, and on wide screens follows their 414px column */
+.player-plate-console {
+  z-index: -1;
+  left: max(6px, calc(50% - 222px));
+  right: max(6px, calc(50% - 222px));
+  bottom: 6px;
+  top: var(--faceplate-console-top);
+}
+.faceplate-flat .player-plate-console {
+  top: 2px;
+}
+/* Behind the seek row's recessed well (its content box): 6px of plate around it */
+.player-plate-seek {
+  z-index: -1;
+  left: 18px;
+  right: 18px;
+  top: -2px;
+  bottom: -6px;
+}
+
+/* Stacked modules: the deck holds the seek/time module above the unchanged console; the artwork and readout are
+   bottom-anchored like the original layout (so expand/collapse still animates), positioned from the layout's budget */
+#streamContainer.fullscreen.faceplate .playerContainer {
+  height: var(--faceplate-deck);
+}
+#streamContainer.fullscreen.faceplate .cover-wrapper {
+  bottom: calc(100% - var(--faceplate-cover-top) - var(--cover-image-height));
+}
+/* The cover is sized by the layout's width, so the cover component and the bay always agree. Its own min-width
+   (its width prop) must never be able to hold it wider than the bay, which would crop instead of scale */
+#streamContainer.fullscreen.faceplate .cover-wrapper > div > div {
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
+/* Metadata band: a fixed height that holds the title and author at font scale 1.3, text centered in it */
+#streamContainer.fullscreen.faceplate .title-author-texts {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--faceplate-band);
+  bottom: var(--faceplate-readout-bottom);
+  left: 16px;
+  width: calc(100% - 32px);
+  padding: 6px 12px;
+}
+#streamContainer.fullscreen.faceplate .title-author-texts .title-text {
+  line-height: 1.25;
+}
+#streamContainer.fullscreen.faceplate #playerTrack {
+  padding-top: 4px;
+}
+#streamContainer.fullscreen.faceplate #playerTrack > div.flex {
+  padding: 5px 10px 2px;
+}
+#streamContainer.fullscreen.faceplate #playerTrack > div.relative {
+  margin-bottom: 8px;
+}
+
+/* Readout type: condensed system face (no font asset), tabular figures; metadata stays neutral in color */
+.faceplate-type .title-author-texts .title-text {
+  font-family: sans-serif-condensed, sans-serif;
+  letter-spacing: 0.01em;
+}
+.faceplate-type .title-author-texts .author-text {
+  font-family: sans-serif-condensed, sans-serif;
+  letter-spacing: 0.02em;
+}
+.faceplate-type #playerTrack p.font-mono {
+  font-family: sans-serif-condensed, sans-serif;
+  font-size: var(--faceplate-times) !important;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.faceplate-type .total-track p.font-mono {
+  font-family: sans-serif-condensed, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.faceplate-type .speed-readout,
+.faceplate-type .sleep-readout {
+  font-family: sans-serif-condensed, sans-serif;
+  letter-spacing: 0.02em;
+}
+.faceplate-type .playback-method {
+  font-family: sans-serif-condensed, sans-serif;
+  font-size: 11px !important;
+}
+/* Previous geometry (two rails, landscape): the seek row keeps its 200px deck, so its times sit on a tight line */
+.faceplate-flat #playerTrack > div.flex {
+  padding: 0 10px;
+}
+.faceplate-flat #playerTrack p.font-mono {
+  line-height: 1;
 }
 </style>

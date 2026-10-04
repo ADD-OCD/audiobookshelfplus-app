@@ -108,6 +108,7 @@ async function playerComponent() {
   const component = sandbox.component
   const ctx = { themeId: 'dark', coverRgb: 'rgb(55, 56, 56)', coverBgIsLight: false, showFullscreen: false, updateScreenSize() {}, $store: { commit() {} } }
   Object.defineProperty(ctx, '$theme', { get: () => ({ theme: engine.getTheme(ctx.themeId) }) })
+  Object.defineProperty(ctx, 'presentationTheme', { get: () => component.computed.presentationTheme.call(ctx) })
   Object.defineProperty(ctx, 'coverChrome', { get: () => component.computed.coverChrome.call(ctx) })
   const watch = (name) => component.watch[name].call(ctx, ctx[name])
   return { ctx, body, watch, setFullscreen: (v) => ((ctx.showFullscreen = v), component.watch.showFullscreen.call(ctx, v)) }
