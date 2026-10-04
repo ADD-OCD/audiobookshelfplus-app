@@ -74,7 +74,7 @@
           <!-- hidden for podcasts but still using this as a placeholder -->
           <span v-else class="material-symbols text-3xl text-white text-opacity-0">bookmark</span>
 
-          <span class="speed-readout font-mono text-fg-muted cursor-pointer" style="font-size: 1.35rem" @click="$emit('selectPlaybackSpeed')">{{ currentPlaybackRate }}x</span>
+          <span class="speed-readout font-mono text-fg-muted cursor-pointer" style="font-size: 1.35rem" @click="$emit('selectPlaybackSpeed')">{{ playbackRateLabel }}</span>
           <!-- Sleep key: the wrapper is the key (flex, so it is exactly the icon's box); the icon is its legend -->
           <span v-if="!sleepTimerRunning" class="player-key utility-key sleep-key flex cursor-pointer" @click.stop="$emit('showSleepTimer')">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-fg-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -146,6 +146,7 @@ import { Capacitor } from '@capacitor/core'
 import { AbsAudioPlayer } from '@/plugins/capacitor'
 import { Dialog } from '@capacitor/dialog'
 import { getAverageColorFromCoverUrl } from '@/utils/coverAverageColor'
+import { normalizePlaybackRate, formatPlaybackRate } from '@/utils/playbackRate'
 import coverPresentation from '@/theme/coverPresentation'
 import WrappingMarquee from '@/assets/WrappingMarquee.js'
 import jumpLabelMixin from '@/mixins/jumpLabel'
@@ -427,6 +428,9 @@ export default {
         return this.$secondsToTimestamp(this.timeRemaining * -1)
       }
       return '-' + this.$secondsToTimestamp(this.timeRemaining)
+    },
+    playbackRateLabel() {
+      return formatPlaybackRate(this.currentPlaybackRate)
     },
     sleepTimeRemainingPretty() {
       if (!this.sleepTimeRemaining) return '0s'
@@ -951,8 +955,10 @@ export default {
       this.endPlayback()
     },
     onPlaybackSpeedChanged(data) {
-      if (!data.value || isNaN(data.value)) return
-      this.currentPlaybackRate = Number(data.value)
+      // Native reports a 32-bit float speed (1.4 arrives as 1.399999976158142)
+      const rate = normalizePlaybackRate(data.value)
+      if (rate === null) return
+      this.currentPlaybackRate = rate
       this.updateTimestamp()
     },
     async init() {
@@ -980,7 +986,9 @@ export default {
         if (!state?.playbackSession || this.playbackSession) return
         console.log('[AudioPlayer] Reattaching to existing native playback session', state.playbackSession.id)
         this.$diag.debug('AudioPlayer', `UI reattached to existing native session: playing=${!!state.isPlaying} position=${state.currentTime} rate=${state.playbackRate} queue=${state.queue?.items?.length || 0}`)
-        if (state.playbackRate) this.currentPlaybackRate = Number(state.playbackRate)
+        // The native player's speed is a 32-bit float; keep the speed the user chose (1.4, not 1.399999976158142)
+        const rate = normalizePlaybackRate(state.playbackRate)
+        if (rate !== null) this.currentPlaybackRate = rate
         this.onPlaybackSession(state.playbackSession)
         // The player template (and its timestamp/track refs) only renders once a session is set
         await this.$nextTick()
