@@ -1055,6 +1055,7 @@ const READOUT_LAYOUT_PROPERTIES = {
   [READOUT_ABOVE_TOTAL_TRACK]: ['bottom'],
   [PRIMARY_GLYPH_FULL]: ['font-size'],
   [PRIMARY_GLYPH_MINI]: ['font-size'],
+  '#streamContainer.fullscreen #playerControls': ['bottom', 'padding-bottom'],
   '.fullscreen #playerControls > div': ['gap'],
   '.fullscreen #playerControls .play-btn': ['margin', 'top'],
   '.fullscreen #playerControls .player-key': KEY_BOX_GEOMETRY,
@@ -1065,7 +1066,7 @@ const READOUT_LAYOUT_PROPERTIES = {
   '#streamContainer:not(.fullscreen) #playerControls .jump-icon > .material-symbols': ['transform'],
   '#playerContent .utility-key': KEY_BOX_GEOMETRY,
   '#playerContent .queue-key > span.absolute': ['bottom', 'right'],
-  '.fullscreen #playerContent .utility-row': ['padding-bottom'],
+  '.fullscreen #playerContent .utility-row': ['bottom', 'padding-top', 'padding-bottom'],
   '.fullscreen #playerContent .speed-readout': READOUT_BOX_GEOMETRY,
   '.fullscreen #playerContent .sleep-display': READOUT_BOX_GEOMETRY,
   '#streamContainer.fullscreen .chrome-key': [...KEY_BOX_GEOMETRY, 'font-size'],
@@ -1452,12 +1453,12 @@ test('Phase 4H CSS: the LLAMA glyph size and amber outrank the player rules; sta
 
 const TIERS = {
   transport: { host: '.fullscreen #playerControls .player-key', size: [60, 60], paint: 'TRANSPORT_KEY' },
-  utility: { host: '#playerContent .utility-key', size: [50, 46], paint: 'UTILITY_KEY' },
+  utility: { host: '#playerContent .utility-key', size: [54, 52], paint: 'UTILITY_KEY' },
   mini: { host: '#streamContainer:not(.fullscreen) #playerControls .player-key', size: [34, 34], paint: 'TRANSPORT_KEY_MINI' },
   chrome: { host: '#streamContainer.fullscreen .chrome-key', size: [44, 44], paint: 'UTILITY_KEY' }
 }
 
-test('Control deck: every key is its own fixed px box (60x60, 50x46, 34x34, 44x44), never content- or font-sized', () => {
+test('Control deck: every key is its own fixed px box (60x60, 54x52, 34x34, 44x44), never content- or font-sized', () => {
   const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
@@ -1473,7 +1474,7 @@ test('Control deck: every key is its own fixed px box (60x60, 50x46, 34x34, 44x4
     for (const [property, value] of Object.entries(P[paint])) assert.equal(rule[property], value, `${tier} ${property}`)
   }
   assert.deepEqual({ ...P.DECK.transport }, { width: 60, height: 60, gap: 8 })
-  // Hierarchy by size: primary 65 > transport 60 > utility 50x46; the collapsed keys stay inside the 40px primary height
+  // Hierarchy by size: primary 65 > transport 60 > utility 54x52; the collapsed keys stay inside the 40px primary height
   assert.ok(65 > P.DECK.transport.height && P.DECK.transport.height > P.DECK.utility.height && P.DECK.mini.height < 40)
 })
 
@@ -1489,6 +1490,33 @@ test('Control deck: the full bank fits 412px with one gap, the primary lifted a 
   assert.ok(4 * width + 65 + 4 * gap <= 412 - 48, 'bank fits')
   // The primary keeps its Phase 4H box (the player's own 65px / 40px rules)
   for (const s of Object.keys(rules)) if (s.includes('play-btn')) for (const p of ['width', 'height', 'min-width', 'min-height', 'transform']) assert.equal(rules[s][p], undefined, `${s}: ${p}`)
+})
+
+test('Control deck: the seam drops inside an unchanged deck, clear of the bank, over a centered utility row', async () => {
+  const P = presets.PRIMITIVES
+  const root = engine.themeSelector('llama')
+  const rules = presets.presentationRules([llama()])
+  const { base, drop } = P.DECK.seam
+  // The player's own placement of the transport row (its bottom edge is the seam), which the drop is measured from
+  const player = (await readFile(new URL('../components/app/AudioPlayer.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n')
+  assert.ok(player.includes(`.fullscreen #playerControls {\n  width: 100%;\n  padding-left: 24px;\n  padding-right: 24px;\n  bottom: ${base}px;`))
+  // The row grows down by exactly what its offset loses: the bank stays put and the deck keeps its height
+  assert.deepEqual(rules[`${root} #streamContainer.fullscreen #playerControls`], { bottom: `${base - drop}px`, 'padding-bottom': `${drop}px` })
+  assert.ok(drop >= 3 && drop <= 7, 'a small drop')
+  // The clearance under the keys covers their drop shadows: transport 0 2px 4px centered in the 65px row, primary 0 3px 5px, lifted
+  const transportClear = (65 - P.DECK.transport.height) / 2 + drop
+  const primaryClear = P.DECK.primaryLift + drop
+  assert.ok(P.TRANSPORT_KEY['box-shadow'].endsWith('0 2px 4px rgb(0 0 0 / 0.5)') && transportClear >= 2 + 4, `transport ${transportClear}`)
+  assert.ok(primaryClear >= 3 + 5, `primary ${primaryClear}`)
+  // The utility row: no padding, its keys centered in the section under the seam (an odd px above), comfortable both ways
+  const depth = base - drop
+  const below = Math.floor((depth - P.DECK.utility.height) / 2)
+  assert.deepEqual(rules[`${root} .fullscreen #playerContent .utility-row`], { bottom: `${below}px`, 'padding-top': '0px', 'padding-bottom': '0px' })
+  const above = depth - P.DECK.utility.height - below
+  assert.ok(above - below <= 1 && below >= 8, `utility margins ${above}/${below}`)
+  // Utility hardware stays subordinate to the transport bank, and five keys keep comfortable gaps across 364px
+  assert.ok(P.DECK.utility.height <= P.DECK.transport.height - 6 && P.DECK.utility.width < P.DECK.transport.width)
+  assert.ok((412 - 48 - 5 * P.DECK.utility.width) / 4 >= 16, 'utility gaps')
 })
 
 test('Control deck: the hit target is the visible key itself (no pseudo-element hit area, no stacking tricks)', () => {
@@ -1642,7 +1670,7 @@ test('Control deck is LLAMA-only in compiled CSS, and Dark, Black and Light get 
     return css.slice(i, css.indexOf('}', i))
   }
   assert.match(block(`${root} .fullscreen #playerControls .player-key`), /width: 60px;\s*height: 60px;/)
-  assert.match(block(`${root} #playerContent .utility-key`), /width: 50px;\s*height: 46px;/)
+  assert.match(block(`${root} #playerContent .utility-key`), /width: 54px;\s*height: 52px;/)
   assert.match(block(`${root} #streamContainer:not(.fullscreen) #playerControls .player-key`), /width: 34px;\s*height: 34px;/)
   assert.ok(!/html\[data-theme='llama'\][^{]*::(before|after)/.test(css), 'no LLAMA pseudo-element faces')
   for (const id of ['dark', 'black', 'light']) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {}, id)

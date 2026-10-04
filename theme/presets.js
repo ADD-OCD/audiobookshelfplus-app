@@ -140,8 +140,11 @@ const PLAYBACK_GLYPH_WEIGHT = Object.freeze({ '-webkit-text-stroke': '0.5px curr
 const DECK = Object.freeze({
   transport: Object.freeze({ width: 60, height: 60, gap: 8 }),
   primaryLift: 3,
-  utility: Object.freeze({ width: 50, height: 46 }),
-  utilityRowPadding: 0,
+  utility: Object.freeze({ width: 54, height: 52 }),
+  // The seam between the transport and utility sections. The player puts the transport row's bottom edge (the seam) 78px
+  // above the deck's bottom; the seam drops a few px inside the deck (the row grows by a bottom padding as its offset
+  // shrinks by the same amount), so the bank keeps its place, its drop shadows clear the seam, and the deck keeps its height
+  seam: Object.freeze({ base: 78, drop: 5 }),
   jumpGlyph: '2rem',
   mini: Object.freeze({ width: 34, height: 34 }),
   // Top chrome (collapse, cast, overflow): three utility-family keys on one line, 20px from the top
@@ -151,8 +154,10 @@ const keyBox = ({ width, height }) => Object.freeze({ width: `${width}px`, heigh
 const KEY_BOX = Object.freeze({ transport: keyBox(DECK.transport), utility: keyBox(DECK.utility), mini: keyBox(DECK.mini) })
 const TRANSPORT_BANK = Object.freeze({ 'justify-content': 'center', gap: `${DECK.transport.gap}px` })
 const PRIMARY_IN_BANK = Object.freeze({ margin: '0', top: `-${DECK.primaryLift}px` })
-// The utility row drops its bottom padding (16px of dead chassis under it) so it sits clear of the transport bank's seam
-const UTILITY_ROW = Object.freeze({ 'padding-bottom': `${DECK.utilityRowPadding}px` })
+const TRANSPORT_SECTION = Object.freeze({ bottom: `${DECK.seam.base - DECK.seam.drop}px`, 'padding-bottom': `${DECK.seam.drop}px` })
+// The utility keys sit centered in the section under the seam (the odd px above them): no padding, the row's own offset
+const UTILITY_SECTION_DEPTH = DECK.seam.base - DECK.seam.drop
+const UTILITY_ROW = Object.freeze({ bottom: `${Math.floor((UTILITY_SECTION_DEPTH - DECK.utility.height) / 2)}px`, 'padding-top': '0px', 'padding-bottom': '0px' })
 // Face finish, the Phase 4H primary key's family: the same dark recessed face, sheen and inner bevel (lit edge, faint second
 // highlight, dark edge) and the same pressed model (sheen and drop go, the face deepens, the bevel inverts with an inner
 // shade, the channel stays). Secondary transport is one step below the primary: a weaker lit return ring (0.18, primary
@@ -335,6 +340,7 @@ const PRIMITIVES = Object.freeze({
   TRANSPORT_BANK,
   PRIMARY_IN_BANK,
   UTILITY_ROW,
+  TRANSPORT_SECTION,
   CHROME_KEY,
   CHROME_KEY_LINE,
   PLAYBACK_METHOD_READOUT,
@@ -445,6 +451,8 @@ const EQUIPMENT_RULES = [
   // Control deck (Phase 4J, recomposed in the finishing pass): every secondary key's own fixed box is its face, painted
   // in the primary key's family; pressed cuts it in, an unavailable key is a sunken socket with a strongly dimmed legend.
   // Full-player transport: chapter start/end and both jumps, packed with the primary into one centered bank
+  // The transport section reaches a few px further down (the seam under it drops; the bank stays where it is)
+  ['#streamContainer.fullscreen #playerControls', TRANSPORT_SECTION],
   ['.fullscreen #playerControls > div', TRANSPORT_BANK],
   ['.fullscreen #playerControls .play-btn', PRIMARY_IN_BANK],
   ['.fullscreen #playerControls .player-key', { ...KEY_BOX.transport, ...TRANSPORT_KEY }],
