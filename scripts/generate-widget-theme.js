@@ -15,11 +15,10 @@ const presets = require('../theme/presets')
 
 const OUTPUT = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'res', 'values', 'widget_theme_colors.xml')
 
-// Native name suffix -> source token (fixed, repository-owned subset: only colors the widget resources use)
+// Native name suffix -> source token (fixed, repository-owned subset: only colors the widget resources use; the steel
+// surface.content / surface.raised entries went when Phase 4H moved the primary key to the dark key face)
 const TOKEN_COLORS = [
   ['base', 'surface.base'],
-  ['content', 'surface.content'],
-  ['raised', 'surface.raised'],
   ['recessed', 'surface.recessed'],
   ['text', 'text.primary'],
   ['text_muted', 'text.muted'],

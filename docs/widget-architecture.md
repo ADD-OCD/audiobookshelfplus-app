@@ -167,7 +167,7 @@ Resource-level paint only, LLAMA only. The app's Play/Pause became a dark square
 
 Measured contrast of the amber glyph against the face in its own rows (rendered): 10.6–10.7:1 resting and 11.3–11.4:1 pressed. From the generated colors, the worst face point (the lit top, which the glyph does not reach) is 9.75:1. Before, the near-white glyph on the steel key was 6.4:1. Glyph ink is 7.6×9.5dp (Play, COMPACT) to 19.4×22.9dp (Pause, LARGE), unchanged.
 
-`widget_llama_raised` and `widget_llama_content` stay in the generated palette, which mirrors every token, but no widget resource uses them anymore. Lint reports them as two `UnusedResources` warnings (143 → 145).
+After this change no widget resource used `widget_llama_raised` or `widget_llama_content` (lint reported two `UnusedResources` warnings, 143 → 145). Phase 5.1 removed both from the generator (`TOKEN_COLORS`), and `tests/widget-theme.test.mjs` now requires every generated color to be used by a widget drawable or layout.
 
 `tests/widget-theme.test.mjs` keeps the contract: the exact layer structure in both states, the dark face, the amber tint on all three transport keys, 7:1 on every generated face color, the unchanged bitmaps and padding, and untouched Standard resources.
 

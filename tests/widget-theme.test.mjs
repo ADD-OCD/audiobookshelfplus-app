@@ -31,6 +31,19 @@ test('native widget colors equal the LLAMA tokens and derived bevel edges', asyn
   assert.equal(Object.keys(colors).length, generator.TOKEN_COLORS.length + 2 + generator.keyColors(t).length)
 })
 
+test('every generated widget color is used by a widget resource (the palette carries no dead colors)', async () => {
+  const { readdir } = await import('node:fs/promises')
+  const res = new URL('../android/app/src/main/res/', import.meta.url)
+  let sources = ''
+  for (const dir of (await readdir(res)).filter((d) => d.startsWith('drawable') || d.startsWith('layout'))) {
+    for (const file of (await readdir(new URL(`${dir}/`, res))).filter((f) => f.endsWith('.xml'))) sources += await read(`../android/app/src/main/res/${dir}/${file}`)
+  }
+  const xml = await read('../android/app/src/main/res/values/widget_theme_colors.xml')
+  const names = [...xml.matchAll(/<color name="([a-z_]+)">/g)].map(([, n]) => n)
+  assert.ok(names.length > 0)
+  for (const name of names) assert.ok(sources.includes(`@color/${name}`), `${name} is generated but no drawable or layout uses it`)
+})
+
 test('only equipment-finish built-ins get a native widget palette; standard themes keep the existing look', () => {
   assert.deepEqual(
     generator.widgetThemes().map((t) => t.id),
