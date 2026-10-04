@@ -126,7 +126,7 @@ The semantic rule stays: playback and transport legends are amber, utility legen
 Phase 4J and the Phase 4 finishing pass implemented the transport bank, the utility keys and readouts, the collapsed-player keys and the top chrome (see "LLAMA control deck" in `docs/theme-architecture.md`). What remains:
 
 - **Legends at very large font scales:** the transport legends fit their fixed keys at font scale 1.0 and 1.3. At much larger One UI steps (2.0 measured) the zoomed legends exceed their keys, although no key moves or overlaps another. A true maximum legend size cannot be expressed in CSS under the WebView's text zoom.
-- **Speed-modal taps on the S26:** not reproducible on the emulator. The pseudo-element hit areas Phase 4J introduced are gone, and the physical retest decides whether anything remains.
+- **Playback Speed dismissal on the S26:** fixed (it did not close above or below its panel; see the control-deck section of `theme-architecture.md`). Awaiting the physical S26 retest.
 - **Up Next backdrop strip:** the queue modal is 95% wide, so its side backdrop is a ~10px strip that Chromium's touch adjustment pulls into the panel (pre-existing; dismissal works above and below the panel and with the close key).
 
 ## Seek handle touch target
