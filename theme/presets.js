@@ -143,7 +143,9 @@ const DECK = Object.freeze({
   utility: Object.freeze({ width: 50, height: 46 }),
   utilityRowPadding: 0,
   jumpGlyph: '2rem',
-  mini: Object.freeze({ width: 34, height: 34 })
+  mini: Object.freeze({ width: 34, height: 34 }),
+  // Top chrome (collapse, cast, overflow): three utility-family keys on one line, 20px from the top
+  chrome: Object.freeze({ width: 44, height: 44, top: 20 })
 })
 const keyBox = ({ width, height }) => Object.freeze({ width: `${width}px`, height: `${height}px`, flex: 'none', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'border-radius': RADIUS.key })
 const KEY_BOX = Object.freeze({ transport: keyBox(DECK.transport), utility: keyBox(DECK.utility), mini: keyBox(DECK.mini) })
@@ -186,6 +188,24 @@ const UTILITY_KEY = Object.freeze({
 })
 const UTILITY_KEY_PRESSED = Object.freeze({ 'background-color': 'rgb(var(--color-recessed) / 0.8)', 'background-image': 'none', 'box-shadow': `${keyPressedBevel(0.55)}, ${PLAYER_KEY_RING}` })
 const UTILITY_LEGEND = Object.freeze({ color: 'rgb(var(--color-fg) / 0.8)' })
+// Top player chrome: collapse, cast and the overflow menu are neutral utility-family keys of one fixed size, aligned on one
+// line (their containers sit 16px and 24px down, so each key is shifted onto the line by a margin), with a 2rem glyph that
+// stays inside the key at font scale 1.3. The click stays on the same element, now the whole key: collapse goes from its
+// 48px glyph box to the 44px key, cast and overflow grow from 30px (39px at 1.3). Cast keeps its slot (64px from the right
+// edge), 4px from the overflow key, so the landscape metadata readout still ends before it (Phase 4E-R2: 111px from the
+// right edge, plate 4px, cast face 108px). The playback method (Direct/Local/Transcode) is a small recessed green display
+// centered on the same line
+const CHROME_KEY = Object.freeze({ ...keyBox(DECK.chrome), ...UTILITY_KEY, ...UTILITY_LEGEND, 'font-size': '2rem' })
+const CHROME_KEY_LINE = Object.freeze({ collapse: Object.freeze({ 'margin-top': `${DECK.chrome.top - 16}px` }), right: Object.freeze({ 'margin-top': `${DECK.chrome.top - 24}px` }) })
+const PLAYBACK_METHOD_READOUT = Object.freeze({
+  width: 'fit-content',
+  padding: '4px 10px',
+  top: `${DECK.chrome.top + DECK.chrome.height / 2 - 11.5}px`,
+  'border-radius': RADIUS.key,
+  'background-color': 'rgb(var(--color-recessed))',
+  'box-shadow': `${RECESSED_WELL}, 0 0 0 1px rgb(var(--color-edge-dark)), 0 1px 0 1px rgb(var(--color-edge-light) / 0.2)`,
+  color: 'rgb(var(--color-accent))'
+})
 // The queue key's "Q" badge sits in the key's lower-right corner, 3px inside it (it used to hang off the glyph box's
 // corner), with a thin dark ring that seats it on the face. Same 14px badge
 const QUEUE_BADGE = Object.freeze({ bottom: '3px', right: '3px', 'box-shadow': '0 0 0 1px rgb(var(--color-edge-dark))' })
@@ -315,6 +335,9 @@ const PRIMITIVES = Object.freeze({
   TRANSPORT_BANK,
   PRIMARY_IN_BANK,
   UTILITY_ROW,
+  CHROME_KEY,
+  CHROME_KEY_LINE,
+  PLAYBACK_METHOD_READOUT,
   TRANSPORT_KEY,
   TRANSPORT_KEY_PRESSED,
   KEY_SOCKET,
@@ -447,6 +470,14 @@ const EQUIPMENT_RULES = [
   ['.fullscreen #playerContent .utility-row', UTILITY_ROW],
   ['.fullscreen #playerContent .speed-readout', READOUT_BOX],
   ['.fullscreen #playerContent .sleep-display', READOUT_BOX],
+  // Top chrome (finishing pass): collapse, cast and overflow are utility-family keys on one line; the playback method is a
+  // recessed green display between them
+  ['#streamContainer.fullscreen .chrome-key', CHROME_KEY],
+  ['#streamContainer.fullscreen .chrome-key:active', UTILITY_KEY_PRESSED],
+  ['#streamContainer.fullscreen .collapse-key', CHROME_KEY_LINE.collapse],
+  ['#streamContainer.fullscreen .cast-key', CHROME_KEY_LINE.right],
+  ['#streamContainer.fullscreen .menu-key', CHROME_KEY_LINE.right],
+  ['#streamContainer.fullscreen .playback-method', PLAYBACK_METHOD_READOUT],
   // Playback legends: only the transport keys (both jumps, chapter start/end) take the amber; the utility keys
   // (queue, bookmark, sleep, chapters) keep their neutral glyphs. An unavailable key is excluded and keeps its dimmed glyph
   ['#playerContent .jump-icon:not(.key-disabled)', PLAYBACK_LEGEND],

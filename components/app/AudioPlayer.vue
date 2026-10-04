@@ -8,21 +8,21 @@
 
       <!-- Collapse button - minimizes player -->
       <div class="top-4 left-4 absolute cursor-pointer">
-        <span class="material-symbols text-5xl" :class="{ 'text-black text-opacity-75': coverChrome.darkForeground }" @click="collapseFullscreen">keyboard_arrow_down</span>
+        <span class="chrome-key collapse-key material-symbols text-5xl" :class="{ 'text-black text-opacity-75': coverChrome.darkForeground }" @click="collapseFullscreen">keyboard_arrow_down</span>
       </div>
 
       <!-- Cast button - Chromecast toggle -->
       <div v-show="showCastBtn" class="top-6 right-16 absolute cursor-pointer">
-        <span class="material-symbols text-3xl" :class="coverChrome.darkForeground ? 'text-black' : ''" @click="castClick">{{ isCasting ? 'cast_connected' : 'cast' }}</span>
+        <span class="chrome-key cast-key material-symbols text-3xl" :class="coverChrome.darkForeground ? 'text-black' : ''" @click="castClick">{{ isCasting ? 'cast_connected' : 'cast' }}</span>
       </div>
 
       <!-- Player options menu button -->
       <div class="top-6 right-4 absolute cursor-pointer">
-        <span class="material-symbols text-3xl" :class="{ 'text-black text-opacity-75': coverChrome.darkForeground }" @click="showMoreMenuDialog = true">more_vert</span>
+        <span class="chrome-key menu-key material-symbols text-3xl" :class="{ 'text-black text-opacity-75': coverChrome.darkForeground }" @click="showMoreMenuDialog = true">more_vert</span>
       </div>
 
       <!-- Playback method indicator (Direct/Local/Transcode) -->
-      <p class="top-4 absolute left-0 right-0 mx-auto text-center uppercase tracking-widest text-opacity-75 z-50" :class="{ 'text-black text-opacity-75': coverChrome.darkForeground }" style="font-size: 10px">{{ isDirectPlayMethod ? $strings.LabelPlaybackDirect : isLocalPlayMethod ? $strings.LabelPlaybackLocal : $strings.LabelPlaybackTranscode }}</p>
+      <p class="playback-method top-4 absolute left-0 right-0 mx-auto text-center uppercase tracking-widest text-opacity-75 z-50" :class="{ 'text-black text-opacity-75': coverChrome.darkForeground }" style="font-size: 10px">{{ isDirectPlayMethod ? $strings.LabelPlaybackDirect : isLocalPlayMethod ? $strings.LabelPlaybackLocal : $strings.LabelPlaybackTranscode }}</p>
     </div>
 
     <!-- Overall book progress bar -->
