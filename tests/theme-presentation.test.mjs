@@ -85,19 +85,10 @@ test('hostile presentation containers cannot pollute prototypes or select a reci
   assert.equal(engine.validateTokens(inherited, dark).tokens['presentation.finish'], 'standard')
 })
 
-// Every recipe value must be free of anything that can escape or extend a declaration. The single exception is the
-// Phase 4J key face: the exact empty-string `content` of a repository-owned ::before rule (a pseudo-element only renders
-// with content). Nothing else may carry a quote: not another property, not another content value, not another selector
-const UNSAFE_VALUE = /url|expression|import|javascript|[;{}<>"'\\@]/i
-const FACE_RULES = new Set(presets.EQUIPMENT_RULES.filter(([s, d]) => s.endsWith('::before') && d.content === presets.KEY_FACE_CONTENT).map(([s]) => s))
-function assertSafeDeclaration(root, selector, property, value) {
-  if (property === 'content') {
-    assert.equal(value, "''", `${selector}: content must be exactly the empty string`)
-    assert.ok(FACE_RULES.has(selector.slice(root.length + 1)), `${selector}: content only on a repository-owned key-face ::before rule`)
-    return
-  }
-  assert.doesNotMatch(value, UNSAFE_VALUE, `${selector}: ${property}: ${value}`)
-}
+// Every recipe value must be free of anything that can escape or extend a declaration, quotes included. (Phase 4J briefly
+// needed one exact exception, the empty `content` of its ::before key faces; the finishing pass paints the faces on the keys
+// themselves, so the recipe has no quoted value at all again.)
+const UNSAFE_VALUE = /url|expression|import|javascript|[;{}<>"'\@]/i
 
 test('the equipment recipe emits only fixed selectors, fixed properties and safe values under its own theme root', () => {
   const theme = equipmentTheme()
@@ -109,42 +100,20 @@ test('the equipment recipe emits only fixed selectors, fixed properties and safe
     assert.ok(selector === root || selector.startsWith(`${root} `), selector)
     for (const [property, value] of Object.entries(declarations)) {
       assert.ok(allowedProps.has(property), property)
-      assertSafeDeclaration(root, selector, property, value)
+      assert.doesNotMatch(value, UNSAFE_VALUE, `${selector}: ${property}: ${value}`)
     }
   }
   assert.match(rules[root]['--color-edge-light'], /^\d{1,3} \d{1,3} \d{1,3}$/)
   assert.match(rules[root]['--color-edge-dark'], /^\d{1,3} \d{1,3} \d{1,3}$/)
 })
 
-test('the key-face content exception is exact, repository-owned and cannot carry theme-supplied quoted content', () => {
-  const root = engine.themeSelector('rig')
-  // The constant is the empty string literal and is used only as `content` on ::before key-face rules
-  assert.equal(presets.KEY_FACE_CONTENT, "''")
-  assert.ok(FACE_RULES.size >= 1)
+test('no recipe value is quoted or generated content, and hostile theme data cannot add one', () => {
   for (const [selector, declarations] of presets.EQUIPMENT_RULES) {
-    for (const [property, value] of Object.entries(declarations)) {
-      if (property === 'content' || /['"]/.test(value)) {
-        assert.equal(property, 'content', `${selector}: no other property may carry a quote`)
-        assert.equal(value, presets.KEY_FACE_CONTENT, selector)
-        assert.ok(selector.endsWith('::before'), selector)
-      }
-    }
+    assert.ok(!/::(before|after)/.test(selector), `${selector}: no pseudo-element rule`)
+    assert.equal(declarations.content, undefined, selector)
+    for (const value of Object.values(declarations)) assert.doesNotMatch(value, /['"]/, selector)
   }
-  // The checker itself rejects anything beyond that exact case
-  for (const [selector, property, value] of [
-    [`${root} #playerControls .player-key::before`, 'content', "'x'"],
-    [`${root} #playerControls .player-key::before`, 'content', '"x"'],
-    [`${root} #playerControls .player-key::before`, 'content', "'' ; color: red"],
-    [`${root} #playerControls .player-key::before`, 'content', 'url(x)'],
-    [`${root} .some-other-element::before`, 'content', "''"],
-    [`${root} #playerControls .player-key`, 'content', "''"],
-    [`${root} #playerControls .player-key::before`, 'background-image', "''"],
-    [`${root} #playerControls .player-key::before`, 'font-family', "'x'"]
-  ]) {
-    assert.throws(() => assertSafeDeclaration(root, selector, property, value), `${selector} ${property}: ${value}`)
-  }
-  // Hostile theme data (quotes and CSS fragments in every token) never reaches content: such a theme fails validation and
-  // falls back, and every content value a validated equipment theme emits is the recipe's own constant
+  // Hostile theme data (quotes and CSS fragments in every token) never reaches a rule
   const dark = engine.getTheme('dark')
   const hostile = {}
   for (const name of Object.keys(dark.tokens)) hostile[name] = "''; } body { content: 'pwned'"
@@ -152,12 +121,9 @@ test('the key-face content exception is exact, repository-owned and cannot carry
   const { theme } = engine.validateTheme({ id: 'rig', labelKey: 'LabelRig', colorScheme: 'dark', tokens: hostile }, dark.tokens)
   const rules = presets.presentationRules([theme || equipmentTheme()])
   for (const [selector, declarations] of Object.entries(rules)) {
-    for (const [property, value] of Object.entries(declarations)) {
-      assert.doesNotMatch(value, /pwned|body/, `${selector}: ${property}`)
-      if (property === 'content') assert.equal(value, "''", selector)
-    }
+    assert.equal(declarations.content, undefined, selector)
+    for (const value of Object.values(declarations)) assert.doesNotMatch(value, /pwned|body|['"]/, selector)
   }
-  // No token is emitted as `content` (tokens only become CSS variables)
   for (const t of TOKENS) assert.notEqual(t.cssVar, 'content', t.name)
 })
 

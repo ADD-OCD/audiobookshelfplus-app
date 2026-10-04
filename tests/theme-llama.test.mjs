@@ -438,7 +438,7 @@ test('Gate B rules compile through Tailwind under the LLAMA root only', async ()
     return css.slice(i, css.indexOf('}', i))
   }
   const root = "html[data-theme='llama']"
-  assert.match(block(`${root} .fullscreen #playerControls .player-key::before`), /border-radius: 4px;[\s\S]*background-image: linear-gradient/)
+  assert.match(block(`${root} .fullscreen #playerControls .player-key`), /width: 60px;[\s\S]*border-radius: 4px;[\s\S]*background-image: linear-gradient/)
   assert.match(block(`${root} #playerContent .sleep-readout`), /color: rgb\(var\(--color-accent\)\)/)
   assert.match(block(`${root} #playerTrack .bg-track-cursor.bg-yellow-300`), /background-image: repeating-linear-gradient/)
   assert.match(block(`${root} #playerTrack .seek-dragging > .bg-track-cursor.bg-yellow-300`), /background-image: none/)
@@ -859,8 +859,8 @@ test('Gate H: the LLAMA destructive key glyph is pure white (non-text contrast),
 
 const PAINT_ONLY = /^(background-color|background-image|box-shadow|border-radius|color|-webkit-text-stroke)$/
 const GEOMETRY_PROPERTY = /^(width|height|min-|max-|padding|margin|border(-width|-style)?$|top|right|bottom|left|inset|position|display|flex|gap|transform|translate|scale|line-height|font|letter-spacing|text-|overflow|z-index)/
-// The full-player transport key faces (Phase 4J ::before plates): resting and pressed
-const KEY_SELECTORS = ['.fullscreen #playerControls .player-key::before', '.fullscreen #playerControls .player-key:not(.key-disabled):active::before']
+// The full-player transport keys (the key's own fixed box is its face since the finishing pass): resting and pressed
+const KEY_SELECTORS = ['.fullscreen #playerControls .player-key', '.fullscreen #playerControls .player-key:not(.key-disabled):active']
 const LEGEND_SELECTORS = ['#playerContent .jump-icon:not(.key-disabled)', '#playerContent .next-icon:not(.key-disabled)']
 const PRIMARY_LEGEND_SELECTORS = ['#playerControls .play-btn .material-symbols', '#playerControls .play-btn .la-ball-spin-clockwise']
 
@@ -976,9 +976,8 @@ test('Phase 4B states stay distinct: unavailable keys get no legend amber; press
   for (const s of [...LEGEND_SELECTORS, KEY_SELECTORS[1]]) assert.ok(s.includes(':not(.key-disabled)'), s)
   // Phase 4J: an unavailable key is a sunken socket with a dimmed legend; those are the only rules that target it
   const disabled = Object.keys(rules).filter((s) => s.includes('.key-disabled') && !s.includes(':not(.key-disabled)'))
-  const socketRules = [JSON.stringify({ ...P.KEY_SOCKET }), JSON.stringify({ ...P.KEY_SOCKET_LEGEND })]
-  for (const s of disabled) assert.ok(socketRules.includes(JSON.stringify(rules[s])), s)
-  assert.ok(disabled.length >= 2)
+  for (const s of disabled) assert.deepEqual(rules[s], { ...P.KEY_SOCKET, ...P.KEY_SOCKET_LEGEND }, s)
+  assert.equal(disabled.length, 3, 'full transport, collapsed transport and utility')
   const resting = rules[`${root} ${KEY_SELECTORS[0]}`]
   const pressed = rules[`${root} ${KEY_SELECTORS[1]}`]
   assert.notEqual(resting['box-shadow'], pressed['box-shadow'])
@@ -1046,28 +1045,34 @@ const READOUT_ABOVE_TOTAL_TRACK = '.fullscreen .total-track ~ .title-author-text
 // Phase 4H adds the primary glyph size (inside the unchanged Play/Pause box) as the recipe's only other geometry
 const PRIMARY_GLYPH_FULL = '.fullscreen #playerControls .play-btn .material-symbols'
 const PRIMARY_GLYPH_MINI = '#streamContainer:not(.fullscreen) #playerControls .play-btn .material-symbols'
-// Phase 4J adds the key faces' internal geometry (the face plate positioned on its key, the key as its containing block)
-// and the transport legends' fixed scale (transforms, which move no box)
-const FACE_PLATE = ['position', 'top', 'left', 'width', 'height', 'z-index']
+// The control deck (Phase 4J, recomposed in the finishing pass) adds its own named geometry: each key's fixed box, the
+// packed transport bank, the primary's lift, the utility row's padding, the readout boxes, the top chrome keys and display,
+// the queue badge and the legends' sizes and offsets (transforms, which move no box)
+const KEY_BOX_GEOMETRY = ['width', 'height', 'flex', 'display']
+const READOUT_BOX_GEOMETRY = ['display', 'height', 'min-width', 'width', 'padding', 'line-height']
 const READOUT_LAYOUT_PROPERTIES = {
   [READOUT]: ['left', 'width', 'padding', 'bottom'],
   [READOUT_ABOVE_TOTAL_TRACK]: ['bottom'],
   [PRIMARY_GLYPH_FULL]: ['font-size'],
   [PRIMARY_GLYPH_MINI]: ['font-size'],
-  '.fullscreen #playerControls .player-key': ['position'],
-  '.fullscreen #playerControls .player-key::before': FACE_PLATE,
-  '.fullscreen #playerControls .jump-icon > .material-symbols': ['transform', 'transform-origin'],
-  '.fullscreen #playerControls .jump-label': ['transform', 'font-weight'],
-  '#playerContent .utility-key': ['position'],
-  '#playerContent .utility-key::before': FACE_PLATE,
-  '#playerContent .queue-key > span.absolute': ['top', 'left', 'bottom', 'right'],
-  '.fullscreen #playerContent .speed-readout': ['position'],
-  '.fullscreen #playerContent .speed-readout::before': ['position', 'inset', 'z-index'],
-  '.fullscreen #playerContent .sleep-readout': ['position', 'transform'],
-  '.fullscreen #playerContent .sleep-readout::before': ['position', 'inset', 'z-index'],
-  '#streamContainer:not(.fullscreen) #playerControls .player-key': ['position'],
-  '#streamContainer:not(.fullscreen) #playerControls .player-key::before': FACE_PLATE,
-  '#streamContainer:not(.fullscreen) #playerControls .jump-icon > .material-symbols': ['transform']
+  '.fullscreen #playerControls > div': ['gap'],
+  '.fullscreen #playerControls .play-btn': ['margin', 'top'],
+  '.fullscreen #playerControls .player-key': KEY_BOX_GEOMETRY,
+  '.fullscreen #playerControls .jump-icon > .material-symbols': ['font-size', 'transform'],
+  '.fullscreen #playerControls .jump-label': ['font-weight'],
+  '.fullscreen #playerControls .next-icon': ['font-size'],
+  '#streamContainer:not(.fullscreen) #playerControls .player-key': KEY_BOX_GEOMETRY,
+  '#streamContainer:not(.fullscreen) #playerControls .jump-icon > .material-symbols': ['transform'],
+  '#playerContent .utility-key': KEY_BOX_GEOMETRY,
+  '#playerContent .queue-key > span.absolute': ['bottom', 'right'],
+  '.fullscreen #playerContent .utility-row': ['padding-bottom'],
+  '.fullscreen #playerContent .speed-readout': READOUT_BOX_GEOMETRY,
+  '.fullscreen #playerContent .sleep-display': READOUT_BOX_GEOMETRY,
+  '#streamContainer.fullscreen .chrome-key': [...KEY_BOX_GEOMETRY, 'font-size'],
+  '#streamContainer.fullscreen .collapse-key': ['margin-top'],
+  '#streamContainer.fullscreen .cast-key': ['margin-top'],
+  '#streamContainer.fullscreen .menu-key': ['margin-top'],
+  '#streamContainer.fullscreen .playback-method': ['width', 'padding', 'top']
 }
 
 test('Phase 4E readout is a recessed well in a bezel plate: frozen, paint-only, from the shared primitives', () => {
@@ -1274,8 +1279,12 @@ test('Phase 4E-R2 landscape readout only ends before the top-bar controls: LLAMA
   // and 4px of chassis (111px), and the 24px left margin that aligns the readout with the seek well (px-6)
   assert.equal(24 + 64 + 39 + 4 + 4, 135)
   const player = await read('../components/app/AudioPlayer.vue')
-  assert.match(player, /<div v-show="showCastBtn" class="top-6 right-16 absolute cursor-pointer">\s*<span class="material-symbols text-3xl"/)
-  assert.match(player, /<div class="top-6 right-4 absolute cursor-pointer">\s*<span class="material-symbols text-3xl"/)
+  assert.match(player, /<div v-show="showCastBtn" class="top-6 right-16 absolute cursor-pointer">\s*<span class="chrome-key cast-key material-symbols text-3xl"/)
+  assert.match(player, /<div class="top-6 right-4 absolute cursor-pointer">\s*<span class="chrome-key menu-key material-symbols text-3xl"/)
+  // Finishing pass: the cast key is a fixed 44px key in the same 64px slot, so the readout (111px from the right edge, plate
+  // 4px) still ends before it: the cast face starts 108px from the right edge
+  assert.equal(presets.PRIMITIVES.DECK.chrome.width, 44)
+  assert.ok(64 + presets.PRIMITIVES.DECK.chrome.width >= 111 - 4)
   // The player's landscape rule it limits (max-width still applies under an !important width) is unchanged
   const style = player.slice(player.indexOf('<style>'))
   assert.match(style, /@media \(orientation: landscape\) \{\s*\.fullscreen \.title-author-texts \{\s*left: 50% !important;\s*width: 50% !important;/)
@@ -1378,7 +1387,9 @@ test('Phase 4H rules: LLAMA-only primary key, amber Play/Pause, seek-pending and
   assert.ok(2.8 * 16 < 65 && 1.875 * 16 < 40)
   // Every play-btn selector stays under the LLAMA root, with no comma list
   const own = Object.keys(rules).filter((s) => s.includes('play-btn') && !s.includes('row-play-btn'))
-  assert.equal(own.length, 8)
+  // 8 Phase 4H rules plus the finishing pass's placement of the primary in the transport bank (margin and lift only)
+  assert.equal(own.length, 9)
+  assert.deepEqual(rules[`${root} .fullscreen #playerControls .play-btn`], { ...presets.PRIMITIVES.PRIMARY_IN_BANK })
   for (const s of own) assert.ok(s.startsWith(`${root} `) && !s.slice(root.length).includes(','), s)
   for (const id of ['dark', 'black', 'light']) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {}, id)
 })
@@ -1437,214 +1448,182 @@ test('Phase 4H CSS: the LLAMA glyph size and amber outrank the player rules; sta
   assert.match(await read('../components/widgets/SpinnerIcon.vue'), /<div class="la-ball-spin-clockwise la-dark la-sm">/)
 })
 
-// --- Phase 4J: control-deck key faces and readouts ---
+// --- Control deck: Phase 4J key faces, recomposed in the Phase 4 finishing pass ---
 
-const FACES = {
-  transport: { host: '.fullscreen #playerControls .player-key', size: [46, 50] },
-  utility: { host: '#playerContent .utility-key', size: [44, 40] },
-  mini: { host: '#streamContainer:not(.fullscreen) #playerControls .player-key', size: [34, 34] }
+const TIERS = {
+  transport: { host: '.fullscreen #playerControls .player-key', size: [60, 60], paint: 'TRANSPORT_KEY' },
+  utility: { host: '#playerContent .utility-key', size: [50, 46], paint: 'UTILITY_KEY' },
+  mini: { host: '#streamContainer:not(.fullscreen) #playerControls .player-key', size: [34, 34], paint: 'TRANSPORT_KEY_MINI' },
+  chrome: { host: '#streamContainer.fullscreen .chrome-key', size: [44, 44], paint: 'UTILITY_KEY' }
 }
 
-test('Phase 4J faces: fixed px tiers (46x50, 44x40, 34x34) centered on the unchanged key, never content- or font-driven', () => {
+test('Control deck: every key is its own fixed px box (60x60, 50x46, 34x34, 44x44), never content- or font-sized', () => {
   const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
-  for (const [tier, { host, size }] of Object.entries(FACES)) {
-    const [w, h] = size
-    const face = rules[`${root} ${host}::before`]
-    assert.ok(face, tier)
-    // Exact px sizes; the plate is centered from 50% of the key box, so it never depends on the legend or the font scale
-    assert.equal(face.width, `${w}px`, tier)
-    assert.equal(face.height, `${h}px`, tier)
-    assert.equal(face.left, `calc(50% - ${w / 2}px)`, tier)
-    assert.equal(face.top, `calc(50% - ${h / 2}px)`, tier)
-    assert.deepEqual({ ...P.KEY_FACE[tier] }, { content: presets.KEY_FACE_CONTENT, position: 'absolute', top: face.top, left: face.left, width: face.width, height: face.height, 'z-index': '-1', 'border-radius': P.RADIUS.key }, tier)
-    for (const p of ['inset', 'right', 'bottom', 'min-width', 'min-height', 'max-width', 'max-height', 'padding']) assert.equal(face[p], undefined, `${tier} ${p}`)
-    // The key itself only becomes the face's containing block: no size, offset, margin or padding change
-    assert.deepEqual(rules[`${root} ${host}`], { position: 'relative', isolation: 'isolate' }, tier)
+  for (const [tier, { host, size, paint }] of Object.entries(TIERS)) {
+    const rule = rules[`${root} ${host}`]
+    assert.ok(rule, tier)
+    assert.equal(rule.width, `${size[0]}px`, tier)
+    assert.equal(rule.height, `${size[1]}px`, tier)
+    assert.equal(rule.flex, 'none', `${tier}: a flex row never stretches or shrinks the key`)
+    assert.equal(rule['border-radius'], P.RADIUS.key, tier)
+    for (const p of ['min-width', 'min-height', 'max-width', 'max-height', 'padding']) assert.equal(rule[p], undefined, `${tier} ${p}`)
+    // The face is painted on the key itself
+    for (const [property, value] of Object.entries(P[paint])) assert.equal(rule[property], value, `${tier} ${property}`)
   }
+  assert.deepEqual({ ...P.DECK.transport }, { width: 60, height: 60, gap: 8 })
+  // Hierarchy by size: primary 65 > transport 60 > utility 50x46; the collapsed keys stay inside the 40px primary height
+  assert.ok(65 > P.DECK.transport.height && P.DECK.transport.height > P.DECK.utility.height && P.DECK.mini.height < 40)
 })
 
-test('Phase 4J full-face interaction: the face is part of its key, painted under the legend, with no z-index workaround', () => {
+test('Control deck: the full bank fits 412px with one gap, the primary lifted a few px and not resized', () => {
+  const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
-  for (const { host } of Object.values(FACES)) {
-    const face = rules[`${root} ${host}::before`]
-    // A ::before is hit-tested as its key: it must not opt out of pointer events, and it sits below the legend only
-    // inside the key's own stacking context (isolation), never above or below neighbouring controls
-    assert.equal(face['pointer-events'], undefined, host)
-    assert.equal(face['z-index'], '-1', host)
-    assert.equal(rules[`${root} ${host}`].isolation, 'isolate', host)
-  }
-  // The only z-index values among the player's rules are the faces' and readout windows' -1 (no stacking workaround)
-  for (const [selector, d] of Object.entries(rules)) {
-    if (/#playerContent|#playerControls/.test(selector) && d['z-index'] !== undefined) assert.ok(selector.endsWith('::before') && d['z-index'] === '-1', selector)
-  }
-  // Readout windows are information: they take no taps (the text keeps its own click)
-  for (const s of ['.fullscreen #playerContent .speed-readout::before', '.fullscreen #playerContent .sleep-readout::before']) assert.equal(rules[`${root} ${s}`]['pointer-events'], 'none', s)
+  const { width, gap } = P.DECK.transport
+  assert.deepEqual(rules[`${root} .fullscreen #playerControls > div`], { 'justify-content': 'center', gap: `${gap}px` })
+  assert.deepEqual(rules[`${root} .fullscreen #playerControls .play-btn`], { margin: '0', top: `-${P.DECK.primaryLift}px` })
+  assert.ok(P.DECK.primaryLift > 0 && P.DECK.primaryLift <= 5)
+  // Five keys and four gaps inside the 412px reference width minus the deck's 24px side padding
+  assert.ok(4 * width + 65 + 4 * gap <= 412 - 48, 'bank fits')
+  // The primary keeps its Phase 4H box (the player's own 65px / 40px rules)
+  for (const s of Object.keys(rules)) if (s.includes('play-btn')) for (const p of ['width', 'height', 'min-width', 'min-height', 'transform']) assert.equal(rules[s][p], undefined, `${s}: ${p}`)
 })
 
-test('Phase 4J hooks: semantic classes and the layout-neutral sleep wrapper; the player has no theme-id conditional', async () => {
+test('Control deck: the hit target is the visible key itself (no pseudo-element hit area, no stacking tricks)', () => {
+  const root = engine.themeSelector('llama')
+  const rules = presets.presentationRules([llama()])
+  for (const [selector, d] of Object.entries(rules)) {
+    if (!/#playerContent|#playerControls|#streamContainer/.test(selector)) continue
+    assert.ok(!selector.includes('::before') && !selector.includes('::after'), `${selector}: no pseudo-element faces`)
+    for (const p of ['z-index', 'isolation', 'pointer-events', 'content']) assert.equal(d[p], undefined, `${selector}: ${p}`)
+  }
+  // A key is a flex box that centers its legend: the glyph never sizes it
+  for (const { host } of Object.values(TIERS)) assert.equal(rules[`${root} ${host}`].display, 'flex', host)
+})
+
+test('Control deck hooks: semantic classes on the keys, readouts, utility row and top chrome; no theme branch in the player', async () => {
   const player = await read('../components/app/AudioPlayer.vue')
   const template = player.slice(0, player.indexOf('</template>'))
-  for (const hook of ['queue-key', 'bookmark-key', 'sleep-key', 'chapters-key', 'speed-readout', 'sleep-readout']) assert.equal((template.match(new RegExp(`\\b${hook}\\b`, 'g')) || []).length, 1, hook)
+  for (const hook of ['queue-key', 'bookmark-key', 'sleep-key', 'chapters-key', 'speed-readout', 'sleep-readout', 'sleep-display', 'utility-row', 'collapse-key', 'cast-key', 'menu-key', 'playback-method']) {
+    assert.equal((template.match(new RegExp(`\\b${hook}\\b`, 'g')) || []).length, 1, hook)
+  }
   assert.equal((template.match(/\butility-key\b/g) || []).length, 4)
-  // The sleep wrapper is a flex span exactly the size of its 28px icon, carrying the key hooks and the original click
+  assert.equal((template.match(/\bchrome-key\b/g) || []).length, 3)
+  // The sleep wrapper is a flex span carrying the key hooks and the original click
   const sleep = template.match(/<span v-if="!sleepTimerRunning" class="([^"]*)" @click\.stop="\$emit\('showSleepTimer'\)">\s*<svg [^>]*class="h-7 w-7 text-fg-muted"[^>]*>/)
   assert.ok(sleep)
   assert.deepEqual(sleep[1].split(' ').sort(), ['cursor-pointer', 'flex', 'player-key', 'sleep-key', 'utility-key'])
   assert.doesNotMatch(template, /<svg[^>]*@click/)
-  // Presentation lives in the theme recipe only: no theme id, data-theme or LLAMA branch in the player (its one theme
-  // read is the token-driven cover-color policy, unchanged)
+  // The top chrome keep their own clicks on the same elements
+  assert.match(template, /class="chrome-key collapse-key [^"]*"[^>]*@click="collapseFullscreen"/)
+  assert.match(template, /class="chrome-key cast-key [^"]*"[^>]*@click="castClick"/)
+  assert.match(template, /class="chrome-key menu-key [^"]*"[^>]*@click="showMoreMenuDialog = true"/)
+  // Presentation lives in the theme recipe only (the one $theme read is the token-driven cover-color policy)
   assert.doesNotMatch(player, /llama|data-theme|themeId|theme\.id\b/i)
   assert.equal((player.match(/\$theme\b/g) || []).length, 1)
-  assert.match(player, /coverPresentation\.coverColorPresentation\(this\.\$theme\.theme,/)
 })
 
-test('Phase 4J transport: amber legend, primary family one step below the primary, pressed and socket states', () => {
+test('Control deck states: pressed cuts the key in, an unavailable key is a dimmed socket, on every tier', () => {
   const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
-  const rule = (s) => rules[`${root} ${s}`]
-  // Face finish: the primary's inner bevel and channel, a weaker lit return (0.18 vs 0.3) and a shorter drop
   const layers = (v) => v.split(/, (?=inset|0)/)
+  // Transport: the primary's inner bevel and channel, a weaker lit return (0.18 vs 0.3) and a shorter drop
   const transport = layers(P.TRANSPORT_KEY['box-shadow'])
   const primary = layers(P.PRIMARY_KEY['box-shadow'])
   assert.deepEqual(transport.slice(0, 4), primary.slice(0, 4))
   assert.equal(transport[4], '0 0 0 2px rgb(var(--color-edge-light) / 0.18)')
   assert.equal(primary[4], '0 0 0 2px rgb(var(--color-edge-light) / 0.3)')
-  assert.equal(transport[5], '0 2px 4px rgb(0 0 0 / 0.5)')
-  assert.equal(primary[5], '0 3px 5px rgb(0 0 0 / 0.55)')
-  assert.deepEqual(rule(`${FACES.transport.host}::before`), { ...P.KEY_FACE.transport, ...P.TRANSPORT_KEY })
-  assert.deepEqual(rule(`${FACES.mini.host}::before`), { ...P.KEY_FACE.mini, ...P.TRANSPORT_KEY_MINI })
-  // Pressed: sheen and drop go, the face deepens, the bevel inverts with an inner shade, channel and return stay
-  for (const [s, d] of [
-    [`${FACES.transport.host}:not(.key-disabled):active::before`, P.TRANSPORT_KEY_PRESSED],
-    [`${FACES.mini.host}:not(.key-disabled):active::before`, P.TRANSPORT_KEY_PRESSED_MINI]
+  // Utility: restrained bezel, no lit return
+  assert.doesNotMatch(P.UTILITY_KEY['box-shadow'], /0 0 0 2px/)
+  for (const [host, pressed] of [
+    [TIERS.transport.host, P.TRANSPORT_KEY_PRESSED],
+    [TIERS.mini.host, P.TRANSPORT_KEY_PRESSED_MINI],
+    [TIERS.utility.host, P.UTILITY_KEY_PRESSED]
   ]) {
-    assert.deepEqual(rule(s), { ...d }, s)
-    assert.equal(d['background-image'], 'none')
-    assert.match(d['box-shadow'], /^inset 1px 1px 0 rgb\(var\(--color-edge-dark\)\), inset -1px -1px 0 rgb\(var\(--color-edge-light\) \/ 0\.3\), inset 0 3px 6px/)
-    assert.doesNotMatch(d['box-shadow'], /0 2px 4px/)
-    for (const p of Object.keys(d)) assert.doesNotMatch(p, /transform|translate|top|left|width|height|margin/, p)
+    assert.deepEqual(rules[`${root} ${host}:not(.key-disabled):active`], { ...pressed }, host)
+    assert.equal(pressed['background-image'], 'none')
+    assert.match(pressed['box-shadow'], /^inset 1px 1px 0 rgb\(var\(--color-edge-dark\)\)/)
+    for (const p of Object.keys(pressed)) assert.doesNotMatch(p, /transform|top|left|width|height|margin/, p)
+    // Unavailable: socket face and dimmed legend in one rule; never pressed
+    assert.deepEqual(rules[`${root} ${host}.key-disabled`], { ...P.KEY_SOCKET, ...P.KEY_SOCKET_LEGEND }, host)
   }
-  // Unavailable: a sunken socket (no raised bevel, ring, return or drop) with a strongly dimmed legend, on every tier
+  assert.deepEqual(rules[`${root} ${TIERS.chrome.host}:active`], { ...P.UTILITY_KEY_PRESSED })
+  assert.deepEqual({ ...P.KEY_SOCKET_LEGEND }, { color: 'rgb(var(--color-fg) / 0.22)' })
   assert.doesNotMatch(P.KEY_SOCKET['box-shadow'], /edge-light\) \/ 0\.6|0 0 0 2px|(^|, )0 2px [34]px/)
-  assert.match(P.KEY_SOCKET['box-shadow'], /^inset 0 0 0 1px rgb\(var\(--color-edge-dark\)\), inset 0 2px 4px/)
-  assert.equal(P.KEY_SOCKET['background-image'], 'none')
-  for (const { host } of Object.values(FACES)) {
-    assert.deepEqual(rule(`${host}.key-disabled::before`), { ...P.KEY_SOCKET }, host)
-    assert.deepEqual(rule(`${host}.key-disabled`), { ...P.KEY_SOCKET_LEGEND }, host)
-  }
-  // Legends: amber for the playback keys (the existing legend rules), and never on a face or socket
-  assert.deepEqual(rule('#playerContent .jump-icon:not(.key-disabled)'), { ...P.PLAYBACK_LEGEND })
-  for (const { host } of Object.values(FACES)) for (const s of [`${host}::before`, `${host}.key-disabled`]) assert.doesNotMatch(JSON.stringify(rule(s)), /track-cursor/, s)
 })
 
-test('Phase 4J transport legends: a fixed equipment scale (transforms only), dynamic duration, chapter glyph unchanged', async () => {
+test('Control deck legends: amber transport, dynamic durations, sizes safe in the fixed keys; neutral utility and chrome', async () => {
   const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
-  // The jump arrow is drawn at 0.82 toward its duration; the duration keeps its size and gets the bold weight
-  assert.deepEqual({ ...P.JUMP_GLYPH }, { transform: 'translateY(-0.5px) scale(0.82)', 'transform-origin': '50% 100%' })
-  assert.deepEqual({ ...P.JUMP_DURATION }, { transform: 'translateY(-3px)', 'font-weight': '700' })
+  assert.deepEqual(rules[`${root} #playerContent .jump-icon:not(.key-disabled)`], { ...P.PLAYBACK_LEGEND })
+  assert.deepEqual({ ...P.JUMP_GLYPH }, { 'font-size': '2rem', transform: 'translateY(2px)' })
+  assert.deepEqual({ ...P.JUMP_DURATION }, { 'font-weight': '700' })
+  assert.deepEqual({ ...P.CHAPTER_GLYPH }, { 'font-size': '2.25rem' })
   assert.deepEqual({ ...P.MINI_JUMP_GLYPH }, { transform: 'translateY(1px) scale(0.78)' })
-  // No legend rule sets a font size, line height or box size (text zoom scales font sizes; boxes must not move)
-  for (const s of ['.fullscreen #playerControls .jump-icon > .material-symbols', '.fullscreen #playerControls .jump-label', '#streamContainer:not(.fullscreen) #playerControls .jump-icon > .material-symbols']) {
-    for (const p of Object.keys(rules[`${root} ${s}`])) assert.match(p, /^(transform|transform-origin|font-weight)$/, `${s}: ${p}`)
-  }
-  // The chapter steps keep their 2rem glyph: no LLAMA rule sizes .next-icon
-  for (const [s, d] of Object.entries(rules)) if (s.includes('next-icon')) for (const p of Object.keys(d)) assert.doesNotMatch(p, /^(font-size|width|height|line-height|transform|text-indent)$/, `${s}: ${p}`)
+  // Utility and chrome legends are the one neutral color; nothing in them is amber or success green
+  for (const s of ['', ' > .material-symbols', ' > svg']) assert.deepEqual(rules[`${root} #playerContent .utility-key:not(.key-disabled)${s}`], { ...P.UTILITY_LEGEND }, s)
+  assert.equal(rules[`${root} #streamContainer.fullscreen .chrome-key`].color, P.UTILITY_LEGEND.color)
+  for (const [s, d] of Object.entries(rules)) if (/utility-key|queue-key|sleep-key|chapters-key|chrome-key/.test(s)) assert.doesNotMatch(JSON.stringify(d), /track-cursor|--color-accent|--color-success/, s)
+  // Durations stay dynamic (the jump settings), never a fixed "10s"
   const player = await read('../components/app/AudioPlayer.vue')
-  assert.match(player, /\.fullscreen #playerControls \.next-icon \{\s*font-size: 2rem;/)
-  // The durations stay dynamic (the jump settings), never a fixed "10s"
   const template = player.slice(0, player.indexOf('</template>'))
   assert.match(template, /class="jump-label [^"]*">\{\{ jumpBackwardsLabel \}\}</)
   assert.match(template, /class="jump-label [^"]*">\{\{ jumpForwardLabel \}\}</)
   assert.doesNotMatch(template, />\s*10s\s*</)
-  for (const d of Object.values(rules)) assert.doesNotMatch(JSON.stringify(d), /10s/)
+  // The queue badge sits inside its key's corner
+  assert.deepEqual({ ...P.QUEUE_BADGE }, { bottom: '3px', right: '3px', 'box-shadow': '0 0 0 1px rgb(var(--color-edge-dark))' })
 })
 
-test('Phase 4J utility keys: one neutral legend, restrained bezel, no amber or success identity; queue badge inside the face', () => {
+test('Control deck readouts: speed, the running sleep timer and the playback method are recessed green displays', () => {
   const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
-  assert.deepEqual(rules[`${root} #playerContent .utility-key::before`], { ...P.KEY_FACE.utility, ...P.UTILITY_KEY })
-  assert.deepEqual(rules[`${root} #playerContent .utility-key:not(.key-disabled):active::before`], { ...P.UTILITY_KEY_PRESSED })
-  // Restrained bezel: the same inner bevel and channel, no lit return ring, the short player-key drop
-  assert.ok(P.UTILITY_KEY['box-shadow'].startsWith(P.TRANSPORT_KEY['box-shadow'].split(', 0 0 0 2px')[0]))
-  assert.doesNotMatch(P.UTILITY_KEY['box-shadow'], /0 0 0 2px/)
-  assert.match(P.UTILITY_KEY['box-shadow'], /0 2px 3px rgb\(0 0 0 \/ 0\.5\)$/)
-  // One neutral legend for the key, its icon glyph and its svg
-  assert.deepEqual({ ...P.UTILITY_LEGEND }, { color: 'rgb(var(--color-fg) / 0.8)' })
-  for (const s of ['', ' > .material-symbols', ' > svg']) assert.deepEqual(rules[`${root} #playerContent .utility-key:not(.key-disabled)${s}`], { ...P.UTILITY_LEGEND }, s)
-  for (const [s, d] of Object.entries(rules)) {
-    if (/utility-key|queue-key|sleep-key|chapters-key/.test(s)) assert.doesNotMatch(JSON.stringify(d), /track-cursor|--color-accent|--color-success/, s)
+  for (const s of ['.fullscreen #playerContent .speed-readout', '.fullscreen #playerContent .sleep-display']) assert.deepEqual(rules[`${root} ${s}`], { ...P.READOUT_BOX }, s)
+  for (const d of [P.READOUT_BOX, P.PLAYBACK_METHOD_READOUT]) {
+    assert.equal(d['background-color'], 'rgb(var(--color-recessed))')
+    assert.ok(d['box-shadow'].startsWith(P.RECESSED_WELL))
+    assert.equal(d['background-image'], undefined, 'no raised sheen')
+    assert.doesNotMatch(d['box-shadow'], /edge-light\) \/ 0\.6|0 0 0 2px|track-cursor/)
   }
-  // The queue badge: anchored 2px inside the face's lower-right corner (face 44x40 from the key center, badge 14px)
-  assert.deepEqual({ ...P.QUEUE_BADGE }, { top: 'calc(50% + 4px)', left: 'calc(50% + 6px)', bottom: 'auto', right: 'auto', 'box-shadow': '0 0 0 1px rgb(var(--color-edge-dark))' })
-  assert.equal(44 / 2 - 6 - 14, 2)
-  assert.equal(40 / 2 - 4 - 14, 2)
-})
-
-test('Phase 4J readouts: speed and the running sleep timer are recessed green windows, never keys', () => {
-  const P = presets.PRIMITIVES
-  const root = engine.themeSelector('llama')
-  const rules = presets.presentationRules([llama()])
-  for (const [name, s] of [
-    ['speed', '.fullscreen #playerContent .speed-readout'],
-    ['sleep', '.fullscreen #playerContent .sleep-readout']
-  ]) {
-    const w = rules[`${root} ${s}::before`]
-    assert.deepEqual(w, { ...P.READOUT_WINDOW[name] }, s)
-    assert.equal(w['background-color'], 'rgb(var(--color-recessed))')
-    assert.ok(w['box-shadow'].startsWith(P.RECESSED_WELL))
-    // Not a raised key: no sheen, lit bevel, return ring or drop, and never amber
-    assert.equal(w['background-image'], undefined)
-    assert.doesNotMatch(w['box-shadow'], /edge-light\) \/ 0\.6|0 0 0 2px|0 2px [34]px|track-cursor/)
-  }
-  // The text is the phosphor green readout color
+  // Readouts are the utility keys' height and at least their width; their width follows the value
+  assert.equal(P.READOUT_BOX.height, `${P.DECK.utility.height}px`)
+  assert.equal(P.READOUT_BOX['min-width'], `${P.DECK.utility.width}px`)
+  assert.equal(P.READOUT_BOX.width, 'auto')
   assert.deepEqual(rules[`${root} #playerContent .speed-readout`], { color: 'rgb(var(--color-accent))' })
   assert.deepEqual(rules[`${root} #playerContent .sleep-readout`], { color: 'rgb(var(--color-accent))' })
-  // Neither readout carries a key hook
-  assert.ok(!Object.keys(rules).some((s) => /speed-readout|sleep-readout/.test(s) && /player-key|utility-key/.test(s)))
+  assert.equal(P.PLAYBACK_METHOD_READOUT.color, 'rgb(var(--color-accent))')
+  assert.ok(!Object.keys(rules).some((s) => /speed-readout|sleep-display|playback-method/.test(s) && /player-key|utility-key|chrome-key/.test(s)))
 })
 
-test('Phase 4J contrast: amber legends and readouts >= 7:1, utility legends >= 4.5:1 on their faces', () => {
+test('Control deck contrast: amber and readouts >= 7:1, utility and chrome legends >= 4.5:1, socket legend dimmed', () => {
   const P = presets.PRIMITIVES
   const t = llama().tokens
   const edge = presets.equipmentDerivedDeclarations(t)['--color-edge-light'].split(' ').map(Number)
   const over = (base, top, a) => base.map((c, i) => c + (top[i] - c) * a)
   const alphaOf = (v) => Number(v.match(/\/ (0\.\d+)\)/)[1])
-  // Worst case: the face at its lightest (the sheen's full 0.2 at the very top), over the deck it sits on
   const faceOn = (deck, fill, sheen = 0.2) => over(over(deck, t['surface.recessed'], alphaOf(fill)), edge, sheen)
-  const full = t['surface.content']
-  const mini = t['surface.base']
   for (const [label, face] of [
-    ['transport', faceOn(full, P.TRANSPORT_KEY['background-color'])],
-    ['transport pressed', faceOn(full, P.TRANSPORT_KEY_PRESSED['background-color'], 0)],
-    ['mini', faceOn(mini, P.TRANSPORT_KEY_MINI['background-color'])],
-    ['mini pressed', faceOn(mini, P.TRANSPORT_KEY_PRESSED_MINI['background-color'], 0)]
+    ['transport', faceOn(t['surface.content'], P.TRANSPORT_KEY['background-color'])],
+    ['transport pressed', faceOn(t['surface.content'], P.TRANSPORT_KEY_PRESSED['background-color'], 0)],
+    ['mini', faceOn(t['surface.base'], P.TRANSPORT_KEY_MINI['background-color'])],
+    ['mini pressed', faceOn(t['surface.base'], P.TRANSPORT_KEY_PRESSED_MINI['background-color'], 0)]
   ]) {
-    // The amber also carries the jump duration text, so this covers the 4.5:1 text threshold too
-    assert.ok(contrast(t['progress.played'], face) >= 7, `${label}: amber ${contrast(t['progress.played'], face).toFixed(2)}`)
+    assert.ok(contrast(t['progress.played'], face) >= 7, `${label}: ${contrast(t['progress.played'], face).toFixed(2)}`)
   }
-  const utilityFace = faceOn(full, P.UTILITY_KEY['background-color'])
-  const legend = over(utilityFace, t['text.primary'], 0.8)
-  // Utility glyphs (icons, not text): the brief's 4.5:1 even at the face's lightest point (measured on the glyphs: 9.6-9.9:1)
-  assert.ok(contrast(legend, utilityFace) >= 4.5, `utility ${contrast(legend, utilityFace).toFixed(2)}`)
+  for (const deck of [t['surface.content'], t['surface.base']]) {
+    const face = faceOn(deck, P.UTILITY_KEY['background-color'])
+    assert.ok(contrast(over(face, t['text.primary'], 0.8), face) >= 4.5)
+  }
   assert.ok(contrast(t['accent.primary'], t['surface.recessed']) >= 7, 'readout green')
-  // The socket is deliberately dim (unavailable), but still a visible shape on the deck
-  const socket = faceOn(full, P.KEY_SOCKET['background-color'], 0)
-  assert.ok(contrast(socket, full) > 1.1)
-  // The unavailable legend: the primary text at 0.22, clearly dimmer than every available legend (unavailable by shape and luminance)
-  assert.deepEqual({ ...P.KEY_SOCKET_LEGEND }, { color: 'rgb(var(--color-fg) / 0.22)' })
-  const dimmed = over(socket, t['text.primary'], alphaOf(P.KEY_SOCKET_LEGEND.color))
-  assert.ok(contrast(dimmed, socket) < 3, `the unavailable legend is clearly dimmer: ${contrast(dimmed, socket).toFixed(2)}`)
-  assert.ok(alphaOf(P.KEY_SOCKET_LEGEND.color) < alphaOf(P.UTILITY_LEGEND.color) / 2)
+  const socket = faceOn(t['surface.content'], P.KEY_SOCKET['background-color'], 0)
+  assert.ok(contrast(over(socket, t['text.primary'], alphaOf(P.KEY_SOCKET_LEGEND.color)), socket) < 3, 'unavailable legend clearly dimmer')
 })
 
-test('Phase 4J is LLAMA-only: hooks have no unscoped rule and Dark, Black and Light get nothing', async () => {
+test('Control deck is LLAMA-only in compiled CSS, and Dark, Black and Light get nothing', async () => {
   const postcss = require('postcss')
   const tailwind = require('tailwindcss')
   const config = require('../tailwind.config.js')
@@ -1654,22 +1633,22 @@ test('Phase 4J is LLAMA-only: hooks have no unscoped rule and Dark, Black and Li
   const root = "html[data-theme='llama']"
   for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{/g)) {
     for (const selector of m[1].split(',')) {
-      if (/utility-key|queue-key|bookmark-key|sleep-key|chapters-key|player-key|#playerContent \.speed-readout/.test(selector)) assert.ok(selector.trim().startsWith(`${root} `), selector.trim())
+      if (/utility-key|utility-row|queue-key|bookmark-key|sleep-key|sleep-display|chapters-key|player-key|chrome-key|playback-method|#playerContent \.speed-readout/.test(selector)) assert.ok(selector.trim().startsWith(`${root} `), selector.trim())
     }
   }
-  // The faces compile with their exact content and size
   const block = (selector) => {
     const i = css.indexOf(`${selector} {`)
     assert.ok(i >= 0, selector)
     return css.slice(i, css.indexOf('}', i))
   }
-  assert.match(block(`${root} .fullscreen #playerControls .player-key::before`), /content: '';[\s\S]*width: 46px;\s*height: 50px;/)
-  assert.match(block(`${root} #playerContent .utility-key::before`), /content: '';[\s\S]*width: 44px;\s*height: 40px;/)
-  assert.match(block(`${root} #streamContainer:not(.fullscreen) #playerControls .player-key::before`), /content: '';[\s\S]*width: 34px;\s*height: 34px;/)
+  assert.match(block(`${root} .fullscreen #playerControls .player-key`), /width: 60px;\s*height: 60px;/)
+  assert.match(block(`${root} #playerContent .utility-key`), /width: 50px;\s*height: 46px;/)
+  assert.match(block(`${root} #streamContainer:not(.fullscreen) #playerControls .player-key`), /width: 34px;\s*height: 34px;/)
+  assert.ok(!/html\[data-theme='llama'\][^{]*::(before|after)/.test(css), 'no LLAMA pseudo-element faces')
   for (const id of ['dark', 'black', 'light']) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {}, id)
 })
 
-test('Phase 4J leaves the Phase 4H primary key frozen and outside every face rule', () => {
+test('Control deck leaves the Phase 4H primary key frozen', () => {
   const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
@@ -1677,5 +1656,4 @@ test('Phase 4J leaves the Phase 4H primary key frozen and outside every face rul
   assert.deepEqual(rules[`${root} #playerControls .play-btn:active`], { ...P.PRIMARY_KEY_PRESSED })
   assert.deepEqual(rules[`${root} .fullscreen #playerControls .play-btn .material-symbols`], { 'font-size': '2.8rem' })
   assert.deepEqual(rules[`${root} #streamContainer:not(.fullscreen) #playerControls .play-btn .material-symbols`], { 'font-size': '1.875rem' })
-  for (const s of Object.keys(rules)) if (s.includes('::before')) assert.doesNotMatch(s, /play-btn/, s)
 })
