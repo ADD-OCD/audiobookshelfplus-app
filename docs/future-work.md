@@ -118,7 +118,7 @@ Observed once during the Gate H audit on the emulator, not investigated. After a
 User direction recorded in Phase 4H. Phase 4H completed only the primary Play/Pause control and was not the final LLAMA visual-fidelity gate. The user wants the rest of the non-widget player controls to move closer to the approved mockup. A later audit should compare the complete non-widget control area against the mockup, keeping the real app authoritative for layout, behavior, touch targets and accessibility:
 
 - **Transport and secondary controls:** rewind, forward and chapter previous/next. Physical key depth, bezel consistency with the new primary key, glyph scale and weight, grouping, and their relationship to the primary key.
-- **Utility controls:** queue, bookmark, sleep and chapters/list. Physical key treatment and the neutral legend hierarchy.
+- **Utility controls:** queue, bookmark, sleep and chapters/list. Physical key treatment; amber legends since the finishing pass (see the equipment color rule in `theme-architecture.md`).
 - **Top player chrome (a separate, later pass):** collapse, cast, overflow and the DIRECT / playback-method display.
 
 The semantic rule stays: playback and transport legends are amber, utility legends are neutral. Not every control becomes amber.
