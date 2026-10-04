@@ -383,10 +383,13 @@ const WIDGET_SRC = '../android/app/src/main/java/app/absplus/android/'
 test('Gate F freeze: standard widget layouts, sizing, artwork planning, provider and renderer are unchanged', async () => {
   // Gate F is LLAMA-only. These hashes pin the files it was not authorized to change (line endings normalized);
   // a deliberate future change updates them together with the reason.
-  // Phase 5.1 (lint cleanup): app_widget_background.xml moved unchanged from drawable-v21/ (minSdk 24 always matched
-  // v21); the unused app_widget_inner_view_background.xml and its unused style were removed.
+  // Phase 5.1 (lint cleanup): media_player_widget.xml gained content descriptions (the LLAMA layout's: @null for the
+  // cover and corner icon, the existing action strings for the three keys) and takes its placeholder "Artist"/"Title"
+  // from string resources with the same text; the compiled layout differs only there. app_widget_background.xml moved
+  // unchanged from drawable-v21/ (minSdk 24 always matched v21); the unused app_widget_inner_view_background.xml and
+  // its unused style were removed.
   const frozen = {
-    'layout/media_player_widget.xml': '5b54df0e36b38c40c26ab34b9d52c6b772f9c4b82c27bbf6fb0d401e8b9dd399',
+    'layout/media_player_widget.xml': '636cce2873d1a0bb277efa018cc39b0ae58ed40f6d856588c3403cee1e7fc91a',
     'layout/media_player_widget_wide.xml': '45bb68e7bd899fa4d5b36c2dde590180d111fe004c7f2d7d7b389ad2eced62cf',
     'layout/media_player_widget_full.xml': '34c8f9fc8756cd2bef2b743f8d665fd8ef462f8863a741ed0264163b3f36030b',
     'layout/media_player_widget_full_expanded.xml': 'f33a537436ee09a53142d616db19272ed3f245fad59ff98cd0564a220ede9b9c',

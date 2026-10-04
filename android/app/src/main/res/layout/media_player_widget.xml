@@ -22,7 +22,8 @@
       android:layout_height="match_parent"
       android:layout_weight="2"
       android:scaleType="centerCrop"
-      android:src="@drawable/icon" />
+      android:src="@drawable/icon"
+      android:contentDescription="@null" />
 
     <!-- Readout: weighted as before plus a fixed 36dp (the former icon column), so the cover keeps its width and the text gains it -->
     <LinearLayout
@@ -44,7 +45,7 @@
         android:gravity="bottom"
         android:ellipsize="end"
         android:maxLines="1"
-        android:text="Artist"/>
+        android:text="@string/widget_preview_artist"/>
 
       <TextView
         android:id="@+id/widgetMediaTitle"
@@ -56,7 +57,7 @@
         android:gravity="top"
         android:ellipsize="end"
         android:maxLines="1"
-        android:text="Title"/>
+        android:text="@string/widget_preview_title"/>
 
       <!-- Controls row: the buttons keep their width (end margin = the former 36dp icon column); the brand icon sits in that margin -->
       <FrameLayout
@@ -81,7 +82,8 @@
             android:layout_margin="4dp"
             android:padding="8dp"
             android:background="@drawable/widget_button_bg"
-            android:src="@drawable/exo_icon_rewind" />
+            android:src="@drawable/exo_icon_rewind"
+            android:contentDescription="@string/action_jump_backward" />
 
           <ImageView
             android:id="@+id/widgetPlayPauseButton"
@@ -91,7 +93,8 @@
             android:layout_margin="4dp"
             android:padding="8dp"
             android:background="@drawable/widget_button_bg"
-            android:src="@drawable/ic_media_play_dark" />
+            android:src="@drawable/ic_media_play_dark"
+            android:contentDescription="@string/widget_play_pause" />
 
           <ImageView
             android:id="@+id/widgetFastForwardButton"
@@ -101,7 +104,8 @@
             android:layout_margin="4dp"
             android:padding="8dp"
             android:background="@drawable/widget_button_bg"
-            android:src="@drawable/exo_icon_fastforward" />
+            android:src="@drawable/exo_icon_fastforward"
+            android:contentDescription="@string/action_jump_forward" />
         </LinearLayout>
 
         <ImageView
@@ -111,7 +115,8 @@
           android:layout_gravity="end|center_vertical"
           android:layout_marginEnd="10dp"
           android:adjustViewBounds ="true"
-          android:src="@drawable/icon_monochrome" />
+          android:src="@drawable/icon_monochrome"
+          android:contentDescription="@null" />
       </FrameLayout>
 
     </LinearLayout>
