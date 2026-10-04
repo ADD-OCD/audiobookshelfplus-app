@@ -278,6 +278,61 @@ test('faceplateHooks: nothing while collapsed (mini-player) or for legacy themes
   }
 })
 
+test('Console banks are vertically centered in their framed sections (transport by its key envelope, utility by its row)', async () => {
+  const P = presets.PRIMITIVES
+  const { FACEPLATE } = layout
+  const root = engine.themeSelector('llama')
+  const rules = presets.presentationRules([llama()])
+  const px = (v) => parseFloat(v)
+  const transport = rules[`${root} #streamContainer.fullscreen.faceplate #playerControls`]
+  const utility = rules[`${root} #streamContainer.fullscreen.faceplate #playerContent .utility-row`]
+  assert.deepEqual(transport, { ...P.FACEPLATE_TRANSPORT_BANK })
+  assert.deepEqual(utility, { ...P.FACEPLATE_UTILITY_BANK })
+  // Offsets measured up from the deck bottom. The divider is where the deck already puts it (DECK.seam, unchanged)
+  const divider = P.DECK.seam.base - P.DECK.seam.drop
+  assert.equal(P.FACEPLATE_DIVIDER, divider)
+  const plateTop = FACEPLATE.console
+  const plateBottom = FACEPLATE.consoleInset
+  // Transport: the bank box is the section [divider, plateTop]; its 65px row is centered in the box below its top padding
+  assert.equal(px(transport.height), plateTop - divider)
+  assert.equal(transport.display, 'flex')
+  assert.equal(transport['flex-direction'], 'column')
+  assert.equal(transport['justify-content'], 'center')
+  const row = P.PRIMARY_KEY_BOX
+  const pad = px(transport['padding-top'])
+  const rowTop = plateTop - pad - (plateTop - divider - pad - row) / 2 // distance of the row box's top above the deck bottom
+  // Envelope: the lifted primary's top to the secondary keys' bottom (60px keys centered in the 65px row)
+  const envelopeTop = rowTop + P.DECK.primaryLift
+  const envelopeBottom = rowTop - row + (row - P.DECK.transport.height) / 2
+  const transportTopClear = plateTop - envelopeTop
+  const transportBottomClear = envelopeBottom - divider
+  assert.ok(Math.abs(transportTopClear - transportBottomClear) < 0.01, `transport clearances ${transportTopClear}/${transportBottomClear}`)
+  assert.ok(transportTopClear >= 8, 'the bank keeps breathing room')
+  // Utility: the bank box is the section [plateBottom, divider]; its keys (and the 52px readouts) are centered in it
+  assert.equal(px(utility.bottom), plateBottom)
+  assert.equal(px(utility.height), divider - plateBottom)
+  assert.equal(utility['justify-content'], 'center')
+  const utilityClear = (divider - plateBottom - P.DECK.utility.height) / 2
+  assert.ok(utilityClear >= 6, `utility clearance ${utilityClear}`)
+  // The constants describe the real elements: the player's primary box, and the console plate's inset in its stylesheet
+  const player = await read('../components/app/AudioPlayer.vue')
+  assert.match(player, new RegExp(`\\.fullscreen #playerControls \\.play-btn \\{\\s*height: ${row}px;\\s*width: ${row}px;`))
+  const plate = player.match(/\.player-plate-console \{([^}]*)\}/)[1]
+  assert.match(plate, new RegExp(`bottom: ${plateBottom}px;`))
+  assert.match(plate, /top: var\(--faceplate-console-top\);/)
+  assert.equal(at(llama(), [412, 842]).vars['--faceplate-console-top'], `${layout.TIERS.regular.deck - plateTop}px`)
+  // The utility section is the same on the previous-geometry plate paths (compat, landscape: plate bottom inset, same
+  // divider), so the same centered bank applies there; the transport section exists only on the faceplate
+  assert.deepEqual(rules[`${root} #streamContainer.fullscreen.faceplate-flat #playerContent .utility-row`], { ...P.FACEPLATE_UTILITY_BANK })
+  assert.equal(rules[`${root} #streamContainer.fullscreen.faceplate-flat #playerControls`], undefined)
+  const flatPlate = player.match(/\.faceplate-flat \.player-plate-console \{([^}]*)\}/)[1]
+  assert.doesNotMatch(flatPlate, /bottom/, 'flat console plate keeps the same bottom inset')
+  const banks = Object.keys(rules).filter((s) => /#playerControls$|\.utility-row$/.test(s) && /faceplate/.test(s))
+  assert.deepEqual(banks.map((s) => s.slice(root.length + 1)).sort(), ['#streamContainer.fullscreen.faceplate #playerContent .utility-row', '#streamContainer.fullscreen.faceplate #playerControls', '#streamContainer.fullscreen.faceplate-flat #playerContent .utility-row'])
+  // Legacy themes get none of it
+  for (const id of LEGACY_THEMES) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {})
+})
+
 test('Recipe paint for the faceplate: LLAMA only, paint only, bay widths from the layout tiers', () => {
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])

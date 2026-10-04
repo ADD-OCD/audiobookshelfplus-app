@@ -1115,7 +1115,11 @@ const READOUT_LAYOUT_PROPERTIES = {
   '#streamContainer.fullscreen .collapse-key': ['margin-top'],
   '#streamContainer.fullscreen .cast-key': ['margin-top'],
   '#streamContainer.fullscreen .menu-key': ['margin-top'],
-  '#streamContainer.fullscreen .playback-method': ['width', 'padding', 'top']
+  '#streamContainer.fullscreen .playback-method': ['width', 'padding', 'top'],
+  // Phase 6B: the faceplate console banks, each exactly its framed section with its row centered (tests/player-layout)
+  '#streamContainer.fullscreen.faceplate #playerControls': ['height', 'padding-top', 'padding-bottom', 'display', 'flex-direction'],
+  '#streamContainer.fullscreen.faceplate #playerContent .utility-row': ['bottom', 'height', 'display', 'flex-direction'],
+  '#streamContainer.fullscreen.faceplate-flat #playerContent .utility-row': ['bottom', 'height', 'display', 'flex-direction']
 }
 
 test('Phase 4E readout is a recessed well in a bezel plate: frozen, paint-only, from the shared primitives', () => {

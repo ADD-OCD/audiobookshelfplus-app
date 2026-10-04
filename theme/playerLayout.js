@@ -31,6 +31,7 @@ const FACEPLATE = Object.freeze({
   bezelRing: 2, // dark ring outside the artwork bezel
   readoutPlate: 4, // the Phase 4E bezel plate drawn around the metadata well
   console: 161, // the console plate: the bottom 161px of the deck (the unchanged transport and utility banks)
+  consoleInset: 6, // the console plate's bottom edge above the deck bottom (and its side inset)
   bayAllowance: 8, // the bay's extra side room beyond the previous artwork side allowance
   flatTimes: 16, // timestamps where the deck keeps its previous 200px (compat, landscape): larger would push the
   //               unchanged seek hit target onto the transport keys at font scale 1.3

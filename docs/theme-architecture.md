@@ -697,7 +697,7 @@ LLAMA only. The portrait full player becomes one equipment faceplate of stacked 
 | regular | 12–72     | 10   | 7     | 76   | 247  | 24    |
 | compact | 12–70     | 6    | 5     | 72   | 239  | 22    |
 
-The console plate is the deck's bottom 161px (the banks are unchanged); the seek/time module sits above it with its well inset 10px. On wide screens the console plate follows the 414px control column.
+The console plate is the deck's bottom 161px (the banks are unchanged); the seek/time module sits above it with its well inset 10px. On wide screens the console plate follows the 414px control column. Each bank is vertically centered in its own framed section (S26 correction): the transport section runs from the plate's top edge to the engraved divider (which stays where the deck puts it), and the transport row is centered there by its key envelope (the lifted Play key included), 11.25px above and below. The utility section runs from the divider to the plate's bottom edge (6px above the deck bottom), with the utility row 7.5px above and below; the same utility centering applies on the two-rail and landscape paths, whose console plate has the same bottom edge. Key sizes, their horizontal layout, the divider and the plate are unchanged (`FACEPLATE_TRANSPORT_BANK`, `FACEPLATE_UTILITY_BANK`).
 
 **Responsive rules.**
 

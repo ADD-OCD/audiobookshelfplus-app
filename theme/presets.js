@@ -339,6 +339,30 @@ const artworkBay = (n) =>
 const ARTWORK_BAY = Object.freeze({ regular: artworkBay(playerLayout.TIERS.regular.bezel), compact: artworkBay(playerLayout.TIERS.compact.bezel) })
 // The deck becomes chassis behind its console plate: no panel paint of its own
 const FACEPLATE_DECK = Object.freeze({ 'background-color': 'rgb(var(--color-primary))', 'background-image': 'none', 'box-shadow': 'none' })
+// Console banks centered in their framed sections (Phase 6B S26 correction). The console plate's top edge is
+// playerLayout.FACEPLATE.console above the deck bottom and its bottom edge FACEPLATE.consoleInset above it; the engraved
+// divider stays where the deck puts it (the transport section's bottom, DECK.seam). The rows had kept the offsets they
+// had in the full-height panel, so both sat low inside the plate. Now each bank box is exactly its section, with its row
+// centered: the transport row by its key envelope (from the lifted primary's top to the secondary keys' bottom: the 65px
+// primary box, lifted DECK.primaryLift, and the 60px keys centered in it), the utility row by its keys. Key boxes, their
+// horizontal layout and the divider are unchanged
+const FACEPLATE_DIVIDER = DECK.seam.base - DECK.seam.drop
+const PRIMARY_KEY_BOX = 65 // the full player's Play/Pause box (AudioPlayer.vue, unchanged)
+const FACEPLATE_TRANSPORT_BANK = Object.freeze({
+  height: `${playerLayout.FACEPLATE.console - FACEPLATE_DIVIDER}px`,
+  'padding-top': `${DECK.primaryLift + (PRIMARY_KEY_BOX - DECK.transport.height) / 2}px`,
+  'padding-bottom': '0px',
+  display: 'flex',
+  'flex-direction': 'column',
+  'justify-content': 'center'
+})
+const FACEPLATE_UTILITY_BANK = Object.freeze({
+  bottom: `${playerLayout.FACEPLATE.consoleInset}px`,
+  height: `${FACEPLATE_DIVIDER - playerLayout.FACEPLATE.consoleInset}px`,
+  display: 'flex',
+  'flex-direction': 'column',
+  'justify-content': 'center'
+})
 
 const PRIMITIVES = Object.freeze({
   RADIUS,
@@ -398,7 +422,11 @@ const PRIMITIVES = Object.freeze({
   FACEPLATE_PLATE,
   FACEPLATE_TOP_PLATE,
   ARTWORK_BAY,
-  FACEPLATE_DECK
+  FACEPLATE_DECK,
+  FACEPLATE_DIVIDER,
+  PRIMARY_KEY_BOX,
+  FACEPLATE_TRANSPORT_BANK,
+  FACEPLATE_UTILITY_BANK
 })
 
 const EQUIPMENT_RULES = [
@@ -487,6 +515,12 @@ const EQUIPMENT_RULES = [
   ['#streamContainer.faceplate-compact .cover-wrapper', ARTWORK_BAY.compact],
   ['#streamContainer.faceplate #playerContent', FACEPLATE_DECK],
   ['#streamContainer.faceplate-flat #playerContent', FACEPLATE_DECK],
+  // ...and each console bank centered in its section. The utility section (divider to plate bottom) is the same on every
+  // plate path; the transport has its own section only on the faceplate (on the previous-geometry paths the console plate
+  // runs up around the seek row, so the transport keeps its place)
+  ['#streamContainer.fullscreen.faceplate #playerControls', FACEPLATE_TRANSPORT_BANK],
+  ['#streamContainer.fullscreen.faceplate #playerContent .utility-row', FACEPLATE_UTILITY_BANK],
+  ['#streamContainer.fullscreen.faceplate-flat #playerContent .utility-row', FACEPLATE_UTILITY_BANK],
   // Panel seam between the primary transport row and the secondary control row
   ['.fullscreen #playerControls', { 'box-shadow': ENGRAVED_SEPARATOR }],
   // Mini-player: seam across the panel above the seek region
