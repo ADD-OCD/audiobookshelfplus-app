@@ -52,6 +52,45 @@ test('LLAMA palette keeps its intended depth order: recessed < base < content < 
   for (const n of ['surface.base', 'surface.content', 'surface.raised', 'surface.hover']) assert.ok(t[n][2] > t[n][0] + 10, n)
 })
 
+test('LLAMA chassis is a restrained deep navy with an indigo lean (finishing pass), over unchanged wells and semantics', () => {
+  const t = llama().tokens
+  const hsl = ([r, g, b]) => {
+    const [R, G, B] = [r / 255, g / 255, b / 255]
+    const max = Math.max(R, G, B)
+    const min = Math.min(R, G, B)
+    const l = (max + min) / 2
+    const d = max - min
+    const s = d ? d / (1 - Math.abs(2 * l - 1)) : 0
+    const h = d ? (max === R ? ((G - B) / d) % 6 : max === G ? (B - R) / d + 2 : (R - G) / d + 4) * 60 : 0
+    return [(h + 360) % 360, s, l]
+  }
+  // The chassis family: blue with a slight indigo lean, visibly chromatic but never neon, and dark
+  for (const n of ['surface.base', 'surface.content', 'surface.raised', 'surface.hover', 'border.default', 'control.toggle', 'control.toggle-selected']) {
+    const [h, s, l] = hsl(t[n])
+    assert.ok(h >= 215 && h <= 230, `${n} hue ${h.toFixed(0)}`)
+    assert.ok(s >= 0.27 && s <= 0.5, `${n} saturation ${s.toFixed(2)}`)
+    assert.ok(l <= 0.5, `${n} lightness ${l.toFixed(2)}`)
+  }
+  // Toggles follow the chassis levels they sit on
+  assert.deepEqual(t['control.toggle'], t['surface.content'])
+  assert.deepEqual(t['control.toggle-selected'], t['surface.hover'])
+  // The chassis steps keep their luminance separation (OLED: no level collapses into the next)
+  assert.ok(contrast(t['surface.content'], t['surface.base']) >= 1.3, 'content vs base')
+  assert.ok(contrast(t['surface.base'], t['surface.recessed']) >= 1.2, 'base vs recessed')
+  assert.ok(contrast(t['surface.raised'], t['surface.content']) >= 1.5, 'raised vs content')
+  // The wells, the seek channel and the semantic colors are not part of the chassis tuning
+  assert.deepEqual(t['surface.recessed'], [10, 13, 18])
+  assert.deepEqual(t['progress.track'], [40, 46, 56])
+  assert.deepEqual(t['progress.buffered'], [86, 98, 116])
+  assert.deepEqual(t['progress.played'], [245, 190, 40])
+  assert.deepEqual(t['accent.primary'], [96, 232, 104])
+  // The overlays fade into the chassis colors themselves, so the player and item header blend with the new navy
+  const stops = (n) => t[n].stops.map((s) => s.color.slice(0, 3))
+  for (const c of stops('overlay.player')) assert.deepEqual(c, t['surface.base'])
+  for (const c of stops('overlay.mini-player')) assert.deepEqual(c, t['surface.base'])
+  assert.deepEqual(stops('overlay.item-header'), [t['surface.recessed'], t['surface.content']])
+})
+
 test('LLAMA text, readout and progress colors meet contrast targets on the surfaces they sit on', () => {
   const t = llama().tokens
   for (const surface of ['surface.base', 'surface.content', 'surface.recessed']) {

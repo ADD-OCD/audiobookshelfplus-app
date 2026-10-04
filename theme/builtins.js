@@ -120,31 +120,34 @@ const light = {
   }
 }
 
-// LLAMA: an original blue-gray audio-equipment theme (late-1990s material language). Palette values are
-// original to Audiobookshelf+. Semantic states keep the shared values so warning/error/success/info keep
+// LLAMA: an original blue audio-equipment theme (late-1990s material language). Palette values are
+// original to Audiobookshelf+. The chassis family (surfaces, border, toggles) is a deep navy with an indigo lean, tuned in
+// the Phase 4 finishing pass toward the approved mockup's character: about 1.7x the earlier chroma and +5 degrees of hue at
+// unchanged luminance, so every contrast and the depth order stay where they were. The near-black wells, the seek channel
+// and every semantic color are unchanged. Semantic states keep the shared values so warning/error/success/info keep
 // their meaning, and warning orange stays distinct from the yellow-amber played progress.
 const llama = {
   id: 'llama',
   labelKey: 'LabelThemeLlama',
   colorScheme: 'dark',
   tokens: {
-    'surface.base': [27, 34, 46], // dark navy/slate chassis: app bar, dialogs, menus
-    'surface.content': [45, 55, 71], // medium blue-gray page surface
-    'surface.raised': [70, 82, 101], // lighter steel strips
-    'surface.hover': [88, 102, 124], // steel highlight for hovered/selected rows
+    'surface.base': [22, 33, 58], // deep navy chassis: app bar, dialogs, menus
+    'surface.content': [39, 54, 87], // blue equipment panel: page surface, player deck
+    'surface.raised': [63, 81, 120], // lighter blue-steel strips
+    'surface.hover': [81, 101, 146], // blue-steel highlight for hovered/selected rows
     'surface.recessed': [10, 13, 18], // black-blue display wells
     'text.default': [235, 238, 242],
     'text.primary': [226, 232, 240], // neutral near-white
     'text.muted': [150, 162, 178], // subdued cool gray
-    'border.default': [96, 111, 134], // steel edge
-    'control.toggle': [45, 55, 71],
-    'control.toggle-selected': [88, 102, 124],
+    'border.default': [88, 109, 157], // blue-steel edge
+    'control.toggle': [39, 54, 87],
+    'control.toggle-selected': [81, 101, 146],
     'progress.track': [40, 46, 56], // recessed channel
     'progress.buffered': [86, 98, 116], // visibly lighter than the track
     'progress.played': [245, 190, 40], // yellow-amber
-    'overlay.item-header': linear(169, [[10, 13, 18, 0.4], 0], [[45, 55, 71, 1], 80]),
-    'overlay.player': linear(180, [[27, 34, 46, 0], 0], [[27, 34, 46, 1], 80]),
-    'overlay.mini-player': linear(145, [[27, 34, 46, 0.5], 0], [[27, 34, 46, 0.9], 20], [[27, 34, 46], 60]),
+    'overlay.item-header': linear(169, [[10, 13, 18, 0.4], 0], [[39, 54, 87, 1], 80]),
+    'overlay.player': linear(180, [[22, 33, 58, 0], 0], [[22, 33, 58, 1], 80]),
+    'overlay.mini-player': linear(145, [[22, 33, 58, 0.5], 0], [[22, 33, 58, 0.9], 20], [[22, 33, 58], 60]),
     ...states,
     'accent.primary': [96, 232, 104], // phosphor green readout/accent
     ...systemBars,
