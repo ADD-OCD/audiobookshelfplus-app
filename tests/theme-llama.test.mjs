@@ -863,6 +863,8 @@ const GEOMETRY_PROPERTY = /^(width|height|min-|max-|padding|margin|border(-width
 const KEY_SELECTORS = ['.fullscreen #playerControls .player-key', '.fullscreen #playerControls .player-key:not(.key-disabled):active']
 const LEGEND_SELECTORS = ['#playerContent .jump-icon:not(.key-disabled)', '#playerContent .next-icon:not(.key-disabled)']
 const PRIMARY_LEGEND_SELECTORS = ['#playerControls .play-btn .material-symbols', '#playerControls .play-btn .la-ball-spin-clockwise']
+// The utility keys' legends (Phase 4 finishing pass: amber = illuminated physical-control legend, superseding "amber is playback only")
+const UTILITY_LEGEND_SELECTORS = ['#playerContent .utility-key:not(.key-disabled)', '#playerContent .utility-key:not(.key-disabled) > .material-symbols', '#playerContent .utility-key:not(.key-disabled) > svg']
 
 test('Phase 4B player keys are a dedicated, frozen, paint-only primitive; the shared KEY_CAP is untouched', () => {
   const P = presets.PRIMITIVES
@@ -938,7 +940,7 @@ test('Phase 4B legends are LLAMA-only paint: Dark, Black and Light get nothing',
   for (const id of ['dark', 'black', 'light']) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {}, id)
 })
 
-test('Phase 4B amber is playback only: both jumps and chapter start/end; utility keys stay neutral', async () => {
+test('Phase 4B amber legends: both jumps and chapter start/end, and (finishing pass) the utility keys; nothing else in the deck', async () => {
   const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
@@ -948,10 +950,10 @@ test('Phase 4B amber is playback only: both jumps and chapter start/end; utility
   assert.deepEqual(rules[`${root} #playerContent .jump-icon:not(.key-disabled) > .material-symbols`], { ...P.PLAYBACK_GLYPH_WEIGHT })
   // The generic key rules paint no glyph color, so no key gets amber (or any other legend) by default
   for (const s of KEY_SELECTORS) assert.ok(!('color' in rules[`${root} ${s}`]), s)
-  // Among the player's key and transport rules the amber token appears on exactly the two legend selectors, plus the
-  // primary Play/Pause legend and its loading spinner (Phase 4H)
+  // Among the player's key and transport rules the amber token appears on exactly the two legend selectors, the
+  // primary Play/Pause legend and its loading spinner (Phase 4H) and the utility keys' legends (finishing pass)
   const amber = Object.entries(rules).filter(([selector, d]) => /#playerContent|#playerControls/.test(selector) && Object.values(d).some((v) => String(v).includes('--color-track-cursor')))
-  assert.deepEqual(amber.map(([selector]) => selector.slice(root.length + 1)).sort(), [...LEGEND_SELECTORS, ...PRIMARY_LEGEND_SELECTORS].sort())
+  assert.deepEqual(amber.map(([selector]) => selector.slice(root.length + 1)).sort(), [...LEGEND_SELECTORS, ...PRIMARY_LEGEND_SELECTORS, ...UTILITY_LEGEND_SELECTORS].sort())
   // The hooks sit on the four transport keys only: queue, bookmark, sleep and chapters carry neither hook
   const player = await read('../components/app/AudioPlayer.vue')
   const template = player.slice(0, player.indexOf('</template>'))
@@ -1583,7 +1585,7 @@ test('Control deck states: pressed cuts the key in, an unavailable key is a dimm
   assert.doesNotMatch(P.KEY_SOCKET['box-shadow'], /edge-light\) \/ 0\.6|0 0 0 2px|(^|, )0 2px [34]px/)
 })
 
-test('Control deck legends: amber transport, dynamic durations, sizes safe in the fixed keys; neutral utility and chrome', async () => {
+test('Control deck legends: amber transport and utility keys, dynamic durations, sizes safe in the fixed keys; neutral chrome', async () => {
   const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
@@ -1592,10 +1594,23 @@ test('Control deck legends: amber transport, dynamic durations, sizes safe in th
   assert.deepEqual({ ...P.JUMP_DURATION }, { 'font-weight': '700' })
   assert.deepEqual({ ...P.CHAPTER_GLYPH }, { 'font-size': '2.25rem' })
   assert.deepEqual({ ...P.MINI_JUMP_GLYPH }, { transform: 'translateY(1px) scale(0.78)' })
-  // Utility and chrome legends are the one neutral color; nothing in them is amber or success green
-  for (const s of ['', ' > .material-symbols', ' > svg']) assert.deepEqual(rules[`${root} #playerContent .utility-key:not(.key-disabled)${s}`], { ...P.UTILITY_LEGEND }, s)
-  assert.equal(rules[`${root} #streamContainer.fullscreen .chrome-key`].color, P.UTILITY_LEGEND.color)
-  for (const [s, d] of Object.entries(rules)) if (/utility-key|queue-key|sleep-key|chapters-key|chrome-key/.test(s)) assert.doesNotMatch(JSON.stringify(d), /track-cursor|--color-accent|--color-success/, s)
+  // Physical deck keys share one illuminated amber legend (the transport keys' token); readouts are green (below). The
+  // utility glyphs keep the regular weight, so the transport legends stay the heavier tier
+  assert.deepEqual({ ...P.UTILITY_LEGEND }, { ...P.PLAYBACK_LEGEND })
+  for (const s of UTILITY_LEGEND_SELECTORS) {
+    assert.deepEqual(rules[`${root} ${s}`], { ...P.UTILITY_LEGEND }, s)
+    assert.equal(rules[`${root} ${s}`]['-webkit-text-stroke'], undefined, s)
+  }
+  // An unavailable utility key (chapters with none) is a socket with the dimmed legend, never amber
+  assert.deepEqual(rules[`${root} #playerContent .utility-key.key-disabled`], { ...P.KEY_SOCKET, ...P.KEY_SOCKET_LEGEND })
+  // The queue badge keeps its own neutral marking (its markup color), painted by no legend rule
+  assert.equal(rules[`${root} #playerContent .queue-key > span.absolute`].color, undefined)
+  // The top chrome (navigation and menus) keeps the neutral legend
+  assert.deepEqual({ ...P.CHROME_LEGEND }, { color: 'rgb(var(--color-fg) / 0.8)' })
+  assert.equal(rules[`${root} #streamContainer.fullscreen .chrome-key`].color, P.CHROME_LEGEND.color)
+  // Neither keys nor chrome ever take the readouts' green or the accent
+  for (const [s, d] of Object.entries(rules)) if (/utility-key|queue-key|sleep-key|chapters-key|chrome-key/.test(s)) assert.doesNotMatch(JSON.stringify(d), /--color-accent|--color-success/, s)
+  for (const [s, d] of Object.entries(rules)) if (/chrome-key/.test(s)) assert.doesNotMatch(JSON.stringify(d), /track-cursor/, s)
   // Durations stay dynamic (the jump settings), never a fixed "10s"
   const player = await read('../components/app/AudioPlayer.vue')
   const template = player.slice(0, player.indexOf('</template>'))
@@ -1627,7 +1642,7 @@ test('Control deck readouts: speed, the running sleep timer and the playback met
   assert.ok(!Object.keys(rules).some((s) => /speed-readout|sleep-display|playback-method/.test(s) && /player-key|utility-key|chrome-key/.test(s)))
 })
 
-test('Control deck contrast: amber and readouts >= 7:1, utility and chrome legends >= 4.5:1, socket legend dimmed', () => {
+test('Control deck contrast: amber transport and utility legends and readouts >= 7:1, chrome legends >= 4.5:1, socket legend dimmed', () => {
   const P = presets.PRIMITIVES
   const t = llama().tokens
   const edge = presets.equipmentDerivedDeclarations(t)['--color-edge-light'].split(' ').map(Number)
@@ -1644,7 +1659,12 @@ test('Control deck contrast: amber and readouts >= 7:1, utility and chrome legen
   }
   for (const deck of [t['surface.content'], t['surface.base']]) {
     const face = faceOn(deck, P.UTILITY_KEY['background-color'])
-    assert.ok(contrast(over(face, t['text.primary'], 0.8), face) >= 4.5)
+    // The amber legend sits mid-key, where the face's sheen has faded (0.2 at the top edge, 0 at 45%): >= 7:1 there, and
+    // >= 4.5:1 even against the full sheen at the top edge (the utility face is a touch lighter than the transport face)
+    assert.ok(contrast(t['progress.played'], faceOn(deck, P.UTILITY_KEY['background-color'], 0.1)) >= 7, 'utility amber at the legend')
+    assert.ok(contrast(t['progress.played'], face) >= 4.5, `utility amber at the top edge ${contrast(t['progress.played'], face).toFixed(2)}`)
+    assert.ok(contrast(t['progress.played'], faceOn(deck, P.UTILITY_KEY_PRESSED['background-color'], 0)) >= 7, 'utility amber pressed')
+    assert.ok(contrast(over(face, t['text.primary'], 0.8), face) >= 4.5, 'chrome legend')
   }
   assert.ok(contrast(t['accent.primary'], t['surface.recessed']) >= 7, 'readout green')
   const socket = faceOn(t['surface.content'], P.KEY_SOCKET['background-color'], 0)

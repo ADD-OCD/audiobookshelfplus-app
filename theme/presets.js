@@ -123,7 +123,8 @@ const PRIMARY_KEY_PRESSED_MINI = Object.freeze({ 'background-image': 'linear-gra
 // 2.8rem in the full player (from 2.1rem) and 1.875rem collapsed (from 1.5rem, the jump glyphs' size). The glyph size is
 // the recipe's second authorized geometry (Phase 4H): it sizes the glyph inside the unchanged 65px / 40px box only
 const PRIMARY_GLYPH_SIZE = Object.freeze({ full: Object.freeze({ 'font-size': '2.8rem' }), mini: Object.freeze({ 'font-size': '1.875rem' }) })
-// Playback legend: the played-progress amber, for transport keys whose meaning is playback (jumps and chapter steps)
+// Control legend: the played-progress amber, the illuminated legend of the deck's physical keys (transport and utility).
+// LLAMA's equipment rule: amber = an illuminated physical-control legend, green = a readout or live display
 const PLAYBACK_LEGEND = Object.freeze({ color: 'rgb(var(--color-track-cursor))' })
 // Heavier playback glyphs. The bundled icon font has only a FILL axis (no weight axis, and FILL leaves these stroke
 // glyphs unchanged), so the transport glyphs get a hairline stroke in their own color. It adds ink, never layout, and
@@ -184,15 +185,18 @@ const KEY_SOCKET = Object.freeze({
 })
 const KEY_SOCKET_LEGEND = Object.freeze({ color: 'rgb(var(--color-fg) / 0.22)' })
 // Utility keys (queue, bookmark, sleep, chapters): the same face family with a restrained bezel, the inner bevel and the dark
-// channel only (no lit return) and the player keys' short drop, on a slightly smaller, lower face. One neutral legend for
-// all four (the primary text at 0.8, never amber or the success green): they are not playback controls
+// channel only (no lit return) and the player keys' short drop, on a smaller face in the row below. Their legends are the
+// deck's illuminated amber, like the transport keys' (the tiers differ by size, bezel and row, and the transport glyphs are
+// heavier), at the font's regular weight; never the success green, which is the readouts'
 const UTILITY_KEY = Object.freeze({
   'background-color': 'rgb(var(--color-recessed) / 0.6)',
   'background-image': PLAYER_KEY_SHEEN,
   'box-shadow': `${KEY_FACE_BEVEL}, ${PLAYER_KEY_RING}, 0 2px 3px rgb(0 0 0 / 0.5)`
 })
 const UTILITY_KEY_PRESSED = Object.freeze({ 'background-color': 'rgb(var(--color-recessed) / 0.8)', 'background-image': 'none', 'box-shadow': `${keyPressedBevel(0.55)}, ${PLAYER_KEY_RING}` })
-const UTILITY_LEGEND = Object.freeze({ color: 'rgb(var(--color-fg) / 0.8)' })
+const UTILITY_LEGEND = Object.freeze({ ...PLAYBACK_LEGEND })
+// The top chrome (navigation and menus, not deck controls) keeps a neutral legend, the primary text at 0.8
+const CHROME_LEGEND = Object.freeze({ color: 'rgb(var(--color-fg) / 0.8)' })
 // Top player chrome: collapse, cast and the overflow menu are neutral utility-family keys of one fixed size, aligned on one
 // line (their containers sit 16px and 24px down, so each key is shifted onto the line by a margin), with a 2rem glyph that
 // stays inside the key at font scale 1.3. The click stays on the same element, now the whole key: collapse goes from its
@@ -200,7 +204,7 @@ const UTILITY_LEGEND = Object.freeze({ color: 'rgb(var(--color-fg) / 0.8)' })
 // edge), 4px from the overflow key, so the landscape metadata readout still ends before it (Phase 4E-R2: 111px from the
 // right edge, plate 4px, cast face 108px). The playback method (Direct/Local/Transcode) is a small recessed green display
 // centered on the same line
-const CHROME_KEY = Object.freeze({ ...keyBox(DECK.chrome), ...UTILITY_KEY, ...UTILITY_LEGEND, 'font-size': '2rem' })
+const CHROME_KEY = Object.freeze({ ...keyBox(DECK.chrome), ...UTILITY_KEY, ...CHROME_LEGEND, 'font-size': '2rem' })
 const CHROME_KEY_LINE = Object.freeze({ collapse: Object.freeze({ 'margin-top': `${DECK.chrome.top - 16}px` }), right: Object.freeze({ 'margin-top': `${DECK.chrome.top - 24}px` }) })
 const PLAYBACK_METHOD_READOUT = Object.freeze({
   width: 'fit-content',
@@ -353,6 +357,7 @@ const PRIMITIVES = Object.freeze({
   UTILITY_KEY,
   UTILITY_KEY_PRESSED,
   UTILITY_LEGEND,
+  CHROME_LEGEND,
   QUEUE_BADGE,
   READOUT_BOX,
   CHAPTER_GLYPH,
