@@ -6,17 +6,20 @@ on:
     paths:
       - strings/** # Should only check if any strings changed
 
+permissions:
+  contents: read
+
 jobs:
   update_translations:
     runs-on: ubuntu-latest
     steps:
     # Check out the repository
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     # Set up node to run the javascript
     - name: Set up node
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: '20'
 

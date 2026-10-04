@@ -1,18 +1,25 @@
+# Inherited iOS simulator build. Audiobookshelf+ is an Android product and the iOS project is not maintained here,
+# so this runs only when something that can affect the native iOS build changes (the iOS project, the dependencies
+# and their native plugins, the Capacitor configuration, or this workflow), and on demand. The shared web app is
+# built and tested on every push by "Build APK".
 name: Build iOS
 
 on:
+  workflow_dispatch:
   push:
-    paths-ignore:
-      - 'android/**'
-      - '.github/workflows/build-apk.yml'
-      - '.github/workflows/deploy-apk.yml'
-      - 'readme.md'
+    paths:
+      - 'ios/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.json'
+      - '.github/workflows/build-ios.yml'
   pull_request:
-    paths-ignore:
-      - 'android/**'
-      - '.github/workflows/build-apk.yml'
-      - '.github/workflows/deploy-apk.yml'
-      - 'readme.md'
+    paths:
+      - 'ios/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.json'
+      - '.github/workflows/build-ios.yml'
 
 permissions:
   contents: read
@@ -23,10 +30,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Check out sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -61,8 +68,9 @@ jobs:
           echo "iOS simulator build succeeded."
 
       - name: Upload iOS simulator app
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: audiobookshelf-ios-simulator
           path: ios/App/build/Build/Products/Debug-iphonesimulator/Audiobookshelf.app
           if-no-files-found: error
+          retention-days: 5

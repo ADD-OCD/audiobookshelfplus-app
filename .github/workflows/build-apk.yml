@@ -1,3 +1,6 @@
+# Android validation: JS tests, web build, debug build and Kotlin JVM/Robolectric tests on every push and pull request.
+# It uploads no APK: phone test builds come from "Debug Test APK (development only)" (signed with the persistent test
+# key, so they update in place), and distributable APKs are built and signed as described in docs/release-process.md.
 name: Build APK
 
 on:
@@ -9,20 +12,24 @@ on:
     paths-ignore:
       - 'ios/**'
       - 'readme.md'
+
+permissions:
+  contents: read
+
 jobs:
   main:
     runs-on: ubuntu-latest
     steps:
       - name: checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
 
       - name: use Node.js 20.x
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v5
         with:
           node-version: 20
 
       - name: Set up Java
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: 21
@@ -48,23 +55,11 @@ jobs:
 
       - name: upload unit test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: unit-test-reports
           path: |
             android/app/build/reports/tests/
             android/app/build/test-results/
           if-no-files-found: ignore
-
-      - name: rename apk
-        working-directory: android/app/build/outputs/apk/debug/
-        run: |
-          build="$(date +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)"
-          name="audiobookshelf-${build}.apk"
-          mv -v app-debug.apk "${name}"
-
-      - name: upload app
-        uses: actions/upload-artifact@v4
-        with:
-          name: audiobookshelf-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
