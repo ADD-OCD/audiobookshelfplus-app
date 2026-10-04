@@ -95,7 +95,7 @@ Found in Phase 2C Gate H and re-measured during the Phase 2C final acceptance. A
 
 Any fix is geometry-affecting responsive/accessibility work, so it needs its own authorization and a font-scale pass on the S26 Ultra's One UI font-size steps.
 
-Phase 4J (LLAMA key faces) did not change this geometry. In LLAMA the collapsed forward key's visible 34×34 face now ends 2.26px past the screen at 1.3, where the Phase 4B cap on the key's own box ended 4.76px past it, and the arrow is fully on screen.
+The Phase 4 finishing pass (LLAMA) gave the collapsed player fixed 34px key boxes, which no longer grow with the font scale: at 1.3 its forward key now ends at 406px, inside the screen. Dark, Black and Light keep the geometry described above.
 
 ## Error-button text contrast
 
@@ -123,11 +123,11 @@ User direction recorded in Phase 4H. Phase 4H completed only the primary Play/Pa
 
 The semantic rule stays: playback and transport legends are amber, utility legends are neutral. Not every control becomes amber.
 
-Phase 4J implemented the transport, utility and collapsed-transport key faces and the speed and sleep readouts (see "LLAMA control-deck key faces" in `docs/theme-architecture.md`). What remains:
+Phase 4J and the Phase 4 finishing pass implemented the transport bank, the utility keys and readouts, the collapsed-player keys and the top chrome (see "LLAMA control deck" in `docs/theme-architecture.md`). What remains:
 
-- **Top player chrome:** collapse, cast, overflow and the DIRECT / playback-method display. This is the next, separate pass and is not started.
-- **Primary bezel across the row seam (recorded in Phase 4J, not changed):** the Phase 4H primary key's return ring and drop cross the engraved seam between the transport row and the secondary row.
-- **Legends above font scale 1.3:** the transport legends use a fixed equipment scale that fits the fixed faces at 1.0 and 1.3. Larger One UI font steps would need a true maximum legend size, which CSS cannot express under the WebView's text zoom.
+- **Legends at very large font scales:** the transport legends fit their fixed keys at font scale 1.0 and 1.3. At much larger One UI steps (2.0 measured) the zoomed legends exceed their keys, although no key moves or overlaps another. A true maximum legend size cannot be expressed in CSS under the WebView's text zoom.
+- **Speed-modal taps on the S26:** not reproducible on the emulator. The pseudo-element hit areas Phase 4J introduced are gone, and the physical retest decides whether anything remains.
+- **Up Next backdrop strip:** the queue modal is 95% wide, so its side backdrop is a ~10px strip that Chromium's touch adjustment pulls into the panel (pre-existing; dismissal works above and below the panel and with the close key).
 
 ## Seek handle touch target
 
