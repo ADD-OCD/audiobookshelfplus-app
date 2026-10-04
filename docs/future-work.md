@@ -162,3 +162,27 @@ Inherited Audiobookshelf+ identity debt (not Audible-related). Phase 5 rewrote t
 ## README screenshots
 
 Phase 5 removed upstream's demo image (official app, iPhone frames) from the README. The fork's own `screenshots/plus/` images predate the current widget and player and are not referenced. Add current Audiobookshelf+ Android screenshots when public material is next prepared, following the no-Audible rule in `docs/app-identity.md`.
+
+## Android lint register (Phase 5.1)
+
+`lintDebug` went from 0 errors / 145 warnings to 0 errors / 108 warnings in Phase 5.1. Every remaining warning belongs to one of the families below, each verified and classified: **C** intentional, **D** lint false positive or tool limitation, **E** out of scope until a product, design or dependency decision. None is unexplained, and no lint ID is disabled, baselined or downgraded; the only lint markers in the tree are `tools:keep` for `xml/config` (`res/raw/keep.xml`) and `tools:override` on the two ExoPlayer icon overrides.
+
+| Lint ID | Count | Class | Why it remains | Future action |
+| --- | --- | --- | --- | --- |
+| `VisibleForTests` | 43 | D | Every call is a public Google Cast SDK API (`CastOptions.Builder`, `MediaStatus`, `RemoteMediaClient.getMediaStatus`, `MediaQueueItem.Builder`) whose shipped classes carry an internal `@VisibleForTesting`; the app has no other way to use Cast. | Re-check after a Cast SDK upgrade. |
+| `PrivateResource` | 20 | C | The widget layouts reference `exo_icon_rewind` / `exo_icon_fastforward`, which the app deliberately overrides (`tools:override`): ExoPlayer UI's `exo_notification_rewind/fastforward` are aliases of them, so the override also styles the media notification. | Disappears with a move to app-owned icon names plus a notification icon provider, or with Media3. |
+| `GradleDependency` | 11 | E | Newer AndroidX (core-splashscreen, appcompat, constraintlayout, core-ktx, work, media) and ExoPlayer 2.19.1 releases exist. Upgrades can change playback, notification and widget behavior. | A dedicated, device-validated dependency phase (ExoPlayer 2 is end-of-life; Media3 is the successor). |
+| `IconDuplicates` | 10 | C | `ic_launcher_round` deliberately uses the same art as `ic_launcher` (main and debug variants). | None. |
+| `VectorPath` | 5 | C | Long paths in the brand and category icons (`abs_*`, `icon_monochrome`, `ic_play_speed_3_0x`); simplifying them changes the artwork. | Only with an icon redesign. |
+| `NestedWeights` | 4 | E | Standard and LLAMA compact/wide widget layouts. Restructuring changes RemoteViews measurement; widget geometry is protected (Gate F freeze, `WidgetContainmentTest`). | Only inside a widget layout phase with containment and device checks. |
+| `UnusedAttribute` | 3 | C | `previewLayout`, `targetCellWidth` and `targetCellHeight` in `media_player_widget_info.xml` apply from API 31 and are ignored below; the file is in the Gate F freeze. | None. |
+| `DisableBaselineAlignment` | 2 | E | Compact widget rows; `baselineAligned="false"` can move text vertically. Same protection as `NestedWeights`. | As `NestedWeights`. |
+| `UselessParent` | 2 | E | FULL widget layouts; removing the wrapper changes the view tree the renderer and containment tests rely on. | As `NestedWeights`. |
+| `ScopedStorage` | 1 | E | `READ_EXTERNAL_STORAGE` without `maxSdkVersion`; `MainActivity` requests it at runtime for local folders and downloads. | A storage-permission review (Android 13+ media permissions, local folder scanning). |
+| `VectorRaster` | 1 | C | `icon_monochrome` is drawn larger than 200×200; it is a brand icon. | Only with an icon redesign. |
+| `AcceptsUserCertificates` | 1 | C | Self-hosted Audiobookshelf servers often use a private CA; the network security config trusts user certificates on purpose. | None (product requirement). |
+| `InsecureBaseConfiguration` | 1 | C | Cleartext is permitted on purpose: many self-hosted servers are reached over plain HTTP on a LAN. | None (product requirement). |
+| `ExportedService` | 1 | C | `PlayerNotificationService` is the `MediaBrowserService`, which must be exported for Android Auto and media controllers; `onGetRoot` rejects callers outside `VALID_MEDIA_BROWSERS`. | None. |
+| `ObsoleteSdkInt` | 1 | E | `values-v21/styles.xml` is what minSdk 24 devices actually use, and it differs from `values/styles.xml` (for example `AppTheme.NoActionBarLaunch` is `Theme.SplashScreen`-based in `values/` but `AppTheme.NoActionBar`-based in `values-v21/`; the widget container style also differs). Merging would settle which theme is intended. | A launch-theme and widget-style decision; merge the folder with the chosen definitions. |
+| `StaticFieldLeak` | 1 | D | `DownloadServiceHost` keeps a `DownloadItemManager` built from `context.applicationContext`, which lives as long as the process. | None. |
+| `IconLocation` | 1 | C | `drawable/icon.png` is densityless on purpose: it is the placeholder and fallback cover art, the download notification icon and the widget's default art. Moving it into a density folder would rescale it everywhere. | Only with an icon redesign. |
