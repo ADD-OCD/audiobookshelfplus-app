@@ -9,14 +9,16 @@
 | Package   | `app.absplus.android.debug`: installs **alongside** the production app `app.absplus.android`, with its own data, settings and widgets                                     |
 | File      | `AudiobookshelfPlus-<versionName>-debug-<label>.apk`, e.g. `AudiobookshelfPlus-0.14.2-beta-debug-llama.apk`                                                               |
 | Artifact  | `AudiobookshelfPlus-<LABEL>-S26-Test`, containing the APK and `build-info.txt` (branch, commit, version, package, APK SHA-256, certificate SHA-256, build time, run link) |
-| Retention | 21 days (disposable)                                                                                                                                                      |
+| Retention | 5 days (disposable)                                                                                                                                                       |
 
 The label is the dispatch input, or else the first word of the branch name (`feature/llama-theme` → `llama`).
 
 ## How it runs
 
-- **Automatically** on every push to a `feature/**` branch (except pushes that only change Markdown or iOS files).
-- **Manually** with `workflow_dispatch`. Because the repository's default branch is `plus`, GitHub only shows the "Run workflow" button once this workflow file is on `plus`. Until then, run it from a computer with `gh workflow run debug-test-apk.yml --ref <branch>` (optionally `-f label=<label>`), or just push to the branch.
+On demand only (`workflow_dispatch`), for the branch that is ready for a phone test. Every push is already validated by the Build APK workflow (JS tests, debug build, Kotlin tests); this workflow only produces the installable test APK, so it does not run, or keep artifacts, for pushes nobody tests on a phone.
+
+- From GitHub: **Actions** → **Debug Test APK (development only)** → **Run workflow**, pick the branch, optionally enter a label.
+- From a computer: `gh workflow run debug-test-apk.yml -R ADD-OCD/audiobookshelfplus-app --ref <branch>` (optionally `-f label=<label>`).
 
 It runs only for branches of this repository. There is no `pull_request` trigger, so code from forks never reaches the signing secrets.
 
@@ -30,6 +32,14 @@ It runs only for branches of this repository. There is no `pull_request` trigger
 Later test builds install **over** the existing debug app and keep its data, because they are all signed with the same test key. They never replace the production app.
 
 If a debug app signed with a different key is already installed (for example one built locally with Android Studio's default debug key), Android refuses the update once: uninstall `Audiobookshelf+` **debug** (not the production app), then install. After that, every build from this workflow updates in place.
+
+## Artifact hygiene
+
+Test APKs are disposable. They are not an archive of development builds, and nothing should depend on an old one: any commit can be rebuilt with the same key by running the workflow again.
+
+- Artifacts expire after 5 days, enough for a phone test session and a retest.
+- **At phase close** (once a phase is accepted and integrated, or abandoned), delete that phase's remaining test APK artifacts instead of waiting for them to expire: **Actions** → the run → **Artifacts** → delete, or `gh api -X DELETE repos/ADD-OCD/audiobookshelfplus-app/actions/artifacts/<id>`. Keep the workflow and the three signing secrets; they are what create the next test APK.
+- Only development test artifacts are cleaned this way. Never delete GitHub Releases, release assets or tags as part of it.
 
 ## Signing model
 

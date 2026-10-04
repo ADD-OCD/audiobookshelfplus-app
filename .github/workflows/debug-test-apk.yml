@@ -3,6 +3,7 @@
 # Builds the debug variant (app.absplus.android.debug, installs alongside the production app), re-signs it
 # with the persistent debug/test key so each new test build installs over the previous one, and uploads it
 # as a short-lived Actions artifact. Never uses the production release key. See docs/debug-test-builds.md.
+# On demand only: run it for the branch that is ready for a phone test (validation runs in "Build APK" on every push).
 name: Debug Test APK (development only)
 
 on:
@@ -12,12 +13,6 @@ on:
         description: 'Label for the file and artifact names (lowercase letters, digits, hyphens), e.g. llama'
         required: false
         default: ''
-  push:
-    branches:
-      - 'feature/**'
-    paths-ignore:
-      - 'ios/**'
-      - '**/*.md'
 
 permissions:
   contents: read
@@ -30,18 +25,18 @@ env:
   DEBUG_PACKAGE: app.absplus.android.debug
   # Certificate of the persistent debug/test key (public fingerprint). A build signed with anything else fails.
   EXPECTED_CERT_SHA256: 0e22f17fc1da110460bef1729a80a1e045c9977968450c00fceedf6d61796c0a
-  RETENTION_DAYS: 21
+  RETENTION_DAYS: 5
 
 jobs:
   debug-test-apk:
     name: Signed debug test APK
-    # Branches of this repository only (dispatch and push both require write access; no pull_request trigger)
+    # Branches of this repository only (dispatch requires write access; no pull_request trigger)
     if: github.ref_type == 'branch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
 
@@ -71,12 +66,12 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -165,7 +160,7 @@ jobs:
             echo "Download the artifact below, unzip it, and install the APK. It updates an existing $PACKAGE install."; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.names.outputs.artifact_name }}
           path: ${{ runner.temp }}/artifact/
