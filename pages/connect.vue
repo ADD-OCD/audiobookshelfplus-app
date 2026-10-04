@@ -6,9 +6,9 @@
       </nuxt-link>
       <div class="absolute top-0 left-0 w-full p-6 flex items-center flex-col justify-center z-0 short:hidden">
         <img src="/Logo.png" class="h-20 w-20 mb-2" />
-        <h1 class="text-2xl">audiobookshelf</h1>
+        <h1 class="text-2xl">{{ $strings.LabelAudiobookshelfPlus }}</h1>
       </div>
-      <p class="hidden absolute short:block top-1.5 left-12 p-2 text-xl">audiobookshelf</p>
+      <p class="hidden absolute short:block top-1.5 left-12 p-2 text-xl">{{ $strings.LabelAudiobookshelfPlus }}</p>
 
       <connection-server-connect-form v-if="deviceData" />
     </div>
