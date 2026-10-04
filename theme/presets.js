@@ -130,19 +130,27 @@ const PLAYBACK_LEGEND = Object.freeze({ color: 'rgb(var(--color-track-cursor))' 
 // the utility keys stay at the font's regular weight, which keeps the transport legends the heavier tier
 const PLAYBACK_GLYPH_WEIGHT = Object.freeze({ '-webkit-text-stroke': '0.5px currentColor' })
 
-// --- Phase 4J: control-deck key faces ---
-// A secondary key's face is painted by its ::before: a fixed-size plate centered on the key's unchanged box, so the glyph
-// (and a jump's duration) is a legend mounted inside a deliberate key rather than an icon with a background. The tiers
-// are fixed CSS px, never content- or font-driven (the system font scale zooms the legends, not px lengths): 46x50
-// full-player transport, 44x40 utility, 34x34 collapsed transport. The face is part of the key: it is drawn under the
-// legend (z-index -1 inside the key's own stacking context) and takes the key's taps, so the whole visible face is
-// interactive without moving or resizing any box. It is centered from 50% of the key's box, which makes the key its
-// containing block (position: relative, no offsets: nothing moves). The face's content is the empty string, the one
-// quoted value in the recipe
-const KEY_FACE_HOST = Object.freeze({ position: 'relative', isolation: 'isolate' })
-const KEY_FACE_CONTENT = "''"
-const keyFace = (width, height) => Object.freeze({ content: KEY_FACE_CONTENT, position: 'absolute', top: `calc(50% - ${height / 2}px)`, left: `calc(50% - ${width / 2}px)`, width: `${width}px`, height: `${height}px`, 'z-index': '-1', 'border-radius': RADIUS.key })
-const KEY_FACE = Object.freeze({ transport: keyFace(46, 50), utility: keyFace(44, 40), mini: keyFace(34, 34) })
+// --- Control deck (Phase 4J, recomposed in the Phase 4 finishing pass) ---
+// Every secondary key's own box is its hardware: a fixed CSS px size, never content- or font-driven (the system font scale
+// zooms legends, not px lengths), with the face painted on the element itself, so the visible key and its touch region are
+// the same box at every font scale. (Phase 4J first drew enlarged faces as a ::before around glyph-sized boxes; the
+// finishing pass replaced that with real boxes: no pseudo-element hit area, no stacking context, and a deck whose geometry
+// no longer grows with the font scale.) The full player's five transport keys are packed and centered as one bank with
+// one gap; the primary keeps its 65px box and sits a few px higher than the secondary keys' center line.
+const DECK = Object.freeze({
+  transport: Object.freeze({ width: 60, height: 60, gap: 8 }),
+  primaryLift: 3,
+  utility: Object.freeze({ width: 50, height: 46 }),
+  utilityRowPadding: 0,
+  jumpGlyph: '2rem',
+  mini: Object.freeze({ width: 34, height: 34 })
+})
+const keyBox = ({ width, height }) => Object.freeze({ width: `${width}px`, height: `${height}px`, flex: 'none', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'border-radius': RADIUS.key })
+const KEY_BOX = Object.freeze({ transport: keyBox(DECK.transport), utility: keyBox(DECK.utility), mini: keyBox(DECK.mini) })
+const TRANSPORT_BANK = Object.freeze({ 'justify-content': 'center', gap: `${DECK.transport.gap}px` })
+const PRIMARY_IN_BANK = Object.freeze({ margin: '0', top: `-${DECK.primaryLift}px` })
+// The utility row drops its bottom padding (16px of dead chassis under it) so it sits clear of the transport bank's seam
+const UTILITY_ROW = Object.freeze({ 'padding-bottom': `${DECK.utilityRowPadding}px` })
 // Face finish, the Phase 4H primary key's family: the same dark recessed face, sheen and inner bevel (lit edge, faint second
 // highlight, dark edge) and the same pressed model (sheen and drop go, the face deepens, the bevel inverts with an inner
 // shade, the channel stays). Secondary transport is one step below the primary: a weaker lit return ring (0.18, primary
@@ -178,41 +186,34 @@ const UTILITY_KEY = Object.freeze({
 })
 const UTILITY_KEY_PRESSED = Object.freeze({ 'background-color': 'rgb(var(--color-recessed) / 0.8)', 'background-image': 'none', 'box-shadow': `${keyPressedBevel(0.55)}, ${PLAYER_KEY_RING}` })
 const UTILITY_LEGEND = Object.freeze({ color: 'rgb(var(--color-fg) / 0.8)' })
-// The queue key's "Q" badge sits in the face's lower-right corner, 2px inside it, instead of on the corner of the glyph box
-// (which grows with the font scale while the face does not, so at 1.3 the badge left the face). Same 14px badge, with a
-// thin dark ring that seats it on the face
-// Readouts in the secondary row (speed, running sleep countdown): information, not keys. Each is a recessed display window
-// drawn by the text's own ::before (never a raised face, never amber), the phosphor green text inside it. The window
-// follows its text (a readout's value and the font scale size it, unlike a key), sits under the text and takes no taps
-// (the text keeps its own click). The running countdown is centered on the sleep key's place: its text is wider than the
-// 28px box it sits in and used to overflow to the right (a transform, so no box moves)
-const READOUT_HOST = Object.freeze({ position: 'relative', isolation: 'isolate' })
-const readoutWindow = (inset) =>
-  Object.freeze({
-    content: KEY_FACE_CONTENT,
-    position: 'absolute',
-    inset,
-    'z-index': '-1',
-    'pointer-events': 'none',
-    'border-radius': RADIUS.key,
-    'background-color': 'rgb(var(--color-recessed))',
-    'box-shadow': `${RECESSED_WELL}, 0 0 0 1px rgb(var(--color-edge-dark)), 0 1px 0 1px rgb(var(--color-edge-light) / 0.2)`
-  })
-const READOUT_WINDOW = Object.freeze({ speed: readoutWindow('2px -8px'), sleep: readoutWindow('1px -6px') })
-const SLEEP_READOUT_CENTER = Object.freeze({ transform: 'translateX(calc(14px - 50%))' })
-const QUEUE_BADGE = Object.freeze({ top: 'calc(50% + 4px)', left: 'calc(50% + 6px)', bottom: 'auto', right: 'auto', 'box-shadow': '0 0 0 1px rgb(var(--color-edge-dark))' })
-// Transport legends inside the faces: a printed legend has a fixed equipment scale, so it stays inside the fixed face at
-// font scale 1.3. CSS cannot cap it by font size: the WebView's text zoom multiplies every computed font size (rem, px, vw,
-// min() alike) and ignores text-size-adjust, and a smaller glyph font would also shrink the key's box and move the row. So
-// the legend is drawn at a fixed scale with transforms, which move nothing. The chapter steps keep their 2rem glyph (a
-// larger one cannot keep its box at 1.3: text zoom scales font sizes but not em lengths). The jump arrow is drawn at 0.82
-// toward its duration, which keeps its own size and weight (bold) so the dynamic duration stays readable, and the two sit
-// as one legend centered in the face (measured ink at 1.3: 24.4x41.9 in the 46x50 face, at least 3.6px from every edge;
-// at 1.0 the arrow's ink matches the chapter glyph's, about 18.5px)
-const JUMP_GLYPH = Object.freeze({ transform: 'translateY(-0.5px) scale(0.82)', 'transform-origin': '50% 100%' })
-const JUMP_DURATION = Object.freeze({ transform: 'translateY(-3px)', 'font-weight': '700' })
-// The collapsed jumps (no duration) at the same fixed scale idea in their 34x34 faces: 0.78, 1px lower to center the arrow's
-// ink (measured at 1.3: 23.2x26.3 in the face, at least 3.2px from every edge; at 1.0 about 18x20)
+// The queue key's "Q" badge sits in the key's lower-right corner, 3px inside it (it used to hang off the glyph box's
+// corner), with a thin dark ring that seats it on the face. Same 14px badge
+const QUEUE_BADGE = Object.freeze({ bottom: '3px', right: '3px', 'box-shadow': '0 0 0 1px rgb(var(--color-edge-dark))' })
+// Readouts in the secondary row (speed, running sleep countdown): information, not keys. Each is a recessed display on its
+// own box, the utility keys' height (never a raised face, never amber), with the phosphor green text inside. Its width
+// follows its value (and the font scale) from a utility key's width up, and it keeps its own click
+const READOUT_BOX = Object.freeze({
+  display: 'inline-flex',
+  'align-items': 'center',
+  'justify-content': 'center',
+  height: `${DECK.utility.height}px`,
+  'min-width': `${DECK.utility.width}px`,
+  width: 'auto',
+  padding: '0 10px',
+  'line-height': '1',
+  'border-radius': RADIUS.key,
+  'background-color': 'rgb(var(--color-recessed))',
+  'box-shadow': `${RECESSED_WELL}, 0 0 0 1px rgb(var(--color-edge-dark)), 0 1px 0 1px rgb(var(--color-edge-light) / 0.2)`
+})
+// Transport legends, sized for the 60px keys. The jump arrow is 2rem (from 1.875rem) and sits 2px lower so the arrow and its
+// bold dynamic duration are centered as one legend (a transform, so nothing moves): at font scale 1.3 the legend is
+// 31.6x51.8 and 4.1px from the top and bottom of the key, at 1.0 24.4x40. The chapter steps' glyph is 2.25rem (from 2rem):
+// safe now that the key's box is fixed (the glyph box no longer sizes the key). The collapsed jumps' arrow is drawn at a
+// fixed 0.78 scale, 1px lower, so it stays inside its 34x34 key at font scale 1.3 (the WebView's text zoom multiplies
+// every computed font size, so a legend cannot be capped by font size)
+const JUMP_GLYPH = Object.freeze({ 'font-size': DECK.jumpGlyph, transform: 'translateY(2px)' })
+const JUMP_DURATION = Object.freeze({ 'font-weight': '700' })
+const CHAPTER_GLYPH = Object.freeze({ 'font-size': '2.25rem' })
 const MINI_JUMP_GLYPH = Object.freeze({ transform: 'translateY(1px) scale(0.78)' })
 // Selected equipment key: pressed in (inset bevel and inner shade, so it reads as a different physical state,
 // not just a color) with an accent ring inside the edge
@@ -309,8 +310,11 @@ const PRIMITIVES = Object.freeze({
   PLAYER_KEY_FACE_MINI,
   PLAYBACK_LEGEND,
   PLAYBACK_GLYPH_WEIGHT,
-  KEY_FACE_HOST,
-  KEY_FACE,
+  DECK,
+  KEY_BOX,
+  TRANSPORT_BANK,
+  PRIMARY_IN_BANK,
+  UTILITY_ROW,
   TRANSPORT_KEY,
   TRANSPORT_KEY_PRESSED,
   KEY_SOCKET,
@@ -321,9 +325,8 @@ const PRIMITIVES = Object.freeze({
   UTILITY_KEY_PRESSED,
   UTILITY_LEGEND,
   QUEUE_BADGE,
-  READOUT_HOST,
-  READOUT_WINDOW,
-  SLEEP_READOUT_CENTER,
+  READOUT_BOX,
+  CHAPTER_GLYPH,
   TRANSPORT_KEY_MINI,
   TRANSPORT_KEY_PRESSED_MINI,
   MINI_JUMP_GLYPH,
@@ -416,41 +419,34 @@ const EQUIPMENT_RULES = [
   ['.fullscreen #playerControls', { 'box-shadow': ENGRAVED_SEPARATOR }],
   // Mini-player: seam across the panel above the seek region
   ['#streamContainer:not(.fullscreen) #playerTrack', { 'box-shadow': ENGRAVED_SEPARATOR_TOP }],
-  // Physical keys: the transport and secondary controls marked with the player-key hook get a dark-faced player
-  // key on their own box (pressed cuts it in). A control that is currently unavailable (key-disabled) has no cap at
-  // all, so it reads flat/unavailable by shape, not only by its dimmed glyph. Readouts (speed, sleep countdown)
-  // and the round play button are not player keys
-  // Full-player transport (Phase 4J): chapter start/end and both jumps are 46x50 faces in the primary key's family, one
-  // step below it; pressed cuts the face in, an unavailable key is a sunken socket with a strongly dimmed legend
-  ['.fullscreen #playerControls .player-key', KEY_FACE_HOST],
-  ['.fullscreen #playerControls .player-key::before', { ...KEY_FACE.transport, ...TRANSPORT_KEY }],
-  ['.fullscreen #playerControls .player-key:not(.key-disabled):active::before', TRANSPORT_KEY_PRESSED],
-  ['.fullscreen #playerControls .player-key.key-disabled::before', KEY_SOCKET],
-  ['.fullscreen #playerControls .player-key.key-disabled', KEY_SOCKET_LEGEND],
+  // Control deck (Phase 4J, recomposed in the finishing pass): every secondary key's own fixed box is its face, painted
+  // in the primary key's family; pressed cuts it in, an unavailable key is a sunken socket with a strongly dimmed legend.
+  // Full-player transport: chapter start/end and both jumps, packed with the primary into one centered bank
+  ['.fullscreen #playerControls > div', TRANSPORT_BANK],
+  ['.fullscreen #playerControls .play-btn', PRIMARY_IN_BANK],
+  ['.fullscreen #playerControls .player-key', { ...KEY_BOX.transport, ...TRANSPORT_KEY }],
+  ['.fullscreen #playerControls .player-key:not(.key-disabled):active', TRANSPORT_KEY_PRESSED],
+  ['.fullscreen #playerControls .player-key.key-disabled', { ...KEY_SOCKET, ...KEY_SOCKET_LEGEND }],
   ['.fullscreen #playerControls .jump-icon > .material-symbols', JUMP_GLYPH],
   ['.fullscreen #playerControls .jump-label', JUMP_DURATION],
-  // Collapsed player transport (Phase 4J): both jumps are 34x34 faces of the same family, deeper on the darker deck
-  ['#streamContainer:not(.fullscreen) #playerControls .player-key', KEY_FACE_HOST],
-  ['#streamContainer:not(.fullscreen) #playerControls .player-key::before', { ...KEY_FACE.mini, ...TRANSPORT_KEY_MINI }],
-  ['#streamContainer:not(.fullscreen) #playerControls .player-key:not(.key-disabled):active::before', TRANSPORT_KEY_PRESSED_MINI],
-  ['#streamContainer:not(.fullscreen) #playerControls .player-key.key-disabled::before', KEY_SOCKET],
-  ['#streamContainer:not(.fullscreen) #playerControls .player-key.key-disabled', KEY_SOCKET_LEGEND],
+  ['.fullscreen #playerControls .next-icon', CHAPTER_GLYPH],
+  // Collapsed player transport: both jumps, deeper face on the darker deck
+  ['#streamContainer:not(.fullscreen) #playerControls .player-key', { ...KEY_BOX.mini, ...TRANSPORT_KEY_MINI }],
+  ['#streamContainer:not(.fullscreen) #playerControls .player-key:not(.key-disabled):active', TRANSPORT_KEY_PRESSED_MINI],
+  ['#streamContainer:not(.fullscreen) #playerControls .player-key.key-disabled', { ...KEY_SOCKET, ...KEY_SOCKET_LEGEND }],
   ['#streamContainer:not(.fullscreen) #playerControls .jump-icon > .material-symbols', MINI_JUMP_GLYPH],
-  // Utility keys (Phase 4J): 44x40 faces, restrained bezel, one neutral legend; chapters without chapters is a socket
-  ['#playerContent .utility-key', KEY_FACE_HOST],
-  ['#playerContent .utility-key::before', { ...KEY_FACE.utility, ...UTILITY_KEY }],
-  ['#playerContent .utility-key:not(.key-disabled):active::before', UTILITY_KEY_PRESSED],
-  ['#playerContent .utility-key.key-disabled::before', KEY_SOCKET],
-  ['#playerContent .utility-key.key-disabled', KEY_SOCKET_LEGEND],
+  // Utility keys: restrained bezel, one neutral legend; chapters without chapters is a socket
+  ['#playerContent .utility-key', { ...KEY_BOX.utility, ...UTILITY_KEY }],
+  ['#playerContent .utility-key:not(.key-disabled):active', UTILITY_KEY_PRESSED],
+  ['#playerContent .utility-key.key-disabled', { ...KEY_SOCKET, ...KEY_SOCKET_LEGEND }],
   ['#playerContent .utility-key:not(.key-disabled)', UTILITY_LEGEND],
   ['#playerContent .utility-key:not(.key-disabled) > .material-symbols', UTILITY_LEGEND],
   ['#playerContent .utility-key:not(.key-disabled) > svg', UTILITY_LEGEND],
   ['#playerContent .queue-key > span.absolute', QUEUE_BADGE],
-  // Readouts (Phase 4J): speed and the running sleep countdown are recessed green windows, not keys
-  ['.fullscreen #playerContent .speed-readout', READOUT_HOST],
-  ['.fullscreen #playerContent .speed-readout::before', READOUT_WINDOW.speed],
-  ['.fullscreen #playerContent .sleep-readout', { ...READOUT_HOST, ...SLEEP_READOUT_CENTER }],
-  ['.fullscreen #playerContent .sleep-readout::before', READOUT_WINDOW.sleep],
+  // Readouts: speed and the running sleep countdown are recessed green displays, not keys
+  ['.fullscreen #playerContent .utility-row', UTILITY_ROW],
+  ['.fullscreen #playerContent .speed-readout', READOUT_BOX],
+  ['.fullscreen #playerContent .sleep-display', READOUT_BOX],
   // Playback legends: only the transport keys (both jumps, chapter start/end) take the amber; the utility keys
   // (queue, bookmark, sleep, chapters) keep their neutral glyphs. An unavailable key is excluded and keeps its dimmed glyph
   ['#playerContent .jump-icon:not(.key-disabled)', PLAYBACK_LEGEND],
@@ -654,4 +650,4 @@ function presentationMediaRules(themes) {
 
 const builtinPresentationMediaRules = () => presentationMediaRules(engine.THEMES)
 
-module.exports = { KEY_FACE_CONTENT, presentationRules, builtinPresentationRules, presentationMediaRules, builtinPresentationMediaRules, equipmentDerivedDeclarations, EQUIPMENT_RULES, EQUIPMENT_MEDIA_RULES, PRIMITIVES }
+module.exports = { presentationRules, builtinPresentationRules, presentationMediaRules, builtinPresentationMediaRules, equipmentDerivedDeclarations, EQUIPMENT_RULES, EQUIPMENT_MEDIA_RULES, PRIMITIVES }

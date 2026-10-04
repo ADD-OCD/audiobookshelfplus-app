@@ -63,7 +63,7 @@
 
     <div id="playerContent" class="playerContainer w-full z-20 absolute bottom-0 left-0 right-0 p-2 pointer-events-auto transition-all" :style="{ backgroundColor: showFullscreen ? '' : coverChrome.backdrop }" @click="clickContainer">
       <!-- Top controls bar - fullscreen only: bookmarks, speed, sleep timer, chapters -->
-      <div v-if="showFullscreen" class="absolute bottom-4 left-0 right-0 w-full pb-4 pt-2 mx-auto px-6" style="max-width: 414px">
+      <div v-if="showFullscreen" class="utility-row absolute bottom-4 left-0 right-0 w-full pb-4 pt-2 mx-auto px-6" style="max-width: 414px">
         <div class="flex items-center justify-between pointer-events-auto">
           <!-- Optional queue icon: list glyph with a bordered "Q" badge, matches the chapters icon style -->
           <div v-if="playerSettings.showQueueIcon" class="player-key utility-key queue-key relative cursor-pointer" @click="$emit('showQueue')">
@@ -81,7 +81,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
             </svg>
           </span>
-          <div v-else class="h-7 w-7 flex items-center justify-around cursor-pointer" @click.stop="$emit('showSleepTimer')">
+          <div v-else class="sleep-display h-7 w-7 flex items-center justify-around cursor-pointer" @click.stop="$emit('showSleepTimer')">
             <p class="sleep-readout text-xl font-mono text-success">{{ sleepTimeRemainingPretty }}</p>
           </div>
 
