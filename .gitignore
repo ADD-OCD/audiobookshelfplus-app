@@ -92,8 +92,18 @@ sw.*
 /resources/
 /android/app/release/
 
-# Audiobookshelf+ release signing - never commit the keystore or its credentials
+# Audiobookshelf+ signing (release and the persistent debug/test key) - never commit a keystore or its credentials
 /android/keystore/
 /android/keystore.properties
 *.jks
 *.keystore
+*.p12
+*.pfx
+
+# Built Android packages anywhere in the tree (android/.gitignore covers android/), e.g. downloaded test APKs
+*.apk
+*.aab
+*.idsig
+
+# Local environment overrides
+.env.*
