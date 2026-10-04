@@ -6,7 +6,7 @@
       </div>
     </template>
 
-    <div class="w-full h-full overflow-hidden absolute top-0 left-0 flex items-center justify-center">
+    <div class="w-full h-full overflow-hidden absolute top-0 left-0 flex items-center justify-center" @click="dismiss">
       <div class="playback-option-panel w-full overflow-x-hidden overflow-y-auto bg-primary rounded-lg border border-border" style="max-height: 75%" @click.stop>
         <ul class="w-full" role="listbox" aria-labelledby="listbox-label">
           <template v-for="rate in rates">
@@ -90,6 +90,12 @@ export default {
       if (this.selected - 0.1 < this.MIN_SPEED) return
       var newPlaybackRate = this.selected - 0.1
       this.selected = Number(newPlaybackRate.toFixed(1))
+    },
+    // The empty column above and below the panel is inside the modal content, not its backdrop, so it closes here (as in the
+    // other player modals) and keeps a stepped speed exactly as a backdrop tap does
+    dismiss() {
+      this.modalInput(false)
+      this.show = false
     },
     modalInput(val) {
       if (!val) {
