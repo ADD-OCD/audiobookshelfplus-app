@@ -2,9 +2,7 @@
 <resources>
     <string name="app_name">Audiobookshelf+</string>
     <string name="title_activity_main">Audiobookshelf+</string>
-    <string name="package_name">app.absplus.android</string>
     <string name="custom_url_scheme">audiobookshelf</string>
-    <string name="add_widget">Add widget</string>
     <string name="app_widget_description">Audiobookshelf+ playback controls</string>
     <string name="action_jump_forward">Jump Forward</string>
     <string name="action_jump_backward">Jump Backward</string>

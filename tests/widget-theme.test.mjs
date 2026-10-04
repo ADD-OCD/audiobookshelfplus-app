@@ -383,6 +383,8 @@ const WIDGET_SRC = '../android/app/src/main/java/app/absplus/android/'
 test('Gate F freeze: standard widget layouts, sizing, artwork planning, provider and renderer are unchanged', async () => {
   // Gate F is LLAMA-only. These hashes pin the files it was not authorized to change (line endings normalized);
   // a deliberate future change updates them together with the reason.
+  // Phase 5.1 (lint cleanup): app_widget_background.xml moved unchanged from drawable-v21/ (minSdk 24 always matched
+  // v21); the unused app_widget_inner_view_background.xml and its unused style were removed.
   const frozen = {
     'layout/media_player_widget.xml': '5b54df0e36b38c40c26ab34b9d52c6b772f9c4b82c27bbf6fb0d401e8b9dd399',
     'layout/media_player_widget_wide.xml': '45bb68e7bd899fa4d5b36c2dde590180d111fe004c7f2d7d7b389ad2eced62cf',
@@ -391,8 +393,7 @@ test('Gate F freeze: standard widget layouts, sizing, artwork planning, provider
     'layout/media_player_widget_full_expanded_large.xml': 'c84e33a140c6413bb4bbb397458296f80bacb2fdb85bac00c4e80f57a7e5b549',
     'drawable/widget_button_bg.xml': '81b7dc37b6f89994fbf022dcc2f59d18aab9af84dac6197b9053d081e9458d55',
     'drawable/widget_progress_default.xml': '290753fd4695f61acfea9c5c4906413cfd108bebb8e54a992e448f2ab53ea9ba',
-    'drawable-v21/app_widget_background.xml': '8f7ccb90ee0370347bcbdfe0bc174fad9bbf08a57b168edea6096b8f18c6fd72',
-    'drawable-v21/app_widget_inner_view_background.xml': 'fc3ea836e38b56903f98aad2e2561dd541654c6d3d360a97c35f35708819c448',
+    'drawable/app_widget_background.xml': '8f7ccb90ee0370347bcbdfe0bc174fad9bbf08a57b168edea6096b8f18c6fd72',
     'xml/media_player_widget_info.xml': '944832659a039ad724946788ac38c06daf5b2b1c0a1b4f9ef11de8deb614b650'
   }
   for (const [file, hash] of Object.entries(frozen)) assert.equal(await sha256(RES + file), hash, `${file} changed`)

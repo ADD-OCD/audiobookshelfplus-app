@@ -25,7 +25,7 @@ This was an identity migration, not a refactor. `applicationId`/`namespace` in `
 - `PlayerNotificationService.kt`'s `VALID_MEDIA_BROWSERS` allowlist (compares the calling app's package name as a string).
 - `DownloadService.kt`'s `ACTION_CANCEL` intent-action string.
 - `PlayerConstants.kt`'s custom media-session action strings (`CUSTOM_ACTION_*`).
-- The vestigial `package_name` string resource in both `strings.xml` variants.
+- The vestigial `package_name` string resource in both `strings.xml` variants (later removed as unused in the Phase 5.1 lint cleanup).
 - The `appAuthRedirectScheme` Gradle manifest placeholder.
 
 No functionality, permissions, minSdk/targetSdk/compileSdk, Gradle/dependency versions, server communication, or upstream API endpoints were changed. References to `com.audiobookshelf.app` that identify the **upstream project itself** rather than this app's own identity were left untouched: the dead/unused `ANDROID_APP_URL` constant in `nuxt.config.js` (points to the real Play Store listing for the official app) and all `ios/**` files (this fork is Android-only; iOS was never built or shipped from this repository).

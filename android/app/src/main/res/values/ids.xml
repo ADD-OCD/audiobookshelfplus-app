@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- The Capacitor bridge's WebView (its layout declares @+id/webview). MainActivity finds it by this id to apply the
+       edge-to-edge insets; the app module declares the id so R.id.webview exists in its own R class. -->
+  <item name="webview" type="id" />
+</resources>
