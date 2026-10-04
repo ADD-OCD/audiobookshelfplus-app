@@ -163,6 +163,22 @@ Inherited Audiobookshelf+ identity debt (not Audible-related). Phase 5 rewrote t
 
 Phase 5 removed upstream's demo image (official app, iPhone frames) from the README. The fork's own `screenshots/plus/` images predate the current widget and player and are not referenced. Add current Audiobookshelf+ Android screenshots when public material is next prepared, following the no-Audible rule in `docs/app-identity.md`.
 
+## Chapter Track and the second (whole-book) rail
+
+Found while preparing the LLAMA B+ faceplate (Phase 6A.3); not changed. The pair is opt-in: Chapter Track is off by default, and Total Track (on by default) only shows its own rail once Chapter Track is on.
+
+- Turning Chapter Track on while paused leaves the second rail's played bar at 0% until the next playback tick: the toggle updates the rails before the new rail has rendered.
+- A book without chapters shows two identical whole-book rails when Chapter Track is on (the second rail's condition does not check for chapters).
+- The menu labels ("Total Track", "Chapter Track") do not explain the pair; "Total Track" alone has no visible effect in the default state.
+
+## Wide two-rail overlap at font scale 1.3
+
+On a wide portrait screen (about 762×986) at font scale 1.3 with Chapter Track and Total Track both on, the metadata readout overlaps the artwork by about 12px (and touches the second rail on a 412×734 screen). This is the previous geometry, which the B+ faceplate keeps on purpose for the two-rail state; it was the same before Phase 6B. A fix belongs to that shared geometry, not the faceplate.
+
+## Widget ANR on display-size changes
+
+Changing the display size (`adb shell wm size`) sends `APPWIDGET_UPDATE_OPTIONS` to the home-screen widget provider, and its handling has produced an "isn't responding" dialog on the emulator. Needs a separate reliability investigation of the widget's options update path.
+
 ## Android lint register (Phase 5.1)
 
 `lintDebug` went from 0 errors / 145 warnings to 0 errors / 108 warnings in Phase 5.1. Every remaining warning belongs to one of the families below, each verified and classified: **C** intentional, **D** lint false positive or tool limitation, **E** out of scope until a product, design or dependency decision. None is unexplained, and no lint ID is disabled, baselined or downgraded; the only lint markers in the tree are `tools:keep` for `xml/config` (`res/raw/keep.xml`) and `tools:override` on the two ExoPlayer icon overrides.

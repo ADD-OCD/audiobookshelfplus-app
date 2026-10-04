@@ -675,6 +675,60 @@ LLAMA only, except for one theme-neutral fix (the playback-speed value, below). 
 
 Twenty-five mutations of these contracts all fail the suite.
 
+## LLAMA B+ faceplate (Phase 6B)
+
+LLAMA only. The portrait full player becomes one equipment faceplate of stacked modules: a restrained top chrome plate, a mounted artwork bay, the recessed metadata readout, a dedicated recessed seek/time module and one console plate around the unchanged transport and utility banks, with controlled seams instead of open chassis. The design came from runtime prototypes (Phases 6A–6A.3); this section is the production contract.
+
+**Architecture.** One presentation projection, `theme/playerLayout.js`, owns every number. It follows the `presentation.cover-color` pattern (`theme/coverPresentation.js`): the player reads the validated theme once (`presentationTheme`) and passes it to both projections. `fullscreenLayout(theme, viewport)` returns the artwork width plus hook classes, `--faceplate-*` variables and which decorative plates to render. The player puts the classes and variables on `#streamContainer` only while the full player is shown, and renders the plates (`.player-plate-top`, `-seek`, `-console`: `aria-hidden`, `pointer-events: none`, so never touch targets). Its own stylesheet consumes them (geometry and type). The LLAMA recipe in `theme/presets.js` only paints the plates, the artwork bay and the deck (`FACEPLATE_PLATE`, `FACEPLATE_TOP_PLATE`, `ARTWORK_BAY`, `FACEPLATE_DECK`). There is no theme-id check, no duplicated player and no pseudo-element plate (the Phase 4J rule against pseudo-element faces stands).
+
+**Paths.**
+
+| Path        | When                                                                                              | Geometry                                                                   | Presentation                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `standard`  | every theme without `presentation.finish: 'equipment'` (Dark, Black, Light)                       | previous, exactly (`legacyCoverWidth` is the old formula, moved unchanged) | none: no classes, no variables, no plates                                        |
+| `faceplate` | LLAMA, portrait, one rail (Chapter Track off, the default)                                        | full B+ (below)                                                            | plates, bay, condensed readouts, 24/22px times                                   |
+| `compat`    | LLAMA, portrait, two rails (Chapter Track + Total Track), or where B+ would cost too much artwork | previous                                                                   | condensed type, 16px times, console plate, top plate where it clears the artwork |
+| `landscape` | LLAMA, landscape                                                                                  | previous two-column                                                        | condensed type, 16px times, console plate; no top plate, no bay                  |
+
+**Budgets (CSS px, each sized for font scale 1.3).** Above the artwork: top plate bottom + seam + bezel + 2px ring. Below: deck + seam + 4px readout plate + band + 4px + seam + bezel + ring. The artwork takes what is left, capped at the previous width allowance minus 8px for the bay.
+
+| Tier    | Top plate | Seam | Bezel | Band | Deck | Times |
+| ------- | --------- | ---- | ----- | ---- | ---- | ----- |
+| regular | 12–72     | 10   | 7     | 76   | 247  | 24    |
+| compact | 12–70     | 6    | 5     | 72   | 239  | 22    |
+
+The console plate is the deck's bottom 161px (the banks are unchanged); the seek/time module sits above it with its well inset 10px. On wide screens the console plate follows the 414px control column.
+
+**Responsive rules.**
+
+- **Compact** applies where the regular budget would make the artwork height-limited: a property of the artwork, not a device height. At the boundary both tiers give the full width, so the artwork never jumps.
+- **Tall:** room left over when the artwork is width-limited is split into three equal seams (above the bay, bay to readout, readout to seek module).
+- **Floor:** if the faceplate would leave less than 0.93 of the previous artwork width (about 13.5% of its area), the `compat` geometry is used instead. The approved costs are about 4% (412×842), 7% (412×799 and 762×986) and 12% (412×734).
+- **Two rails:** the second (whole-book) rail would cost the artwork 21–35% inside the faceplate, so Chapter Track + Total Track keeps the previous geometry with the presentation only. Settings, defaults and rail semantics are unchanged.
+- **Landscape:** previous geometry. The bay and top plate are omitted because the artwork sits under the chrome line there.
+
+**Artwork scaling (required).** The cover component pins `min-width` to its `width` prop and `.cover-wrapper` hides overflow, so a component wider than the bay crops instead of scaling (the first runtime prototype did exactly that). Production sizes the component, the bay and `--cover-image-*` from the same layout width, and under the faceplate the component also gets `width/height: 100%`, `min-width: 0` and `max-width: 100%` (the landscape rule's technique). Square, 1.6 portrait and placeholder covers were checked: the image always fills the bay exactly.
+
+**Typography.** Readouts (times, speed, sleep, playback method) and title/author use the system `sans-serif-condensed` family with tabular figures. No font asset is added and the global `@font-face` situation is unchanged (see Typography findings). On the emulator it renders as condensed Roboto; Samsung's mapping must be checked on the S26. Times: 24px regular, 22px compact, 16px compat/landscape (the 200px deck there: anything larger pushes the unchanged seek hit target onto the transport keys at font scale 1.3). Title and author stay neutral in color; the title's line-height is 1.25 inside the fixed band.
+
+**Measurements (emulator, production build, Book A at 94.6s).**
+
+| State              | Path              | Artwork             | Readout | Seek module  | Console | Times |
+| ------------------ | ----------------- | ------------------- | ------- | ------------ | ------- | ----- |
+| 412×842            | faceplate         | 384 at 93–477 (−4%) | 503–579 | 601–662      | 681–836 | 24    |
+| 412×799            | faceplate compact | 378 (−7%)           | 478–550 | 566–625      | 638–793 | 22    |
+| 412×734            | faceplate compact | 313 (−12%)          | 413–485 | 501–559      | 573–728 | 22    |
+| 412×933            | faceplate         | 384, seams 43/43/48 | 564–640 | 692–753      | 772–927 | 24    |
+| 762×986            | faceplate compact | 565 (−7%)           | 665–737 | 753–812      | 825–980 | 22    |
+| 412×842, two rails | compat            | 392 (0%)            | 527–589 | well 650–672 | 644–836 | 16    |
+| 915×364            | landscape         | 433×279 (unchanged) | 94–154  | well 172–194 | 166–358 | 16    |
+
+Every state matches the approved runtime prototype within 1px. Key boxes are unchanged everywhere (60×60 transport, 65×65 primary, 54×52 utility), and the seek hit target is 28×32 with 22–35px clearance above the keys (6px at 1.3 on the previous-geometry paths, where it was 2px before). At font scale 1.3 the band holds the title and author and the seek module stays clear of the console (6px at least). Dark, Black and Light are unchanged (no classes, no variables, no plates, the previous artwork formula), and the mini-player stays 120px.
+
+`tests/player-layout.test.mjs` keeps the contract: the legacy no-op over a grid of viewports and aspect ratios, path selection, tiers and the boundary, tall seams, the floor, the 1.3 budgets, the no-crop guarantee, plates being decorative, the faceplate stylesheet never touching controls, the seek target or the mini-player, and the LLAMA-only paint.
+
+**Retained findings (out of scope, unchanged).** With Chapter Track on: toggling it while paused leaves the second rail's played bar at 0% until the next playback tick; a book without chapters shows two identical whole-book rails; the menu labels do not explain the pair. Wide screens at font scale 1.3 with both rails overlap the artwork and readout by about 12px (previous geometry, before 6B too). Display-size changes can make the home-screen widget's `APPWIDGET_UPDATE_OPTIONS` handling ANR. See `docs/future-work.md`.
+
 ## Content-derived color (intentionally not tokens)
 
 - **Player and mini-player background:** the average color of the cover art (`utils/coverAverageColor.js`), with `coverBgIsLight` choosing dark or light icon colors. The theme overlays (`overlay.player`, `overlay.mini-player`) sit on top of it.
