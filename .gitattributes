@@ -1,0 +1,3 @@
+# Text files are stored with LF line endings in the repository (they already are); checkouts follow each client's
+# settings (CRLF with core.autocrlf=true on Windows). Binary files are detected automatically and left untouched.
+* text=auto
