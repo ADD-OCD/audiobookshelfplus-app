@@ -5,7 +5,8 @@ import { readFile } from 'node:fs/promises'
 // Load the Nuxt ES module without changing this project's CommonJS package type.
 const source = await readFile(new URL('../utils/playbackRate.js', import.meta.url), 'utf8')
 const { normalizePlaybackRate, formatPlaybackRate } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
-const read = (path) => readFile(new URL(path, import.meta.url), 'utf8')
+// Source files are read LF-normalized, so a Windows (core.autocrlf) checkout and CI see the same text
+const read = (path) => readFile(new URL(path, import.meta.url), 'utf8').then((s) => s.replace(/\r\n/g, '\n'))
 
 // The speed a 32-bit native float reports for each value the app offers, widened to a double (as the bridge delivers it)
 const asNativeFloat = (rate) => Math.fround(rate)

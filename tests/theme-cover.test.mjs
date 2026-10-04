@@ -8,7 +8,8 @@ const require = createRequire(import.meta.url)
 const engine = require('../theme/engine.js')
 const { coverColorPresentation, THEME_BACKDROP, THEME_CONTROL } = require('../theme/coverPresentation.js')
 const { TOKENS } = require('../theme/tokens.js')
-const read = (path) => readFile(new URL(path, import.meta.url), 'utf8')
+// Source files are read LF-normalized, so a Windows (core.autocrlf) checkout and CI see the same text
+const read = (path) => readFile(new URL(path, import.meta.url), 'utf8').then((s) => s.replace(/\r\n/g, '\n'))
 
 // Cover samples as utils/coverAverageColor.js produces them (unchanged), plus the player's defaults
 const COVERS = {

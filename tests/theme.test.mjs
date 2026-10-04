@@ -7,7 +7,8 @@ import vm from 'node:vm'
 const require = createRequire(import.meta.url)
 const engine = require('../theme/engine.js')
 const { TOKENS, TOKEN_NAMES } = require('../theme/tokens.js')
-const read = (path) => readFile(new URL(path, import.meta.url), 'utf8')
+// Source files are read LF-normalized, so a Windows (core.autocrlf) checkout and CI see the same text
+const read = (path) => readFile(new URL(path, import.meta.url), 'utf8').then((s) => s.replace(/\r\n/g, '\n'))
 
 const LEGACY_IDS = ['dark', 'black', 'light']
 const legacySelector = { dark: ':root', black: "html[data-theme='black']", light: "html[data-theme='light']" }

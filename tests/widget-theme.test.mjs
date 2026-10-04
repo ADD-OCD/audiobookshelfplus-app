@@ -7,7 +7,8 @@ const require = createRequire(import.meta.url)
 const engine = require('../theme/engine.js')
 const presets = require('../theme/presets.js')
 const generator = require('../scripts/generate-widget-theme.js')
-const read = (path) => readFile(new URL(path, import.meta.url), 'utf8')
+// Source files are read LF-normalized, so a Windows (core.autocrlf) checkout and CI see the same text
+const read = (path) => readFile(new URL(path, import.meta.url), 'utf8').then((s) => s.replace(/\r\n/g, '\n'))
 
 test('the committed native widget palette matches the canonical built-in theme data', async () => {
   const committed = (await read('../android/app/src/main/res/values/widget_theme_colors.xml')).replace(/\r\n/g, '\n')

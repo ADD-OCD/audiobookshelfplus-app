@@ -210,7 +210,7 @@ test('podcast playlist preserves local episode identity and streaming entries', 
 
 // Exercise the real container methods with a mocked Capacitor boundary.
 async function container(native) {
-  const source = await readFile(new URL('../components/app/AudioPlayerContainer.vue', import.meta.url), 'utf8')
+  const source = (await readFile(new URL('../components/app/AudioPlayerContainer.vue', import.meta.url), 'utf8')).replace(/\r\n/g, '\n')
   const script = source
     .match(/<script>([\s\S]*?)<\/script>/)[1]
     .replace(/^import .*$/gm, '')

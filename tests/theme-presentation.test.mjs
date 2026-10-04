@@ -160,7 +160,7 @@ test('every equipment rule survives the real Tailwind build (no selector silentl
   const postcss = require('postcss')
   const tailwind = require('tailwindcss')
   const config = require('../tailwind.config.js')
-  const source = await readFile(new URL('../assets/tailwind.css', import.meta.url), 'utf8')
+  const source = (await readFile(new URL('../assets/tailwind.css', import.meta.url), 'utf8')).replace(/\r\n/g, '\n')
   // Real content globs, resolved from the project root like the Nuxt build
   const content = config.content.map((glob) => new URL(`../${glob}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
   const { css } = await postcss([tailwind({ ...config, content })]).process(source, { from: undefined })
