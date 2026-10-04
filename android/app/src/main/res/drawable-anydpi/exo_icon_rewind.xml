@@ -1,4 +1,8 @@
+<!-- Deliberately overrides ExoPlayer UI's exo_icon_rewind: the library's exo_notification_rewind is an alias of
+     it, so this icon is the media notification's key as well as the widget's (tools:override marks the override) -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:override="true"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"

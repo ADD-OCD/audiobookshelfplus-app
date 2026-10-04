@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resources used only by name at runtime, which lint and resource shrinking cannot see:
+     xml/config is the Cordova configuration that Capacitor's Bridge reads through Cordova's ConfigXmlParser
+     (getIdentifier("config", "xml", ...)); `npx cap sync` regenerates the file itself, so it cannot carry the mark. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@xml/config" />
