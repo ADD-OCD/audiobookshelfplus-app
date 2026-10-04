@@ -83,7 +83,7 @@ Policies are ordinary enum tokens: invalid values fall back to `standard` / `leg
 
 ## LLAMA (built-in, Phase 2)
 
-LLAMA is an original Audiobookshelf+ theme inspired by the material language of late-1990s blue-gray audio equipment: a steel chassis, recessed black displays, phosphor-green readouts and amber progress. It uses no third-party skin assets, fonts or pixel values.
+LLAMA is an original Audiobookshelf+ theme inspired by the material language of late-1990s blue audio equipment: a deep navy chassis with steel trim, recessed black displays, phosphor-green readouts and amber progress. It uses no third-party skin assets, fonts or pixel values.
 
 - It is a built-in like the others (`id: 'llama'`, label `LabelThemeLlama`, `colorScheme: 'dark'`, `equipment` + `theme`). It appears last in Settings through the registry.
 - It styles the existing UI only. Layout, geometry, controls and behavior are unchanged, with one authorized exception: the full player's metadata readout (Phase 4E, below).
@@ -280,25 +280,42 @@ Sizes, behavior, validation, native inputs, ARIA roles, focus handling and dismi
   - `FullscreenModal`: the reader's sheet follows the independent reader theme;
   - unused `DropdownMenu` and `Menu`.
 
-Palette (accepted as the LLAMA palette through Phase 2C Gates A–H):
+Palette (accepted as the LLAMA palette through Phase 2C Gates A–H; the chassis family was retuned toward the mockup in the Phase 4 finishing pass, below):
 
 | Token                                              | RGB                               | Role                                                                                                              |
 | -------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `surface.recessed`                                 | 10 13 18                          | black-blue display wells                                                                                          |
-| `surface.base`                                     | 27 34 46                          | navy/slate chassis: app bar, dialogs, menus                                                                       |
-| `surface.content`                                  | 45 55 71                          | medium blue-gray page surface                                                                                     |
-| `surface.raised`                                   | 70 82 101                         | lighter steel strips                                                                                              |
-| `surface.hover`                                    | 88 102 124                        | steel highlight                                                                                                   |
+| `surface.base`                                     | 22 33 58                          | deep navy chassis: app bar, dialogs, menus                                                                        |
+| `surface.content`                                  | 39 54 87                          | blue equipment panel: page surface, player deck                                                                   |
+| `surface.raised`                                   | 63 81 120                         | lighter blue-steel strips                                                                                         |
+| `surface.hover`                                    | 81 101 146                        | blue-steel highlight                                                                                              |
 | `text.default` / `text.primary`                    | 235 238 242 / 226 232 240         | neutral near-white                                                                                                |
 | `text.muted`                                       | 150 162 178                       | subdued cool gray                                                                                                 |
-| `border.default`                                   | 96 111 134                        | steel edge                                                                                                        |
-| `control.toggle` / `-selected`                     | 45 55 71 / 88 102 124             | toggle segments                                                                                                   |
+| `border.default`                                   | 88 109 157                        | blue-steel edge                                                                                                   |
+| `control.toggle` / `-selected`                     | 39 54 87 / 81 101 146             | toggle segments                                                                                                   |
 | `progress.track` / `buffered` / `played`           | 40 46 56 / 86 98 116 / 245 190 40 | recessed channel, lighter buffered, yellow-amber played                                                           |
 | `accent.primary`                                   | 96 232 104                        | phosphor-green readout/accent                                                                                     |
 | `state.*`                                          | shared                            | success, warning, error and info keep their semantic values, so warning orange stays distinct from amber progress |
 | `state.success-action`                             | 46 125 50 (shared)                | fill of actionable success controls with white labels (Gate H)                                                    |
-| derived `--color-edge-light` / `--color-edge-dark` | 153 160 170 / 11 14 18            | bevel edges, fixed blends of `surface.raised` / `surface.base`                                                    |
+| derived `--color-edge-light` / `--color-edge-dark` | 149 159 181 / 9 13 23             | bevel edges, fixed blends of `surface.raised` / `surface.base`                                                    |
 | `system.*`                                         | 35 35 35, light icons             | the actual native window background; runtime system-bar theming is out of scope                                   |
+
+**Chassis palette (Phase 4 finishing pass).** With the control deck finished, the largest remaining difference from the approved mockup was the chassis: the accepted palette was a restrained blue-gray slate (hue about 217°, saturation 17–26%), the mockup a deeper blue equipment chassis with a slight indigo lean (panels sampled at hue 218–222°, saturation 35–45%, for example 41 56 86 for its deck and 23 35 54 for its darker frame). The chassis family (`surface.base`, `surface.content`, `surface.raised`, `surface.hover`, `border.default`, both toggle segments, and the chassis colors inside the three overlays) moved by +5° of hue and 1.7× the chroma at unchanged WCAG luminance:
+
+| Token                                       | Before (Phase 2C)      | After (finishing pass) |
+| ------------------------------------------- | ---------------------- | ---------------------- |
+| `surface.base`                              | 27 34 46               | 22 33 58               |
+| `surface.content` / `control.toggle`        | 45 55 71               | 39 54 87               |
+| `surface.raised`                            | 70 82 101              | 63 81 120              |
+| `surface.hover` / `control.toggle-selected` | 88 102 124             | 81 101 146             |
+| `border.default`                            | 96 111 134             | 88 109 157             |
+| derived `--color-edge-light` / `-dark`      | 153 160 170 / 11 14 18 | 149 159 181 / 9 13 23  |
+
+- **Why this one.** Runtime prototypes of the finished player and of the bookshelf, item page, settings, a modal and the mini-player compared the current palette with a subtle (+3°, 1.35×), an intermediate (+4°, 1.5×) and a moderate (+5°, 1.7×) move. The moderate palette is the one that reads as the mockup's equipment: its deck (39 54 87) sits on the mockup's own panel color (41 56 86), and it stays dark, with no neon or "gaming" blue. The subtle and intermediate steps were recognizably on the way to it rather than distinct alternatives.
+- **What does not change.** Holding luminance keeps every contrast and every depth step where it was: text, readouts and amber within ±0.02 of before (primary text 13.0:1 on the chassis, 9.7:1 on the deck; muted text 4.6:1 on the deck; the green 7.6:1 and the amber 7.0:1 on the deck), the content/base step 1.33:1 (the mockup's is about 1.35:1) and the base/well step 1.22:1, so nothing collapses into black on OLED. The grayscale rendering of the player is essentially unchanged. The near-black wells (`surface.recessed`), the seek channel (`progress.track`, `progress.buffered`), amber (`progress.played`), green (`accent.primary`), the text colors, `state.success`, `state.success-action`, `state.error` and the system bars are not part of the chassis family and keep their values.
+- **Amber and green.** The rendered legends are as before, measured on the finished build: transport amber 10.4:1 (10.9:1 pressed), utility amber 10.4–10.5:1, primary 9.9:1, collapsed 11.2:1, speed readout 12.3:1. Against the bluer deck, amber reads warmer without turning orange and the green keeps its phosphor look, because both sit on the dark key faces and wells, whose colors moved only slightly with the chassis.
+- **Widget.** The native widget palette is generated from these tokens (`scripts/generate-widget-theme.js`), so the LLAMA widget's chassis, raised trim, bevel edges and key faces follow the new navy (base `#16213A`, content `#273657`, raised `#3F5178`, key face `#0C1018`). No widget layout, geometry, provider or action changed; Robolectric renders of the FULL and WIDE layouts confirm the same hierarchy on the new chassis.
+- **Scope.** LLAMA only: Dark, Black and Light are pixel-identical, and geometry is unchanged (the 22-role check matches the accepted build).
 
 Known limits at this stage:
 
