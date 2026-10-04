@@ -151,10 +151,14 @@ Observed once on the Galaxy S26 Ultra during the Phase 2C final acceptance. The 
 
 The cause is undetermined: no device logs were captured at the time. It belongs with the playback/session/widget restoration work (see "Widget session mismatch after restart"). Capture `adb logcat` and a Diagnostics export when it recurs before treating any cause as known.
 
-## Connect-screen title branding
+## Connect-screen logo
 
-Inherited Audiobookshelf+ identity debt (not Audible-related). The server-connect screen still shows the upstream title "audiobookshelf" under the logo instead of "Audiobookshelf+". Its footer already identifies Audiobookshelf+ correctly. Part of the Audiobookshelf+ branding cleanup (see `docs/app-identity.md`).
+Inherited Audiobookshelf+ identity debt (not Audible-related). Phase 5 changed the server-connect title to Audiobookshelf+, but the logo above it (`static/Logo.png`) is still the upstream Audiobookshelf mark, without the plus badge of the Audiobookshelf+ launcher icon. Replacing it needs an Audiobookshelf+ logo asset (a design decision, not a text change). Part of the Audiobookshelf+ branding cleanup (see `docs/app-identity.md`).
 
 ## Store-listing branding
 
-Inherited Audiobookshelf+ identity debt (not Audible-related). The fastlane store-listing imagery (`fastlane/metadata/android/en-US/images/`: feature graphic and phone screenshots) still carries upstream "audiobookshelf" branding. Replace it before any public Audiobookshelf+ store or release material is prepared. It must also follow the no-Audible rule in `docs/app-identity.md`.
+Inherited Audiobookshelf+ identity debt (not Audible-related). Phase 5 rewrote the fastlane listing text (`fastlane/metadata/android/{en-US,de}/`) for Audiobookshelf+, but the imagery (`fastlane/metadata/android/en-US/images/`: the feature graphic, the icon and eight phone screenshots, several in iPhone frames) is still upstream's "audiobookshelf" material with upstream demo content. Replace it with Audiobookshelf+ graphics and current Android screenshots before any public store or release material is prepared. It must also follow the no-Audible rule in `docs/app-identity.md`.
+
+## README screenshots
+
+Phase 5 removed upstream's demo image (official app, iPhone frames) from the README. The fork's own `screenshots/plus/` images predate the current widget and player and are not referenced. Add current Audiobookshelf+ Android screenshots when public material is next prepared, following the no-Audible rule in `docs/app-identity.md`.

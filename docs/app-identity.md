@@ -89,4 +89,4 @@ An external Audible screenshot may be kept only as a deliberately retained refer
 
 **User content is not app branding.** Cover art from a user's own library may legitimately contain Audible logos or branding. That is user content, not Audiobookshelf+ branding, and the app does not censor or alter it; it is not a rendering defect. But public Audiobookshelf+ screenshots, mockups, documentation imagery, store graphics and promotional composites must avoid showing library items whose cover art visibly carries Audible branding.
 
-Other inherited identity debt (not Audible-related): the server-connect screen title still reads "audiobookshelf", and the fastlane store-listing imagery carries upstream branding. Both are tracked in `docs/future-work.md`.
+Other inherited identity debt (not Audible-related): the server-connect screen still shows the upstream logo (its title reads Audiobookshelf+ since Phase 5), and the fastlane store-listing imagery carries upstream branding (its text describes Audiobookshelf+ since Phase 5). Both are tracked in `docs/future-work.md`.

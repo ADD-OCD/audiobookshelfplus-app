@@ -111,6 +111,10 @@ be) in the official app.
   or *Clear* it. Logs are sanitized before they're stored or exported — passwords, tokens, server
   addresses and file locations are redacted — but please look over a log before sharing it
   publicly.
+- **LLAMA theme** — an optional, original late-1990s audio-equipment theme (Settings → Theme): a
+  deep navy chassis, a full player with physical-style transport and utility keys, amber key
+  legends and progress, and green readouts for speed, sleep timer and playback time. The home
+  screen widget follows it. Black, Dark and Light are unchanged.
 
 ### Getting builds
 
@@ -133,15 +137,19 @@ instead for fork-specific problems.
 
 **Requires an Audiobookshelf server to connect with**
 
-<img alt="Screenshot" src="https://github.com/advplyr/audiobookshelf-app/raw/master/screenshots/DeviceDemoScreens.png" />
-
 ## Contributing
 
-This application is built using [NuxtJS](https://nuxtjs.org/) and [Capacitor](https://capacitorjs.com/) in order to run on both iOS and Android on the same code base.
+The app is built with [NuxtJS](https://nuxtjs.org/) and [Capacitor](https://capacitorjs.com/). The
+inherited codebase is cross-platform (one web app inside Android and iOS shells), but
+**Audiobookshelf+ supports and tests Android only**. The iOS project is kept as inherited from
+upstream and is not maintained or supported here.
 
 ### Localization
 
-Thank you to [Weblate](https://hosted.weblate.org/engage/audiobookshelf/) for hosting our localization infrastructure pro-bono. If you want to see Audiobookshelf in your language, please help us localize. Additional information on helping with the translations [here](https://www.audiobookshelf.org/faq#how-do-i-help-with-translations). <a href="https://hosted.weblate.org/engage/audiobookshelf/"> <img src="https://hosted.weblate.org/widget/audiobookshelf/abs-mobile-app/horizontal-auto.svg" alt="Translation status" /> </a>
+Translations come from the official Audiobookshelf project, whose translations are hosted on
+[Weblate](https://hosted.weblate.org/engage/audiobookshelf/) (see
+[how to help](https://www.audiobookshelf.org/faq#how-do-i-help-with-translations)). Strings added
+by Audiobookshelf+ are maintained in this repository and fall back to English.
 
 ### Windows Environment Setup for Android
 
@@ -180,7 +188,6 @@ Required Software:
 
 - [Android Studio](https://developer.android.com/studio)
 - [Node.js](https://nodejs.org/en/) (version 20)
-- [Cocoapods](https://guides.cocoapods.org/using/getting-started.html#installation)
 - [Android SDK](https://developer.android.com/studio)
 
 <details>
@@ -189,7 +196,7 @@ Required Software:
 <p>
 
 ```zsh
-brew install android-studio node cocoapods
+brew install android-studio node
 ```
 
 </p>
@@ -264,6 +271,9 @@ npm run sync
 ```
 
 ### Mac Environment Setup for iOS
+
+> **Not supported by Audiobookshelf+.** The iOS instructions below are inherited from upstream and
+> kept for reference only. This fork does not maintain, build, test or distribute the iOS app.
 
 Required Software:
 

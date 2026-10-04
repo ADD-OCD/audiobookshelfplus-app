@@ -1,1 +1,1 @@
-Hörbuch- und Podcast-Player für Ihren selbst gehosteten Audiobookshelf-Server
+Inoffizieller Android-Player für Ihren selbst gehosteten Audiobookshelf-Server
