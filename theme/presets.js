@@ -382,6 +382,27 @@ const FACEPLATE_UTILITY_BANK = Object.freeze({
   'justify-content': 'center'
 })
 
+// Collapsed mini-player (Phase 7B, Candidate B): the full player's type and readout language at the mini's fixed 120px,
+// with no geometry. Metadata and times take the condensed system face (no font asset) the faceplate uses; the metadata
+// stays neutral. The times grow to 14px on the same line box (14px x 1.3714286 = the previous 12.8px x 1.5 = 19.2px, and
+// 24.96px at font scale 1.3), so the time row, rail and every offset keep their bounds
+const CONDENSED_FACE = 'sans-serif-condensed, sans-serif'
+const MINI_TITLE_TYPE = Object.freeze({ 'font-family': CONDENSED_FACE, 'letter-spacing': '0.01em' })
+const MINI_AUTHOR_TYPE = Object.freeze({ 'font-family': CONDENSED_FACE, 'letter-spacing': '0.02em' })
+const MINI_TIME_TYPE = Object.freeze({ 'font-family': CONDENSED_FACE, 'font-size': '0.875rem', 'line-height': '1.3714286', 'font-variant-numeric': 'tabular-nums', 'letter-spacing': '0.02em' })
+// The times and rail as one recessed readout strip across the panel: the seek row's own box gets the recessed face with
+// a shaded top edge (in place of the engraved seam, at the same line), and two offset shadows of that box carry the face
+// 6px below the rail and end it with a lit line. Shadows are paint outside the box, so nothing moves and nothing gains a
+// hit area. Full width, so it has no side edges or corners to meet the artwork, which at font scale 1.3 sits only ~2px
+// above the row: an inset well there would land on the artwork
+const MINI_READOUT_STRIP = Object.freeze({
+  'background-color': 'rgb(var(--color-recessed))',
+  'background-image': 'linear-gradient(180deg, rgb(var(--color-edge-dark)) 0, rgb(var(--color-edge-dark)) 1px, rgb(0 0 0 / 0.4) 1px, rgb(0 0 0 / 0) 6px)',
+  'box-shadow': '0 6px 0 0 rgb(var(--color-recessed)), 0 7px 0 0 rgb(var(--color-edge-light) / 0.22)'
+})
+// The mini artwork keeps its frame and gains a soft mount shadow: no bezel, ring or size change
+const MINI_ARTWORK_MOUNT = Object.freeze({ 'box-shadow': `${ARTWORK_FRAME}, 0 2px 4px 2px rgb(0 0 0 / 0.45)` })
+
 const PRIMITIVES = Object.freeze({
   RADIUS,
   ELEVATION,
@@ -446,7 +467,13 @@ const PRIMITIVES = Object.freeze({
   FACEPLATE_TRANSPORT_BANK,
   FACEPLATE_UTILITY_BANK,
   DUAL_TRACK_UPPER,
-  DUAL_TRACK_LOWER
+  DUAL_TRACK_LOWER,
+  CONDENSED_FACE,
+  MINI_TITLE_TYPE,
+  MINI_AUTHOR_TYPE,
+  MINI_TIME_TYPE,
+  MINI_READOUT_STRIP,
+  MINI_ARTWORK_MOUNT
 })
 
 const EQUIPMENT_RULES = [
@@ -549,8 +576,9 @@ const EQUIPMENT_RULES = [
   ['#streamContainer.fullscreen.faceplate-dual #playerContent .utility-row', FACEPLATE_UTILITY_BANK],
   // Panel seam between the primary transport row and the secondary control row
   ['.fullscreen #playerControls', { 'box-shadow': ENGRAVED_SEPARATOR }],
-  // Mini-player: seam across the panel above the seek region
-  ['#streamContainer:not(.fullscreen) #playerTrack', { 'box-shadow': ENGRAVED_SEPARATOR_TOP }],
+  // Mini-player: the seek region is a recessed readout strip across the panel (Phase 7B; it replaces the engraved seam
+  // that was drawn at its top edge)
+  ['#streamContainer:not(.fullscreen) #playerTrack', MINI_READOUT_STRIP],
   // Control deck (Phase 4J, recomposed in the finishing pass): every secondary key's own fixed box is its face, painted
   // in the primary key's family; pressed cuts it in, an unavailable key is a sunken socket with a strongly dimmed legend.
   // Full-player transport: chapter start/end and both jumps, packed with the primary into one centered bank
@@ -633,6 +661,13 @@ const EQUIPMENT_RULES = [
   ['#streamContainer:not(.fullscreen) #playerControls .play-btn .material-symbols', PRIMARY_GLYPH_SIZE.mini],
   // Collapsed mini-player: chassis top edge (same footprint)
   ['#streamContainer:not(.fullscreen) #playerContent', { 'box-shadow': 'inset 0 1px 0 rgb(var(--color-edge-light) / 0.45), 0 -8px 8px rgb(0 0 0 / 0.33)' }],
+  // Collapsed mini-player (Phase 7B, Candidate B): condensed neutral metadata, condensed tabular times on their unchanged
+  // line box, and the artwork mounted with a soft shadow. Type and paint only; the 120px panel and every box keep their
+  // geometry. None of these match the full player (.fullscreen)
+  ['#streamContainer:not(.fullscreen) .title-author-texts .title-text', MINI_TITLE_TYPE],
+  ['#streamContainer:not(.fullscreen) .title-author-texts .author-text', MINI_AUTHOR_TYPE],
+  ['#streamContainer:not(.fullscreen) #playerTrack p.font-mono', MINI_TIME_TYPE],
+  ['#streamContainer:not(.fullscreen) .cover-wrapper', MINI_ARTWORK_MOUNT],
 
   // Bookshelf view: the wood material becomes graphite/blue-gray equipment (same boxes, labels and layout)
   ['.bookshelfRow', { 'background-image': 'linear-gradient(180deg, rgb(var(--color-primary)) 0%, rgb(var(--color-bg)) 100%)' }],

@@ -121,9 +121,9 @@
         <!-- Faceplate seek/time module plate: decorative, drawn behind the recessed well, never a touch target -->
         <div v-if="faceplateHooks.plates.seek" class="player-plate player-plate-seek" aria-hidden="true" />
         <div class="flex pointer-events-none">
-          <p class="font-mono text-fg" style="font-size: 0.8rem" ref="currentTimestamp">0:00</p>
+          <p class="track-time font-mono text-fg" ref="currentTimestamp">0:00</p>
           <div class="flex-grow" />
-          <p class="font-mono text-fg" style="font-size: 0.8rem">{{ timeRemainingPretty }}</p>
+          <p class="track-time font-mono text-fg">{{ timeRemainingPretty }}</p>
         </div>
         <div class="relative">
           <div ref="track" class="h-1.5 w-full bg-track/50 relative rounded-full overflow-hidden" :class="{ 'animate-pulse': showLoadingState, 'seek-dragging': isDraggingCursor }" @click.stop>
@@ -1159,6 +1159,10 @@ export default {
   transition-property: margin;
   bottom: 35px;
   max-width: 100%;
+}
+/* Seek-row times: the stylesheet (not an inline style) sizes them, so a presentation theme can set their type */
+#playerTrack .track-time {
+  font-size: 0.8rem;
 }
 .fullscreen #playerTrack {
   bottom: unset;
