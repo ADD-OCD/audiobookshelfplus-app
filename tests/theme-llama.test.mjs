@@ -507,7 +507,8 @@ test('Gate B.1 steel stays on the secondary steel surfaces; the play button no l
   // Secondary keys and the other steel surfaces are unchanged
   assert.equal(P.KEY_CAP['background-image'], P.STEEL_SHEEN)
   assert.equal(P.STEEL_SHEEN, 'linear-gradient(180deg, rgb(var(--color-edge-light) / 0.18) 0%, rgb(var(--color-edge-light) / 0) 55%, rgb(0 0 0 / 0.18) 100%)')
-  for (const s of ['#bookshelf-navbar', '.btn:not(:disabled)', '.icon-btn.border:not(:disabled)', '.bookshelfDivider']) assert.equal(rules[`${root} ${s}`]['background-image'], P.STEEL_SHEEN, s)
+  // (the navigation strip left steel for the content chassis in Phase 8B)
+  for (const s of ['.btn:not(:disabled)', '.icon-btn.border:not(:disabled)', '.bookshelfDivider']) assert.equal(rules[`${root} ${s}`]['background-image'], P.STEEL_SHEEN, s)
   for (const id of ['dark', 'black', 'light']) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {}, id)
 })
 
@@ -1131,7 +1132,11 @@ const READOUT_LAYOUT_PROPERTIES = {
   // Phase 7B: the collapsed mini-player's type (face, spacing, and the times' size on their unchanged line box)
   '#streamContainer:not(.fullscreen) .title-author-texts .title-text': ['font-family', 'letter-spacing'],
   '#streamContainer:not(.fullscreen) .title-author-texts .author-text': ['font-family', 'letter-spacing'],
-  '#streamContainer:not(.fullscreen) #playerTrack p.font-mono': ['font-family', 'font-size', 'line-height', 'font-variant-numeric', 'letter-spacing']
+  '#streamContainer:not(.fullscreen) #playerTrack p.font-mono': ['font-family', 'font-size', 'line-height', 'font-variant-numeric', 'letter-spacing'],
+  // Phase 8B: browsing section labels and the toolbar count (face and spacing only; same size, weight and line box)
+  '.shelf-heading': ['font-family', 'letter-spacing'],
+  '.search-section-label': ['font-family', 'letter-spacing'],
+  '.toolbar-count': ['font-family', 'letter-spacing', 'font-variant-numeric']
 }
 
 test('Phase 4E readout is a recessed well in a bezel plate: frozen, paint-only, from the shared primitives', () => {
@@ -1888,4 +1893,142 @@ test('Phase 7B rules compile through Tailwind under the LLAMA root only; Dark, B
   assert.match(block(`${root} ${MINI} #playerTrack`), /box-shadow: 0 6px 0 0 rgb\(var\(--color-recessed\)\), 0 7px 0 0 rgb\(var\(--color-edge-light\) \/ 0\.22\);/)
   assert.ok(!/@font-face[^}]*condensed/.test(css), 'no font asset')
   for (const id of ['dark', 'black', 'light']) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {}, id)
+})
+
+// --- Phase 8B: LLAMA browsing chrome Candidate B (nav chassis, recessed selected tab, condensed labels, list play key) ---
+
+const BROWSE_8B = {
+  '#bookshelf-navbar': 'BROWSE_NAV_CHASSIS',
+  '#bookshelf-navbar a.bg-primary': 'BROWSE_NAV_SELECTED',
+  '.shelf-heading': 'SECTION_LABEL_TYPE',
+  '.shelf-heading-band': 'SHELF_HEADING_RULE',
+  '.search-section-label': 'SECTION_LABEL_TYPE',
+  '.toolbar-count': 'COUNT_TYPE',
+  '.list-play-key': 'LIST_PLAY_KEY',
+  '.list-play-key > .material-symbols': 'LIST_PLAY_LEGEND'
+}
+const HOOKS_8B = /shelf-heading|search-section-label|toolbar-count|list-play-key/
+
+test('Phase 8B hooks mark exactly the intended browsing elements, and never the players', async () => {
+  const shelf = await read('../components/bookshelf/Shelf.vue')
+  assert.match(shelf, /<div v-if="altViewEnabled" class="shelf-heading-band px-5 pb-3 pt-4">\s*<p class="shelf-heading font-semibold" :style="\{ fontSize: sizeMultiplier \+ 'rem' \}">\{\{ label \}\}<\/p>/)
+  const toolbar = await read('../components/home/BookshelfToolbar.vue')
+  assert.match(toolbar, /<p v-show="!selectedSeriesName" class="toolbar-count pt-1">\{\{ \$formatNumber\(totalEntities\) \}\} \{\{ entityTitle \}\}<\/p>/)
+  // The series-name line carries a name, not just a count: it keeps its face
+  assert.match(toolbar, /<p v-show="selectedSeriesName" class="ml-2 pt-1">/)
+  assert.equal((toolbar.match(/toolbar-count/g) || []).length, 1)
+  const search = await read('../pages/search.vue')
+  assert.equal((search.match(/class="search-section-label font-semibold text-sm mb-1/g) || []).length, 7)
+  assert.doesNotMatch(search, /class="font-semibold text-sm mb-1/)
+  const list = await read('../components/cards/LazyListBookCard.vue')
+  assert.match(list, /<button type="button" class="list-play-key relative rounded-full bg-fg-muted\/50" :class="\{ 'p-2': !playerIsStartingForThisMedia \}" @click\.stop\.prevent="play">/)
+  for (const file of ['../components/app/AudioPlayer.vue', '../components/app/AudioPlayerContainer.vue', '../components/app/Appbar.vue', '../components/home/BookshelfNavBar.vue']) assert.doesNotMatch(await read(file), HOOKS_8B, file)
+})
+
+test('Phase 8B rules are the frozen Candidate B primitives, LLAMA only', () => {
+  const P = presets.PRIMITIVES
+  const root = engine.themeSelector('llama')
+  const rules = presets.presentationRules([llama()])
+  for (const [suffix, name] of Object.entries(BROWSE_8B)) {
+    assert.ok(Object.isFrozen(P[name]), name)
+    assert.deepEqual(rules[`${root} ${suffix}`], { ...P[name] }, suffix)
+    for (const value of Object.values(P[name])) assert.match(value, SAFE_VALUE, `${name}: ${value}`)
+  }
+  // None reaches the players
+  for (const suffix of Object.keys(BROWSE_8B)) assert.doesNotMatch(suffix, /streamContainer|playerContent|playerControls|playerTrack/, suffix)
+  for (const id of ['dark', 'black', 'light']) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {}, id)
+})
+
+test('Phase 8B navigation: chassis strip and a recessed selected key that keeps its non-color cues', async () => {
+  const P = presets.PRIMITIVES
+  // Chassis: the content surface and sheen, a faint lit top lip and a dark seam; paint only
+  assert.deepEqual({ ...P.BROWSE_NAV_CHASSIS }, { 'background-color': 'rgb(var(--color-bg))', 'background-image': P.CHASSIS_SHEEN, 'box-shadow': 'inset 0 1px 0 rgb(var(--color-edge-light) / 0.18), inset 0 -1px 0 rgb(var(--color-edge-dark))' })
+  // Selected: recessed dark face, pressed bevel and the accent underline; no ring, no colored label (Candidate C rejected)
+  assert.deepEqual({ ...P.BROWSE_NAV_SELECTED }, { 'background-color': 'rgb(var(--color-recessed))', 'background-image': P.RECESSED_FACE, 'box-shadow': `${P.PRESSED_BEVEL}, inset 0 -2px 0 rgb(var(--color-accent))` })
+  assert.doesNotMatch(P.BROWSE_NAV_SELECTED['box-shadow'], /inset 0 0 0 1px/)
+  for (const set of [P.BROWSE_NAV_CHASSIS, P.BROWSE_NAV_SELECTED]) for (const property of Object.keys(set)) assert.match(property, PAINT_ONLY, property)
+  // The selected tab still shows its text label where the others show an icon (shape, not only color)
+  const navbar = await read('../components/home/BookshelfNavBar.vue')
+  assert.match(navbar, /:class="routeName === item\.routeName \? 'bg-primary' : 'text-fg-muted'"/)
+  assert.match(navbar, /<p v-if="routeName === item\.routeName" class="text-sm font-semibold">\{\{ item\.text \}\}<\/p>/)
+})
+
+test('Phase 8B typography freeze: navigation labels, the library selector, cards and titles keep their type', () => {
+  const root = engine.themeSelector('llama')
+  const rules = presets.presentationRules([llama()])
+  const TYPE = /^(font|letter-spacing|line-height|text-)/
+  for (const [selector, declarations] of Object.entries(rules)) {
+    if (!/bookshelf-navbar|library-selector|card-artwork|book-card|appbar|bookshelf-toolbar/.test(selector)) continue
+    for (const property of Object.keys(declarations)) assert.doesNotMatch(property, TYPE, `${selector}: ${property}`)
+  }
+  // Only the hooked labels and the count take type, and only face, spacing and figures (same size, weight, line box)
+  const typed = Object.entries(rules).filter(([s, d]) => !s.includes('#streamContainer') && Object.keys(d).some((p) => p === 'font-family'))
+  assert.deepEqual(typed.map(([s]) => s.slice(root.length + 1)).sort(), ['.search-section-label', '.shelf-heading', '.toolbar-count'])
+  for (const [, declarations] of typed) {
+    assert.equal(declarations['font-family'], 'sans-serif-condensed, sans-serif')
+    for (const property of ['font-size', 'font-weight', 'line-height', 'color']) assert.equal(declarations[property], undefined, property)
+  }
+  assert.equal(rules[`${root} .toolbar-count`]['font-variant-numeric'], 'tabular-nums')
+})
+
+test('Phase 8B shelf heading rule is the band painting itself: an engraved line clear of the artwork, no box or strip', () => {
+  const P = presets.PRIMITIVES
+  assert.deepEqual(Object.keys(P.SHELF_HEADING_RULE).sort(), ['background-image', 'background-position', 'background-repeat', 'background-size'])
+  // Two 1px lines (dark seam, faint lit return), 6px above the band's bottom edge, inset 20px each side
+  assert.equal(P.SHELF_HEADING_RULE['background-size'], 'calc(100% - 40px) 1px, calc(100% - 40px) 1px')
+  assert.equal(P.SHELF_HEADING_RULE['background-position'], '20px calc(100% - 6px), 20px calc(100% - 5px)')
+  assert.equal(P.SHELF_HEADING_RULE['background-repeat'], 'no-repeat')
+  assert.match(P.SHELF_HEADING_RULE['background-image'], /^linear-gradient\(rgb\(var\(--color-edge-dark\)\), rgb\(var\(--color-edge-dark\)\)\), linear-gradient\(rgb\(var\(--color-edge-light\) \/ 0\.\d+\)/)
+  // No raised strip (Candidate C): the band gets no shadow, color or chassis sheen, and the shelf keeps its own seam
+  const root = engine.themeSelector('llama')
+  const rules = presets.presentationRules([llama()])
+  assert.equal(rules[`${root} .shelf-heading-band`]['box-shadow'], undefined)
+  assert.ok(!P.SHELF_HEADING_RULE['background-image'].includes(P.CHASSIS_SHEEN))
+  assert.deepEqual(rules[`${root} .shelf-section`], { 'box-shadow': P.ENGRAVED_SEPARATOR })
+})
+
+test('Phase 8B list play key: the mini key face and amber legend on the unchanged button box', () => {
+  const P = presets.PRIMITIVES
+  assert.deepEqual({ ...P.LIST_PLAY_KEY }, { ...P.TRANSPORT_KEY_MINI, 'border-radius': P.RADIUS.key })
+  assert.deepEqual({ ...P.LIST_PLAY_LEGEND }, { ...P.PLAYBACK_LEGEND })
+  for (const property of Object.keys(P.LIST_PLAY_KEY)) assert.match(property, PAINT_ONLY, property)
+  // Contrast: the amber legend on the key face over the browsing surface
+  const t = llama().tokens
+  const face = t['surface.recessed'].map((c, i) => c * 0.85 + t['surface.base'][i] * 0.15)
+  assert.ok(contrast(t['progress.played'], face) >= 7, 'amber legend >= 7:1')
+})
+
+test('Phase 8B leaves cards, the app bar and the shared states alone (no Candidate C)', () => {
+  const P = presets.PRIMITIVES
+  const root = engine.themeSelector('llama')
+  const rules = presets.presentationRules([llama()])
+  assert.equal(rules[`${root} .card-artwork`]['box-shadow'], `${P.ARTWORK_FRAME}, ${P.ELEVATION.panel}`)
+  assert.deepEqual(rules[`${root} .library-selector`], { ...P.KEY_CAP })
+  assert.deepEqual(rules[`${root} #appbar`], { 'background-image': P.CHASSIS_SHEEN, 'box-shadow': `${P.RAISED_BEVEL}, 0 1px 0 rgb(var(--color-edge-dark))` })
+  // No accent or amber text on labels, counts or the selector name
+  for (const s of ['.shelf-heading', '.search-section-label', '.toolbar-count', '.library-selector p', '#bookshelf-navbar a.bg-primary p']) assert.equal((rules[`${root} ${s}`] || {}).color, undefined, s)
+  // Progress semantics unchanged
+  assert.deepEqual(rules[`${root} .absolute.bottom-0.left-0.z-10.bg-yellow-400`], { 'background-color': 'rgb(var(--color-track-cursor))' })
+  assert.ok(!Object.keys(rules).some((s) => /bg-success/.test(s)))
+})
+
+test('Phase 8B rules compile through Tailwind under the LLAMA root only', async () => {
+  const postcss = require('postcss')
+  const tailwind = require('tailwindcss')
+  const config = require('../tailwind.config.js')
+  const source = await read('../assets/tailwind.css')
+  const content = config.content.map((glob) => new URL(`../${glob}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
+  const { css } = await postcss([tailwind({ ...config, content })]).process(source, { from: undefined })
+  const root = "html[data-theme='llama']"
+  for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{/g)) {
+    for (const selector of m[1].split(',')) if (HOOKS_8B.test(selector) || selector.includes('#bookshelf-navbar')) assert.ok(selector.trim().startsWith(`${root} `), selector.trim())
+  }
+  const block = (selector) => {
+    const i = css.indexOf(`${selector} {`)
+    assert.ok(i >= 0, selector)
+    return css.slice(i, css.indexOf('}', i))
+  }
+  assert.match(block(`${root} .shelf-heading-band`), /background-position: 20px calc\(100% - 6px\), 20px calc\(100% - 5px\);/)
+  assert.match(block(`${root} .toolbar-count`), /font-family: sans-serif-condensed, sans-serif;[\s\S]*font-variant-numeric: tabular-nums;/)
+  assert.match(block(`${root} #bookshelf-navbar a.bg-primary`), /background-color: rgb\(var\(--color-recessed\)\);/)
 })
