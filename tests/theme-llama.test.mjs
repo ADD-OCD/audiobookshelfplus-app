@@ -387,9 +387,10 @@ test('Gate B player rules are paint only, built from the shared primitives', () 
   assert.equal(rule('.fullscreen .cover-wrapper')['box-shadow'], `${P.ARTWORK_FRAME}, ${P.ELEVATION.panel}`)
   // Transport deck: raised chassis panel with a dark seam above it
   assert.deepEqual(rule('.fullscreen #playerContent'), { 'background-color': 'rgb(var(--color-bg))', 'background-image': P.CHASSIS_SHEEN, 'box-shadow': `${P.RAISED_BEVEL}, 0 -1px 0 rgb(var(--color-edge-dark))` })
-  // Seams: transport vs secondary row (fullscreen), panel vs seek region (mini)
+  // Seam between the transport and secondary rows (fullscreen); the mini's seek region is a recessed readout strip
+  // (Phase 7B, in place of its former top seam)
   assert.deepEqual(rule('.fullscreen #playerControls'), { 'box-shadow': P.ENGRAVED_SEPARATOR })
-  assert.deepEqual(rule('#streamContainer:not(.fullscreen) #playerTrack'), { 'box-shadow': P.ENGRAVED_SEPARATOR_TOP })
+  assert.deepEqual(rule('#streamContainer:not(.fullscreen) #playerTrack'), { ...P.MINI_READOUT_STRIP })
   // Recessed displays keep their content-box well and squared radius, now with a recessed face
   for (const s of ['.fullscreen #playerTrack', '.fullscreen .total-track']) {
     assert.equal(rule(s)['background-image'], P.RECESSED_FACE, s)
@@ -1126,7 +1127,11 @@ const READOUT_LAYOUT_PROPERTIES = {
   '#streamContainer.fullscreen.faceplate #playerControls': ['height', 'padding-top', 'padding-bottom', 'display', 'flex-direction'],
   '#streamContainer.fullscreen.faceplate #playerContent .utility-row': ['bottom', 'height', 'display', 'flex-direction'],
   '#streamContainer.fullscreen.faceplate-flat #playerContent .utility-row': ['bottom', 'height', 'display', 'flex-direction'],
-  '#streamContainer.fullscreen.faceplate-dual #playerContent .utility-row': ['bottom', 'height', 'display', 'flex-direction']
+  '#streamContainer.fullscreen.faceplate-dual #playerContent .utility-row': ['bottom', 'height', 'display', 'flex-direction'],
+  // Phase 7B: the collapsed mini-player's type (face, spacing, and the times' size on their unchanged line box)
+  '#streamContainer:not(.fullscreen) .title-author-texts .title-text': ['font-family', 'letter-spacing'],
+  '#streamContainer:not(.fullscreen) .title-author-texts .author-text': ['font-family', 'letter-spacing'],
+  '#streamContainer:not(.fullscreen) #playerTrack p.font-mono': ['font-family', 'font-size', 'line-height', 'font-variant-numeric', 'letter-spacing']
 }
 
 test('Phase 4E readout is a recessed well in a bezel plate: frozen, paint-only, from the shared primitives', () => {
@@ -1201,8 +1206,11 @@ test('Phase 4E metadata stays neutral: no LLAMA rule colors the title or author,
   const rules = presets.presentationRules([llama()])
   for (const [selector, declarations] of Object.entries(rules)) {
     if (!/title-author|title-text|author-text|titlewrapper/.test(selector)) continue
-    // Only the full-player readout rules, never the collapsed player's block
-    assert.ok([`${root} ${READOUT}`, `${root} ${READOUT_ABOVE_TOTAL_TRACK}`].includes(selector), selector)
+    // The full-player readout rules, and (Phase 7B) the collapsed player's title and author type: face and spacing only,
+    // never its block, box or color
+    const mini = [`${root} #streamContainer:not(.fullscreen) .title-author-texts .title-text`, `${root} #streamContainer:not(.fullscreen) .title-author-texts .author-text`]
+    assert.ok([`${root} ${READOUT}`, `${root} ${READOUT_ABOVE_TOTAL_TRACK}`, ...mini].includes(selector), selector)
+    if (mini.includes(selector)) assert.deepEqual(Object.keys(declarations).sort(), ['font-family', 'letter-spacing'], selector)
     assert.equal(declarations.color, undefined, selector)
     for (const value of Object.values(declarations)) assert.doesNotMatch(value, /--color-(track-cursor|accent|success|warning)/, selector)
   }
@@ -1756,4 +1764,128 @@ test('Control deck leaves the Phase 4H primary key frozen', () => {
   assert.deepEqual(rules[`${root} #playerControls .play-btn:active`], { ...P.PRIMARY_KEY_PRESSED })
   assert.deepEqual(rules[`${root} .fullscreen #playerControls .play-btn .material-symbols`], { 'font-size': '2.8rem' })
   assert.deepEqual(rules[`${root} #streamContainer:not(.fullscreen) #playerControls .play-btn .material-symbols`], { 'font-size': '1.875rem' })
+})
+
+// --- Phase 7B: LLAMA mini-player Candidate B (condensed type, recessed readout strip, artwork mount; no geometry) ---
+
+const MINI = '#streamContainer:not(.fullscreen)'
+const MINI_7B = {
+  [`${MINI} .title-author-texts .title-text`]: 'MINI_TITLE_TYPE',
+  [`${MINI} .title-author-texts .author-text`]: 'MINI_AUTHOR_TYPE',
+  [`${MINI} #playerTrack p.font-mono`]: 'MINI_TIME_TYPE',
+  [`${MINI} #playerTrack`]: 'MINI_READOUT_STRIP',
+  [`${MINI} .cover-wrapper`]: 'MINI_ARTWORK_MOUNT'
+}
+
+test('Phase 7B mini rules are exactly the frozen Candidate B primitives, collapsed player only', () => {
+  const P = presets.PRIMITIVES
+  const root = engine.themeSelector('llama')
+  const rules = presets.presentationRules([llama()])
+  for (const [suffix, name] of Object.entries(MINI_7B)) {
+    assert.ok(Object.isFrozen(P[name]), name)
+    assert.deepEqual(rules[`${root} ${suffix}`], { ...P[name] }, suffix)
+    for (const value of Object.values(P[name])) assert.match(value, SAFE_VALUE, `${name}: ${value}`)
+  }
+  // None of them can reach the full player
+  for (const suffix of Object.keys(MINI_7B)) assert.ok(suffix.startsWith(`${MINI} `) && !suffix.includes('.fullscreen '), suffix)
+})
+
+test('Phase 7B mini type: condensed neutral metadata, condensed tabular times on the unchanged line box', async () => {
+  const P = presets.PRIMITIVES
+  const player = await read('../components/app/AudioPlayer.vue')
+  // The same system condensed face the full-player faceplate uses; no font asset, no @font-face
+  assert.equal(P.CONDENSED_FACE, 'sans-serif-condensed, sans-serif')
+  assert.match(player, /\.faceplate-type \.title-author-texts \.title-text \{\s*font-family: sans-serif-condensed, sans-serif;/)
+  for (const set of [P.MINI_TITLE_TYPE, P.MINI_AUTHOR_TYPE, P.MINI_TIME_TYPE]) {
+    assert.equal(set['font-family'], P.CONDENSED_FACE)
+    assert.equal(set.color, undefined, 'type only: metadata stays neutral and the times keep the readout green')
+  }
+  assert.deepEqual({ ...P.MINI_TITLE_TYPE }, { 'font-family': P.CONDENSED_FACE, 'letter-spacing': '0.01em' })
+  assert.deepEqual({ ...P.MINI_AUTHOR_TYPE }, { 'font-family': P.CONDENSED_FACE, 'letter-spacing': '0.02em' })
+  assert.equal(P.MINI_TIME_TYPE['font-variant-numeric'], 'tabular-nums')
+  // 14px times on the line box the 12.8px times had at the inherited 1.5 line height: 19.2px, and 24.96px at font scale
+  // 1.3, so the time row and the rail under it keep their bounds
+  const size = parseFloat(P.MINI_TIME_TYPE['font-size']) * 16
+  const line = Number(P.MINI_TIME_TYPE['line-height'])
+  assert.equal(size, 14)
+  for (const scale of [1, 1.3]) assert.ok(Math.abs(size * scale * line - 0.8 * 16 * scale * 1.5) < 0.001, `line box at ${scale}`)
+  // The times keep the phosphor readout color
+  const root = engine.themeSelector('llama')
+  assert.deepEqual(presets.presentationRules([llama()])[`${root} #playerTrack p.font-mono`], { color: 'rgb(var(--color-accent))' })
+})
+
+test('Phase 7B: the seek-row times are sized by the stylesheet (same 0.8rem everywhere), so the theme can set their type', async () => {
+  const player = await read('../components/app/AudioPlayer.vue')
+  const start = player.indexOf('<div id="playerTrack"')
+  const track = player.slice(start, player.indexOf('<div class="relative">', start))
+  assert.match(track, /<p class="track-time font-mono text-fg" ref="currentTimestamp">0:00<\/p>/)
+  assert.match(track, /<p class="track-time font-mono text-fg">\{\{ timeRemainingPretty \}\}<\/p>/)
+  assert.doesNotMatch(track, /style="font-size/)
+  assert.match(player, /#playerTrack \.track-time \{\s*font-size: 0\.8rem;\s*\}/)
+  // The full player's faceplate times still win there (!important), and the book rail's times are untouched
+  assert.match(player, /\.faceplate-type #playerTrack p\.font-mono \{[^}]*font-size: var\(--faceplate-times\) !important;/)
+  assert.equal((player.match(/<p class="font-mono text-fg" style="font-size: 0\.8rem">/g) || []).length, 2, 'total-track times unchanged')
+})
+
+test('Phase 7B readout strip and artwork mount are paint only and add no hit area or size', () => {
+  const P = presets.PRIMITIVES
+  assert.deepEqual(Object.keys(P.MINI_READOUT_STRIP).sort(), ['background-color', 'background-image', 'box-shadow'])
+  assert.equal(P.MINI_READOUT_STRIP['background-color'], 'rgb(var(--color-recessed))')
+  // Top-edge shading only (the seam line it replaces, then a fade)
+  assert.match(P.MINI_READOUT_STRIP['background-image'], /^linear-gradient\(180deg, rgb\(var\(--color-edge-dark\)\) 0, rgb\(var\(--color-edge-dark\)\) 1px, /)
+  // Two offset copies of the row's own box, below it: the face carried 6px under the rail, then a 1px lit line. No inset,
+  // blur or spread, so the strip is the row's own width and never changes its box
+  assert.deepEqual(P.MINI_READOUT_STRIP['box-shadow'].split(/, (?=\d)/), ['0 6px 0 0 rgb(var(--color-recessed))', '0 7px 0 0 rgb(var(--color-edge-light) / 0.22)'])
+  // Artwork: the shared frame plus one soft drop; no bezel or ring
+  assert.equal(P.MINI_ARTWORK_MOUNT['box-shadow'], `${P.ARTWORK_FRAME}, 0 2px 4px 2px rgb(0 0 0 / 0.45)`)
+  assert.deepEqual(Object.keys(P.MINI_ARTWORK_MOUNT), ['box-shadow'])
+  for (const set of [P.MINI_READOUT_STRIP, P.MINI_ARTWORK_MOUNT]) for (const property of Object.keys(set)) assert.match(property, PAINT_ONLY, property)
+})
+
+test('Phase 7B rejects Candidate C: no mini plate, well, bay or decorative element; the 120px panel geometry is unchanged', async () => {
+  const P = presets.PRIMITIVES
+  const root = engine.themeSelector('llama')
+  const rules = presets.presentationRules([llama()])
+  for (const [selector, declarations] of Object.entries(rules)) {
+    if (!selector.includes(':not(.fullscreen)')) continue
+    assert.doesNotMatch(selector, /plate|well|bay|console/, selector)
+    assert.notDeepEqual(declarations, { ...P.ARTWORK_BAY.regular }, selector)
+    assert.notDeepEqual(declarations, { ...P.METADATA_READOUT }, selector)
+  }
+  assert.equal(rules[`${root} ${MINI} .title-author-texts`], undefined, 'no metadata well')
+  const player = await read('../components/app/AudioPlayer.vue')
+  // Still only the three Phase 6B full-player plates, each shown by the layout projection (full screen only)
+  assert.deepEqual(
+    [...player.matchAll(/class="player-plate ([a-z-]+)"/g)].map((m) => m[1]),
+    ['player-plate-top', 'player-plate-console', 'player-plate-seek']
+  )
+  // The collapsed player's geometry: the 120px panel, the 46px artwork, and the anchors of the metadata, keys and seek row
+  assert.match(player, /\.playerContainer \{\s*height: 120px;\s*\}/)
+  assert.match(player, /--cover-image-width-collapsed: 46px;\s*--cover-image-height-collapsed: 46px;/)
+  assert.match(player, /\.cover-wrapper \{\s*bottom: 68px;\s*left: 24px;/)
+  assert.match(player, /width: var\(--title-author-width-collapsed\);\s*bottom: 76px;/)
+  assert.match(player, /#playerControls \{[^}]*width: 128px;\s*padding-right: 24px;\s*bottom: 70px;/)
+  assert.match(player, /#playerTrack \{[^}]*bottom: 35px;/)
+})
+
+test('Phase 7B rules compile through Tailwind under the LLAMA root only; Dark, Black and Light get nothing', async () => {
+  const postcss = require('postcss')
+  const tailwind = require('tailwindcss')
+  const config = require('../tailwind.config.js')
+  const source = await read('../assets/tailwind.css')
+  const content = config.content.map((glob) => new URL(`../${glob}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
+  const { css } = await postcss([tailwind({ ...config, content })]).process(source, { from: undefined })
+  const root = "html[data-theme='llama']"
+  for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{/g)) {
+    for (const selector of m[1].split(',')) if (selector.includes('#streamContainer:not(.fullscreen)')) assert.ok(selector.trim().startsWith(`${root} `), selector.trim())
+  }
+  const block = (selector) => {
+    const i = css.indexOf(`${selector} {`)
+    assert.ok(i >= 0, selector)
+    return css.slice(i, css.indexOf('}', i))
+  }
+  assert.match(block(`${root} ${MINI} #playerTrack p.font-mono`), /font-family: sans-serif-condensed, sans-serif;\s*font-size: 0\.875rem;\s*line-height: 1\.3714286;\s*font-variant-numeric: tabular-nums;\s*letter-spacing: 0\.02em;/)
+  assert.match(block(`${root} ${MINI} #playerTrack`), /box-shadow: 0 6px 0 0 rgb\(var\(--color-recessed\)\), 0 7px 0 0 rgb\(var\(--color-edge-light\) \/ 0\.22\);/)
+  assert.ok(!/@font-face[^}]*condensed/.test(css), 'no font asset')
+  for (const id of ['dark', 'black', 'light']) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {}, id)
 })
