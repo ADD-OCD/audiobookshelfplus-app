@@ -1,7 +1,7 @@
 <template>
   <div class="shelf-section w-full relative">
-    <div v-if="altViewEnabled" class="px-5 pb-3 pt-4">
-      <p class="font-semibold" :style="{ fontSize: sizeMultiplier + 'rem' }">{{ label }}</p>
+    <div v-if="altViewEnabled" class="shelf-heading-band px-5 pb-3 pt-4">
+      <p class="shelf-heading font-semibold" :style="{ fontSize: sizeMultiplier + 'rem' }">{{ label }}</p>
     </div>
 
     <div class="flex items-end px-3 max-w-full overflow-x-auto" :class="altViewEnabled ? '' : 'bookshelfRow'" :style="{ height: shelfHeight + 'px', paddingBottom: entityPaddingBottom + 'px' }">

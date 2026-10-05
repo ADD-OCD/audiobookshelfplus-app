@@ -2,7 +2,7 @@
   <div class="browse-toolbar w-full h-9 bg-bg relative z-20">
     <div id="bookshelf-toolbar" class="absolute top-0 left-0 w-full h-full z-20 flex items-center px-2">
       <div class="flex items-center w-full text-sm">
-        <p v-show="!selectedSeriesName" class="pt-1">{{ $formatNumber(totalEntities) }} {{ entityTitle }}</p>
+        <p v-show="!selectedSeriesName" class="toolbar-count pt-1">{{ $formatNumber(totalEntities) }} {{ entityTitle }}</p>
         <p v-show="selectedSeriesName" class="ml-2 pt-1">{{ selectedSeriesName }} ({{ $formatNumber(totalEntities) }})</p>
         <div class="flex-grow" />
         <span v-if="page == 'library' || seriesBookPage" class="material-symbols text-2xl px-2" @click="changeView">{{ !bookshelfListView ? 'view_list' : 'grid_view' }}</span>

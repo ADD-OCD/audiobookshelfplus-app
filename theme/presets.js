@@ -403,6 +403,39 @@ const MINI_READOUT_STRIP = Object.freeze({
 // The mini artwork keeps its frame and gains a soft mount shadow: no bezel, ring or size change
 const MINI_ARTWORK_MOUNT = Object.freeze({ 'box-shadow': `${ARTWORK_FRAME}, 0 2px 4px 2px rgb(0 0 0 / 0.45)` })
 
+// Browsing chrome (Phase 8B, Candidate B of the Phase 8A audit): the content environment around the frozen players takes
+// their language in restrained form. Paint and type only; every box keeps its geometry.
+// Navigation strip: the content chassis (base surface, chassis sheen, faint lit top lip, dark seam below) instead of the
+// brighter steel strip, so the app bar, navigation and content read as one chassis
+const BROWSE_NAV_CHASSIS = Object.freeze({
+  'background-color': 'rgb(var(--color-bg))',
+  'background-image': CHASSIS_SHEEN,
+  'box-shadow': 'inset 0 1px 0 rgb(var(--color-edge-light) / 0.18), inset 0 -1px 0 rgb(var(--color-edge-dark))'
+})
+// Selected tab: a recessed dark key (the players' key language) pressed into the strip; it keeps the accent underline
+// and its text label (unselected tabs show an icon), so the state never reads by color alone
+const BROWSE_NAV_SELECTED = Object.freeze({
+  'background-color': 'rgb(var(--color-recessed))',
+  'background-image': RECESSED_FACE,
+  'box-shadow': `${PRESSED_BEVEL}, inset 0 -2px 0 rgb(var(--color-accent))`
+})
+// Section labels (shelf headings, search result groups): the condensed system face, neutral, same size and weight
+const SECTION_LABEL_TYPE = Object.freeze({ 'font-family': CONDENSED_FACE, 'letter-spacing': '0.03em' })
+// Shelf heading rule: an engraved line (dark seam over a faint lit return) painted by the heading band's own background,
+// 6px above the band's bottom edge (so 6px above the artwork) and inset 20px, the band's own text inset
+const SHELF_HEADING_RULE = Object.freeze({
+  'background-image': `linear-gradient(rgb(var(--color-edge-dark)), rgb(var(--color-edge-dark))), linear-gradient(rgb(var(--color-edge-light) / 0.14), rgb(var(--color-edge-light) / 0.14))`,
+  'background-size': 'calc(100% - 40px) 1px, calc(100% - 40px) 1px',
+  'background-position': '20px calc(100% - 6px), 20px calc(100% - 5px)',
+  'background-repeat': 'no-repeat'
+})
+// Toolbar item count: condensed with tabular figures, neutral (a count is not a live readout)
+const COUNT_TYPE = Object.freeze({ 'font-family': CONDENSED_FACE, 'letter-spacing': '0.02em', 'font-variant-numeric': 'tabular-nums' })
+// List-row play button: the mini-player's key face (dark, sheened, squared, ring and drop) on the button's own box, with
+// the playback amber legend
+const LIST_PLAY_KEY = Object.freeze({ ...TRANSPORT_KEY_MINI, 'border-radius': RADIUS.key })
+const LIST_PLAY_LEGEND = PLAYBACK_LEGEND
+
 const PRIMITIVES = Object.freeze({
   RADIUS,
   ELEVATION,
@@ -473,16 +506,25 @@ const PRIMITIVES = Object.freeze({
   MINI_AUTHOR_TYPE,
   MINI_TIME_TYPE,
   MINI_READOUT_STRIP,
-  MINI_ARTWORK_MOUNT
+  MINI_ARTWORK_MOUNT,
+  BROWSE_NAV_CHASSIS,
+  BROWSE_NAV_SELECTED,
+  SECTION_LABEL_TYPE,
+  SHELF_HEADING_RULE,
+  COUNT_TYPE,
+  LIST_PLAY_KEY,
+  LIST_PLAY_LEGEND
 })
 
 const EQUIPMENT_RULES = [
   // Navigation chrome: bevelled chassis strips
   ['#appbar', { 'background-image': CHASSIS_SHEEN, 'box-shadow': `${RAISED_BEVEL}, 0 1px 0 rgb(var(--color-edge-dark))` }],
-  ['#bookshelf-navbar', { 'background-image': STEEL_SHEEN, 'box-shadow': RAISED_BEVEL }],
-  // Selected navigation tab reads as a pressed key (inset) with an accent underline, not color alone
+  // Navigation strip: the content chassis (Phase 8B; it was a steel strip, the brightest surface in the top chrome)
+  ['#bookshelf-navbar', BROWSE_NAV_CHASSIS],
+  // Selected navigation tab: a recessed dark key pressed into the strip (Phase 8B), keeping its accent underline and its
+  // text label, so the state never reads by color alone
   // (BookshelfNavBar binds bg-primary on the active tab; runtime-only router classes would be pruned by Tailwind)
-  ['#bookshelf-navbar a.bg-primary', { 'background-image': 'none', 'box-shadow': `${PRESSED_BEVEL}, inset 0 -2px 0 rgb(var(--color-accent))` }],
+  ['#bookshelf-navbar a.bg-primary', BROWSE_NAV_SELECTED],
 
   // Buttons: steel sheen over the existing (semantic) button color, raised; pressed = inset
   ['.btn:not(:disabled)', { 'background-image': STEEL_SHEEN, 'box-shadow': `${RAISED_BEVEL}, ${ELEVATION.raised}` }],
@@ -690,6 +732,16 @@ const EQUIPMENT_RULES = [
   // Library selector (app bar): a physical key; pressed inverts it
   ['.library-selector', KEY_CAP],
   ['.library-selector:active', KEY_CAP_PRESSED],
+  // Browsing labels and the list-row play key (Phase 8B, Candidate B). Section labels are condensed and neutral; the shelf
+  // heading band paints an engraved rule clear of the artwork; the toolbar count is condensed with tabular figures; the
+  // list-row play button wears the mini-player's key face and amber legend. Type and paint only: cards, titles, authors,
+  // navigation labels and the library selector are deliberately unchanged
+  ['.shelf-heading', SECTION_LABEL_TYPE],
+  ['.shelf-heading-band', SHELF_HEADING_RULE],
+  ['.search-section-label', SECTION_LABEL_TYPE],
+  ['.toolbar-count', COUNT_TYPE],
+  ['.list-play-key', LIST_PLAY_KEY],
+  ['.list-play-key > .material-symbols', LIST_PLAY_LEGEND],
   // Library list: recessed well, seamed rows; the current library is a selected key (pressed, accent ring) on
   // a lit row, and its marker uses the accent instead of warning orange (selection is not a warning)
   ['.modal .library-option-panel ul[role=listbox]', { 'background-color': 'rgb(var(--color-recessed))', 'box-shadow': RECESSED_WELL }],
