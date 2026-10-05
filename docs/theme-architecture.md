@@ -730,6 +730,32 @@ Every state matches the approved runtime prototype within 1px. Key boxes are unc
 
 **Retained findings (out of scope, unchanged).** With Chapter Track on: toggling it while paused leaves the second rail's played bar at 0% until the next playback tick; a book without chapters shows two identical whole-book rails; the menu labels do not explain the pair. Wide screens at font scale 1.3 with both rails overlap the artwork and readout by about 12px (previous geometry, before 6B too). Display-size changes can make the home-screen widget's `APPWIDGET_UPDATE_OPTIONS` handling ANR. See `docs/future-work.md`.
 
+## LLAMA mini-player (Phase 7B)
+
+LLAMA only, collapsed player only. The mini-player takes the accepted B+ full player's type and readout language in reduced form. It stays a visibly simpler, persistent control surface, not a small faceplate. It is Candidate B of the Phase 7A runtime audit, implemented as prototyped: type and paint only, with no geometry. The panel stays exactly 120px, and the artwork (46×46), the title/author block, the three keys, the seek row, the rail and every offset and touch target keep their bounds at font scales 1.0 and 1.3, on narrow (343px), standard (412px), wide (762px) and landscape screens.
+
+**What changes** (recipe rules in `theme/presets.js`, all under `#streamContainer:not(.fullscreen)`, so the full player never matches them):
+
+- **Metadata** (`MINI_TITLE_TYPE`, `MINI_AUTHOR_TYPE`): the system `sans-serif-condensed` face the faceplate uses (`CONDENSED_FACE`), 0.01em / 0.02em spacing. Sizes, color (neutral), scrolling and truncation are unchanged. The condensed face fits about 9% more title and 7% more author in the same slot.
+- **Times** (`MINI_TIME_TYPE`): condensed, tabular figures, 14px (was 12.8px), still the green readout color. The line height (1.3714286) keeps the previous line box exactly: 19.2px, and 24.96px at font scale 1.3. So the time row and the rail under it do not move.
+- **Readout strip** (`MINI_READOUT_STRIP`): the existing seek row (`#playerTrack`) gets the recessed face with a shaded top edge, in place of the engraved seam that was drawn at the same line. Two offset shadows of the row's own box carry the face 6px below the rail and end it with a 1px lit line. Shadows are paint outside the box, so nothing moves and no hit area is added. The rail stays non-seekable in the mini. The times and the amber rail now read as one compact readout.
+- **Artwork** (`MINI_ARTWORK_MOUNT`): the existing frame plus one soft mount shadow (`0 2px 4px 2px`). No bezel, ring, size, crop or radius change.
+
+**One template hook.** The seek row's two times used an inline `font-size: 0.8rem`, which a recipe rule cannot override. They now carry a `track-time` class, and the player stylesheet sets the same 0.8rem (`#playerTrack .track-time`). Every theme computes the identical size. The full player's faceplate times still win there through their existing `!important` rule. The book rail's times keep their inline style.
+
+**Deliberately not transferred** (Phase 7A, Candidates C and beyond):
+
+- A console plate behind the keys: cramped, 2px from the screen edge, a third framed box.
+- A recessed metadata well: Phase 4E found it infeasible without geometry.
+- An artwork bay or ring.
+- An inset seek well: at font scale 1.3 its top edge lands on the artwork.
+- A top plate, faceplate geometry, larger time line boxes, new controls, labels or decorative elements.
+- Removing the empty ~35px band under the rail.
+
+**Clearances retained, not changed.** At font scale 1.3 the existing mini geometry leaves only about 2px between the artwork and the seek row, and the metadata block extends about 1.2px above the panel. The default "Book | Chapter" title already scrolls at 412px. Candidate B does not worsen any of these: the strip's top edge is where the seam was. See `docs/future-work.md`.
+
+Dark, Black and Light get no rules; their mini-player and full player are unchanged. `tests/theme-llama.test.mjs` (Phase 7B tests) pins the rules to the frozen primitives and the collapsed player, the line-box arithmetic, the paint-only strip and mount, the template hook, the 120px geometry anchors, the absence of any Candidate C element, and the LLAMA-only compiled CSS.
+
 ## Content-derived color (intentionally not tokens)
 
 - **Player and mini-player background:** the average color of the cover art (`utils/coverAverageColor.js`), with `coverBgIsLight` choosing dark or light icon colors. The theme overlays (`overlay.player`, `overlay.mini-player`) sit on top of it.

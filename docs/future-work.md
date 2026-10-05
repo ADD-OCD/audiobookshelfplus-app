@@ -175,6 +175,10 @@ Found while preparing the LLAMA B+ faceplate (Phase 6A.3); not changed. The pair
 
 On a wide portrait screen (about 762×986) at font scale 1.3 with Chapter Track and Total Track both on, the metadata readout overlaps the artwork by about 12px (and touches the second rail on a 412×734 screen). This is the previous geometry, which the B+ faceplate keeps on purpose for the two-rail state; it was the same before Phase 6B. A fix belongs to that shared geometry, not the faceplate.
 
+## Mini-player clearance at font scale 1.3
+
+Measured during the LLAMA mini-player work (Phases 7A/7B) and left unchanged; the panel is fixed at 120px. At font scale 1.3 only about 2px separate the mini artwork from the seek row, and the title/author block extends about 1.2px above the panel. The default "Book | Chapter" title already scrolls at 412px. This rules out any inset well or bezel around the mini readout or artwork without a geometry change; a fix belongs to the shared collapsed-player geometry (all themes).
+
 ## Widget ANR on display-size changes
 
 Changing the display size (`adb shell wm size`) sends `APPWIDGET_UPDATE_OPTIONS` to the home-screen widget provider, and its handling has produced an "isn't responding" dialog on the emulator. Needs a separate reliability investigation of the widget's options update path.
