@@ -1443,4 +1443,48 @@ export default {
 .faceplate-flat #playerTrack p.font-mono {
   line-height: 1;
 }
+
+/* Chapter + book progress (two rails, previous geometry): one dual-track instrument directly above the console. The
+   chapter rail (the seek row) and the book rail are two equal sections stacked with no gap, bottom-anchored from the
+   layout's offsets, inside one plate (the seek plate, extended over the book section). Progress, seek and the rails'
+   behavior are unchanged; this only places and sizes the two existing rows */
+#streamContainer.fullscreen.faceplate-dual #playerTrack {
+  top: auto;
+  bottom: var(--faceplate-dual-main-bottom);
+  height: var(--faceplate-dual-section);
+  padding-top: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+#streamContainer.fullscreen.faceplate-dual .total-track {
+  bottom: var(--faceplate-dual-book-bottom);
+  height: var(--faceplate-dual-section);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.faceplate-dual #playerTrack > div.flex,
+.faceplate-dual .total-track > div.flex {
+  padding: 0 10px;
+}
+.faceplate-dual #playerTrack > div.relative,
+.faceplate-dual .total-track > div.w-full {
+  margin-top: 2px;
+}
+/* The book rail matches the chapter rail (6px) */
+.faceplate-dual .total-track div.relative {
+  height: 6px;
+}
+.faceplate-dual #playerTrack p.font-mono,
+.faceplate-dual .total-track p.font-mono {
+  line-height: 1;
+}
+.faceplate-dual .total-track p.font-mono {
+  font-size: var(--faceplate-times) !important;
+}
+.faceplate-dual .player-plate-seek {
+  top: calc(-6px - var(--faceplate-dual-section));
+  bottom: -6px;
+}
 </style>

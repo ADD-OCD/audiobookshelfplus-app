@@ -14,6 +14,8 @@
  *               B+ presentation only, because the second rail would otherwise cost the artwork 21-35% of its area.
  *               Also used where the faceplate would shrink the artwork below MIN_ARTWORK_RATIO of its previous width.
  * - 'landscape' equipment, landscape: the previous two-column geometry with the B+ presentation only.
+ * With two rails, both previous-geometry paths present the chapter and book rails as one dual-track instrument
+ * ('faceplate-dual'); with one rail they keep the console plate around the whole previous deck ('faceplate-flat').
  *
  * Every number lives here; the player turns the result into CSS variables and hook classes on #streamContainer,
  * and its own stylesheet consumes them (the LLAMA recipe in theme/presets.js only paints the plates and bezel).
@@ -35,7 +37,14 @@ const FACEPLATE = Object.freeze({
   bayAllowance: 8, // the bay's extra side room beyond the previous artwork side allowance
   flatTimes: 16, // timestamps where the deck keeps its previous 200px (compat, landscape): larger would push the
   //               unchanged seek hit target onto the transport keys at font scale 1.3
-  compatPlateClearance: 6 // compat shows the top plate only with this much room above the artwork frame
+  compatPlateClearance: 6, // compat shows the top plate only with this much room above the artwork frame
+  legacyDeck: 200, // the full player's previous deck height (compat and landscape keep it)
+  // Chapter + book progress (two rails) on the previous-geometry paths: one dual-track instrument directly above the
+  // console. Offsets are measured up from the deck bottom. `console` puts the console plate's top edge where it centers
+  // the transport bank as it already sits (the divider at 73px plus 7.5px, the 65.5px key envelope and 7.5px: keys do
+  // not move); above it a seam, the plate, then two equal sections (chapter below, book above), each sized for font
+  // scale 1.3 (16px times + 2px + a 6px rail)
+  dual: Object.freeze({ console: 153.5, seam: 6, plate: 6, section: 30 })
 })
 // Below this fraction of its previous width the faceplate is not worth the artwork: use the compat geometry. 0.93
 // keeps the cost within about 13.5% of the artwork's area, which covers the approved 412x734 cost (about 12%)
@@ -100,21 +109,30 @@ function fullscreenLayout(theme, { width, height, aspectRatio, twoRail }) {
   const none = { top: false, console: false, seek: false }
   if (!isEquipment(theme)) return { path: 'standard', coverWidth: legacy, classes: [], vars: {}, plates: none }
 
-  const flat = (path, topPlate) => ({
+  // Previous geometry with the B+ presentation. With two rails (dual) the chapter and book rails become one dual-track
+  // instrument above the console; otherwise the console plate wraps the whole previous deck (flat)
+  const D = FACEPLATE.dual
+  const dualVars = () => ({
+    '--faceplate-console-top': px(FACEPLATE.legacyDeck - D.console),
+    '--faceplate-dual-section': px(D.section),
+    '--faceplate-dual-main-bottom': px(D.console + D.seam + D.plate),
+    '--faceplate-dual-book-bottom': px(D.console + D.seam + D.plate + D.section)
+  })
+  const flat = (path, topPlate, dual) => ({
     path,
     coverWidth: legacy,
-    classes: ['faceplate-type', 'faceplate-flat', ...(topPlate ? ['faceplate-top-plate'] : [])],
-    vars: { '--faceplate-times': px(FACEPLATE.flatTimes), '--faceplate-plate-height': px(TIERS.regular.plateBottom - FACEPLATE.plateTop) },
-    plates: { top: topPlate, console: true, seek: false }
+    classes: ['faceplate-type', dual ? 'faceplate-dual' : 'faceplate-flat', ...(topPlate ? ['faceplate-top-plate'] : [])],
+    vars: { '--faceplate-times': px(FACEPLATE.flatTimes), '--faceplate-plate-height': px(TIERS.regular.plateBottom - FACEPLATE.plateTop), ...(dual ? dualVars() : {}) },
+    plates: { top: topPlate, console: true, seek: dual }
   })
-  if (width >= height) return flat('landscape', false)
+  if (width >= height) return flat('landscape', false, twoRail)
 
   // Previous portrait geometry: the artwork's top edge (its 2px frame included) decides whether the top plate fits
-  const compat = () => {
+  const compat = (dual) => {
     const legacyTop = height / 2 - 120 - (legacy * aspectRatio) / 2 - 2
-    return flat('compat', legacyTop - TIERS.regular.plateBottom >= FACEPLATE.compatPlateClearance)
+    return flat('compat', legacyTop - TIERS.regular.plateBottom >= FACEPLATE.compatPlateClearance, dual)
   }
-  if (twoRail) return compat()
+  if (twoRail) return compat(true)
 
   let tier = TIERS.regular
   let cover = faceplateCover(tier, { width, height, aspectRatio })
@@ -122,7 +140,7 @@ function fullscreenLayout(theme, { width, height, aspectRatio, twoRail }) {
     tier = TIERS.compact
     cover = faceplateCover(tier, { width, height, aspectRatio })
   }
-  if (cover.coverWidth < legacy * MIN_ARTWORK_RATIO) return compat()
+  if (cover.coverWidth < legacy * MIN_ARTWORK_RATIO) return compat(false)
 
   // Room left over when the artwork is width-limited becomes three equal seams (above the bay, between the bay and
   // the readout, between the readout and the seek module) rather than one dead band

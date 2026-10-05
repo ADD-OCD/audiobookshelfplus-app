@@ -45,7 +45,8 @@ function equipmentDerivedDeclarations(tokens) {
 // Radius scale: squared, restrained geometry. Every key, the primary Play/Pause key included, uses `key`.
 const RADIUS = Object.freeze({
   frame: '2px', // artwork frames and fine detail
-  key: '4px' // wells, panels and equipment keys
+  key: '4px', // wells, panels and equipment keys
+  none: '0px' // square inner corners where two wells join into one (the dual-track display)
 })
 
 // Edge treatments
@@ -356,6 +357,23 @@ const FACEPLATE_TRANSPORT_BANK = Object.freeze({
   'flex-direction': 'column',
   'justify-content': 'center'
 })
+// Chapter + book progress (two rails): the two rows are one recessed well split by an engraved seam. The upper (book)
+// section carries the well's top lip and the seam's dark line at its bottom; the lower (chapter) section carries the
+// seam's faint light line at its top and the well's bottom lip. The seam uses ENGRAVED_SEPARATOR's two colors, and the
+// lips RECESSED_FACE's, so the pair reads as one display with an internal division. Paint only (background layers on the
+// content box, as RECESSED_FACE)
+const DUAL_TRACK_UPPER = Object.freeze({
+  'background-image': 'linear-gradient(180deg, rgb(var(--color-edge-dark)) 0, rgb(var(--color-edge-dark)) 1px, rgb(0 0 0 / 0.4) 1px, rgb(0 0 0 / 0) 6px, rgb(0 0 0 / 0) calc(100% - 1px), rgb(var(--color-edge-dark)) calc(100% - 1px))',
+  'border-radius': RADIUS.key,
+  'border-bottom-left-radius': RADIUS.none,
+  'border-bottom-right-radius': RADIUS.none
+})
+const DUAL_TRACK_LOWER = Object.freeze({
+  'background-image': 'linear-gradient(180deg, rgb(var(--color-edge-light) / 0.12) 0, rgb(var(--color-edge-light) / 0.12) 1px, rgb(0 0 0 / 0) 1px, rgb(0 0 0 / 0) calc(100% - 1px), rgb(var(--color-edge-light) / 0.22) calc(100% - 1px))',
+  'border-radius': RADIUS.key,
+  'border-top-left-radius': RADIUS.none,
+  'border-top-right-radius': RADIUS.none
+})
 const FACEPLATE_UTILITY_BANK = Object.freeze({
   bottom: `${playerLayout.FACEPLATE.consoleInset}px`,
   height: `${FACEPLATE_DIVIDER - playerLayout.FACEPLATE.consoleInset}px`,
@@ -426,7 +444,9 @@ const PRIMITIVES = Object.freeze({
   FACEPLATE_DIVIDER,
   PRIMARY_KEY_BOX,
   FACEPLATE_TRANSPORT_BANK,
-  FACEPLATE_UTILITY_BANK
+  FACEPLATE_UTILITY_BANK,
+  DUAL_TRACK_UPPER,
+  DUAL_TRACK_LOWER
 })
 
 const EQUIPMENT_RULES = [
@@ -521,6 +541,12 @@ const EQUIPMENT_RULES = [
   ['#streamContainer.fullscreen.faceplate #playerControls', FACEPLATE_TRANSPORT_BANK],
   ['#streamContainer.fullscreen.faceplate #playerContent .utility-row', FACEPLATE_UTILITY_BANK],
   ['#streamContainer.fullscreen.faceplate-flat #playerContent .utility-row', FACEPLATE_UTILITY_BANK],
+  // Chapter + book progress (two rails): one dual-track instrument above the console (theme/playerLayout.js places it);
+  // the deck is chassis, the two rows one recessed well with an engraved seam, the utility bank centered as above
+  ['#streamContainer.faceplate-dual #playerContent', FACEPLATE_DECK],
+  ['#streamContainer.faceplate-dual .total-track', DUAL_TRACK_UPPER],
+  ['#streamContainer.faceplate-dual #playerTrack', DUAL_TRACK_LOWER],
+  ['#streamContainer.fullscreen.faceplate-dual #playerContent .utility-row', FACEPLATE_UTILITY_BANK],
   // Panel seam between the primary transport row and the secondary control row
   ['.fullscreen #playerControls', { 'box-shadow': ENGRAVED_SEPARATOR }],
   // Mini-player: seam across the panel above the seek region

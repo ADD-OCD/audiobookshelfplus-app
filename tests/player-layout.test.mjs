@@ -149,10 +149,11 @@ test('Chapter Track + Total Track (two rails) selects the compatibility path: pr
       const r = at(llama(), vp, ar, true)
       assert.equal(r.path, 'compat', String(vp))
       assert.equal(r.coverWidth, previousCoverWidth(vp[0], vp[1], ar))
-      assert.ok(r.classes.includes('faceplate-type') && r.classes.includes('faceplate-flat'))
-      assert.ok(!r.classes.includes('faceplate') && !r.classes.includes('faceplate-compact'))
+      // The two rails are one dual-track instrument (faceplate-dual), never the flat single-rail deck
+      assert.ok(r.classes.includes('faceplate-type') && r.classes.includes('faceplate-dual'))
+      assert.ok(!r.classes.includes('faceplate') && !r.classes.includes('faceplate-compact') && !r.classes.includes('faceplate-flat'))
       assert.equal(r.plates.console, true)
-      assert.equal(r.plates.seek, false)
+      assert.equal(r.plates.seek, true) // the seek plate, extended over the book section, is the instrument's frame
       assert.equal(r.vars['--faceplate-times'], '16px')
       assert.equal(r.vars['--faceplate-cover-top'], undefined)
     }
@@ -168,8 +169,8 @@ test('Landscape keeps the previous two-column geometry with the safe presentatio
       const r = at(llama(), vp, 1, twoRail)
       assert.equal(r.path, 'landscape')
       assert.equal(r.coverWidth, previousCoverWidth(vp[0], vp[1], 1))
-      assert.deepEqual(r.classes, ['faceplate-type', 'faceplate-flat'])
-      assert.deepEqual(r.plates, { top: false, console: true, seek: false })
+      assert.deepEqual(r.classes, ['faceplate-type', twoRail ? 'faceplate-dual' : 'faceplate-flat'])
+      assert.deepEqual(r.plates, { top: false, console: true, seek: twoRail })
       assert.equal(r.vars['--faceplate-times'], '16px')
     }
   }
@@ -226,7 +227,7 @@ test('Faceplate stylesheet: geometry only behind the hook classes, and never on 
   const rules = [...block.matchAll(/([^{}]+)\{[^}]*\}/g)].map((m) => m[1].replace(/\/\*[\s\S]*?\*\//g, '').trim())
   for (const selector of rules) {
     for (const s of selector.split(',').map((x) => x.trim())) {
-      assert.match(s, /^(\.player-plate|\.faceplate-|#streamContainer\.fullscreen\.faceplate )/, s)
+      assert.match(s, /^(\.player-plate|\.faceplate-|#streamContainer\.fullscreen\.faceplate(-dual)? )/, s)
       // Controls, keys, the seek channel and its touch target are frozen
       assert.doesNotMatch(s, /playerControls|play-btn|player-key|utility|trackCursor|chrome-key|\.relative \.|rounded-full/, s)
     }
@@ -328,9 +329,98 @@ test('Console banks are vertically centered in their framed sections (transport 
   const flatPlate = player.match(/\.faceplate-flat \.player-plate-console \{([^}]*)\}/)[1]
   assert.doesNotMatch(flatPlate, /bottom/, 'flat console plate keeps the same bottom inset')
   const banks = Object.keys(rules).filter((s) => /#playerControls$|\.utility-row$/.test(s) && /faceplate/.test(s))
-  assert.deepEqual(banks.map((s) => s.slice(root.length + 1)).sort(), ['#streamContainer.fullscreen.faceplate #playerContent .utility-row', '#streamContainer.fullscreen.faceplate #playerControls', '#streamContainer.fullscreen.faceplate-flat #playerContent .utility-row'])
+  assert.deepEqual(banks.map((s) => s.slice(root.length + 1)).sort(), ['#streamContainer.fullscreen.faceplate #playerContent .utility-row', '#streamContainer.fullscreen.faceplate #playerControls', '#streamContainer.fullscreen.faceplate-dual #playerContent .utility-row', '#streamContainer.fullscreen.faceplate-flat #playerContent .utility-row'])
   // Legacy themes get none of it
   for (const id of LEGACY_THEMES) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {})
+})
+
+test('Chapter + book progress is one dual-track instrument: adjacent sections, one frame, an engraved seam, keys unmoved', async () => {
+  const P = presets.PRIMITIVES
+  const { FACEPLATE } = layout
+  const D = FACEPLATE.dual
+  const root = engine.themeSelector('llama')
+  const rules = presets.presentationRules([llama()])
+  const player = await read('../components/app/AudioPlayer.vue')
+  const px = (v) => parseFloat(v)
+  for (const vp of [
+    [412, 842],
+    [412, 734],
+    [412, 933],
+    [762, 986],
+    [915, 364]
+  ]) {
+    const r = at(llama(), vp, 1, true)
+    assert.ok(r.classes.includes('faceplate-dual'), String(vp))
+    // Directly stacked: the book section's bottom is the chapter section's top (no chassis between them)
+    assert.equal(px(r.vars['--faceplate-dual-book-bottom']), px(r.vars['--faceplate-dual-main-bottom']) + px(r.vars['--faceplate-dual-section']))
+    assert.equal(px(r.vars['--faceplate-dual-main-bottom']), D.console + D.seam + D.plate)
+    assert.equal(px(r.vars['--faceplate-console-top']), FACEPLATE.legacyDeck - D.console)
+    assert.equal(r.coverWidth, previousCoverWidth(vp[0], vp[1], 1), 'previous artwork geometry')
+  }
+  // One frame: the seek plate is extended over the book section (plate width above, below it), never a second plate
+  const plate = player.match(/\.faceplate-dual \.player-plate-seek \{([^}]*)\}/)[1]
+  assert.match(plate, new RegExp(`top: calc\\(-${D.plate}px - var\\(--faceplate-dual-section\\)\\);`))
+  assert.match(plate, new RegExp(`bottom: -${D.plate}px;`))
+  const template = player.slice(0, player.indexOf('</template>'))
+  assert.equal((template.match(/class="player-plate /g) || []).length, 3, 'no extra plate element')
+  // Both sections: same height, same 10px inset, same 6px rail, same 16px green condensed times on a tight line
+  assert.match(player, /#streamContainer\.fullscreen\.faceplate-dual #playerTrack \{[^}]*bottom: var\(--faceplate-dual-main-bottom\);\s*height: var\(--faceplate-dual-section\);/)
+  assert.match(player, /#streamContainer\.fullscreen\.faceplate-dual \.total-track \{\s*bottom: var\(--faceplate-dual-book-bottom\);\s*height: var\(--faceplate-dual-section\);/)
+  assert.match(player, /\.faceplate-dual #playerTrack > div\.flex,\s*\.faceplate-dual \.total-track > div\.flex \{\s*padding: 0 10px;/)
+  assert.match(player, /\.faceplate-dual \.total-track div\.relative \{\s*height: 6px;/)
+  assert.match(player, /class="h-1\.5 w-full bg-track\/50 relative rounded-full/, 'the chapter rail is 6px (h-1.5)')
+  assert.match(player, /\.faceplate-dual \.total-track p\.font-mono \{\s*font-size: var\(--faceplate-times\) !important;/)
+  // Each section holds its content at font scale 1.3: 16px times on line-height 1, 2px, the 6px rail
+  assert.ok(D.section >= FACEPLATE.flatTimes * 1.3 + 2 + 6, `section ${D.section}`)
+  // Keys do not move: the console plate's top edge centers the transport bank where it already sits (divider + 7.5px,
+  // the key envelope, 7.5px), and the utility bank is centered in its section as on the other plate paths
+  const divider = P.DECK.seam.base - P.DECK.seam.drop
+  const clear = P.DECK.seam.drop + (P.PRIMARY_KEY_BOX - P.DECK.transport.height) / 2
+  const envelope = P.PRIMARY_KEY_BOX + P.DECK.primaryLift - (P.PRIMARY_KEY_BOX - P.DECK.transport.height) / 2
+  assert.equal(D.console, divider + clear + envelope + clear)
+  assert.equal(rules[`${root} #streamContainer.fullscreen.faceplate-dual #playerControls`], undefined, 'transport untouched')
+  assert.deepEqual(rules[`${root} #streamContainer.fullscreen.faceplate-dual #playerContent .utility-row`], { ...P.FACEPLATE_UTILITY_BANK })
+  // The instrument's top clears the metadata readout's floors with the two rails (Phase 4E: 249px, short screens 247px,
+  // each with its 4px plate) by at least 6px
+  const top = D.console + D.seam + D.plate + 2 * D.section + D.plate
+  assert.ok(top + 6 <= 249 - 4 && top + 6 <= 247 - 4, `instrument top ${top}`)
+  // One recessed well with an engraved seam: the book section ends on the seam's dark line, the chapter section starts on
+  // its faint light line (ENGRAVED_SEPARATOR's colors); the inner corners are square, the outer ones the key radius
+  assert.deepEqual(rules[`${root} #streamContainer.faceplate-dual .total-track`], { ...P.DUAL_TRACK_UPPER })
+  assert.deepEqual(rules[`${root} #streamContainer.faceplate-dual #playerTrack`], { ...P.DUAL_TRACK_LOWER })
+  assert.ok(P.ENGRAVED_SEPARATOR.includes('rgb(var(--color-edge-dark))') && P.ENGRAVED_SEPARATOR.includes('rgb(var(--color-edge-light) / 0.12)'))
+  assert.match(P.DUAL_TRACK_UPPER['background-image'], /rgb\(var\(--color-edge-dark\)\) calc\(100% - 1px\)\)$/)
+  assert.match(P.DUAL_TRACK_LOWER['background-image'], /^linear-gradient\(180deg, rgb\(var\(--color-edge-light\) \/ 0\.12\) 0, /)
+  assert.equal(P.DUAL_TRACK_UPPER['border-bottom-left-radius'], P.RADIUS.none)
+  assert.equal(P.DUAL_TRACK_LOWER['border-top-right-radius'], P.RADIUS.none)
+  assert.deepEqual(rules[`${root} #streamContainer.faceplate-dual #playerContent`], { ...P.FACEPLATE_DECK })
+  // Legacy themes: none of it
+  for (const id of LEGACY_THEMES) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {})
+})
+
+test('Single-rail progress (book only, chapter only) stays on the B+ faceplate; only both rails make the dual instrument', async () => {
+  const source = await read('../components/app/AudioPlayer.vue')
+  const script = source
+    .match(/<script>([\s\S]*?)<\/script>/)[1]
+    .replace(/^import .*$/gm, '')
+    .replace('export default', 'globalThis.component =')
+  const sandbox = { coverPresentation: {}, playerLayout: layout, Capacitor: {}, AbsAudioPlayer: {}, Dialog: {}, getAverageColorFromCoverUrl: async () => null, WrappingMarquee: function () {}, jumpLabelMixin: {}, console }
+  vm.runInNewContext(script, sandbox)
+  const c = sandbox.component.computed
+  const ctx = { showFullscreen: true, windowWidth: 412, windowHeight: 842, playerSettings: {}, $store: { getters: { 'libraries/getBookCoverAspectRatio': 1 } } }
+  Object.defineProperty(ctx, '$theme', { get: () => ({ theme: llama() }) })
+  for (const name of ['presentationTheme', 'bookCoverAspectRatio', 'fullscreenLayout']) Object.defineProperty(ctx, name, { get: () => c[name].call(ctx) })
+  for (const [chapter, total, path, dual] of [
+    [false, true, 'faceplate', false], // book only (the default)
+    [true, false, 'faceplate', false], // chapter only
+    [true, true, 'compat', true] // chapter + book
+  ]) {
+    ctx.playerSettings = { useChapterTrack: chapter, useTotalTrack: total }
+    assert.equal(ctx.fullscreenLayout.path, path, `${chapter}/${total}`)
+    assert.equal([...ctx.fullscreenLayout.classes].includes('faceplate-dual'), dual)
+  }
+  // The second rail's own condition in the template is unchanged
+  assert.match(source, /<div v-if="playerSettings\.useChapterTrack && playerSettings\.useTotalTrack && showFullscreen" class="absolute total-track w-full z-30 px-6">/)
 })
 
 test('Recipe paint for the faceplate: LLAMA only, paint only, bay widths from the layout tiers', () => {

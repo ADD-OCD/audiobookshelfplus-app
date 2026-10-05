@@ -259,7 +259,7 @@ test('shared equipment primitives exist as fixed, frozen, paint-only recipe valu
   assert.ok(Object.isFrozen(P))
   for (const name of ['RADIUS', 'ELEVATION', 'RAISED_BEVEL', 'PRESSED_BEVEL', 'RECESSED_WELL', 'STEEL_SHEEN', 'PRIMARY_KEY', 'PRIMARY_KEY_PRESSED', 'CHASSIS_SHEEN', 'ARTWORK_FRAME', 'ENGRAVED_SEPARATOR', 'ENGRAVED_SEPARATOR_TOP', 'RECESSED_FACE', 'KEY_CAP', 'KEY_CAP_PRESSED', 'SELECTED_KEY']) assert.ok(P[name], name)
   // Radius scale: squared frames, squared keys/wells/panels (Phase 4H squared the last round control, Play/Pause)
-  assert.deepEqual({ ...P.RADIUS }, { frame: '2px', key: '4px' })
+  assert.deepEqual({ ...P.RADIUS }, { frame: '2px', key: '4px', none: '0px' })
   assert.ok(Object.isFrozen(P.RADIUS) && Object.isFrozen(P.ELEVATION))
   // Three elevation levels, increasing blur, each a plain black drop shadow
   assert.deepEqual(Object.keys(P.ELEVATION), ['raised', 'panel', 'overlay'])
@@ -307,7 +307,13 @@ test('existing rules reuse the primitives (radius scale, elevation levels, press
   assert.deepEqual(rules[`${root} .btn:not(:disabled):active`], { ...P.KEY_CAP_PRESSED })
   assert.deepEqual(rules[`${root} .icon-btn.border:not(:disabled):active`], { ...P.KEY_CAP_PRESSED })
   // No radius in the recipe falls outside the scale
-  for (const [selector, declarations] of Object.entries(rules)) if (declarations['border-radius']) assert.ok(Object.values(P.RADIUS).includes(declarations['border-radius']), selector)
+  for (const [selector, declarations] of Object.entries(rules)) {
+    for (const [property, value] of Object.entries(declarations)) if (/^border(-(top|bottom)-(left|right))?-radius$/.test(property)) assert.ok(Object.values(P.RADIUS).includes(value), `${selector}: ${property}`)
+  }
+  // The square corner is only for the dual-track display's inner corners
+  for (const [selector, declarations] of Object.entries(rules)) {
+    for (const [property, value] of Object.entries(declarations)) if (/radius$/.test(property) && value === P.RADIUS.none) assert.match(selector, /faceplate-dual/, `${selector}: ${property}`)
+  }
 })
 
 test('artwork frame targets artwork via the card-artwork hook, never a whole list row', async () => {
@@ -1119,7 +1125,8 @@ const READOUT_LAYOUT_PROPERTIES = {
   // Phase 6B: the faceplate console banks, each exactly its framed section with its row centered (tests/player-layout)
   '#streamContainer.fullscreen.faceplate #playerControls': ['height', 'padding-top', 'padding-bottom', 'display', 'flex-direction'],
   '#streamContainer.fullscreen.faceplate #playerContent .utility-row': ['bottom', 'height', 'display', 'flex-direction'],
-  '#streamContainer.fullscreen.faceplate-flat #playerContent .utility-row': ['bottom', 'height', 'display', 'flex-direction']
+  '#streamContainer.fullscreen.faceplate-flat #playerContent .utility-row': ['bottom', 'height', 'display', 'flex-direction'],
+  '#streamContainer.fullscreen.faceplate-dual #playerContent .utility-row': ['bottom', 'height', 'display', 'flex-direction']
 }
 
 test('Phase 4E readout is a recessed well in a bezel plate: frozen, paint-only, from the shared primitives', () => {
