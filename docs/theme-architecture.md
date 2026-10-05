@@ -756,6 +756,40 @@ LLAMA only, collapsed player only. The mini-player takes the accepted B+ full pl
 
 Dark, Black and Light get no rules; their mini-player and full player are unchanged. `tests/theme-llama.test.mjs` (Phase 7B tests) pins the rules to the frozen primitives and the collapsed player, the line-box arithmetic, the paint-only strip and mount, the template hook, the 120px geometry anchors, the absence of any Candidate C element, and the LLAMA-only compiled CSS.
 
+## LLAMA browsing chrome (Phase 8B)
+
+LLAMA only. Home, Library and navigation are the content environment around the frozen equipment (the Phase 6B full player and the Phase 7B mini-player). They take the players' language in restrained form and stay content-first: artwork dominates, and only real controls become keys. This is Candidate B of the Phase 8A runtime audit, implemented as audited. Paint and type only: every box keeps its geometry, and no behavior changes.
+
+**What changes** (recipe rules in `theme/presets.js`):
+
+- **Navigation strip** (`#bookshelf-navbar`, `BROWSE_NAV_CHASSIS`): the content chassis (base surface, chassis sheen, faint lit top lip, dark seam below) instead of the brighter steel strip. The app bar, navigation and content now read as one chassis. Unselected icons rise from 5.0:1 to 7.2:1.
+- **Selected tab** (`BROWSE_NAV_SELECTED`): a recessed dark key pressed into the strip, the players' key language. It keeps the accent underline and its text label (unselected tabs show an icon), so the state never reads by color alone.
+- **Shelf headings** (`shelf-heading` hook, `SECTION_LABEL_TYPE`): the system `sans-serif-condensed` face, neutral, same size and weight, 0.03em spacing.
+- **Shelf heading rule** (`shelf-heading-band` hook, `SHELF_HEADING_RULE`): the heading band paints an engraved line (a dark seam over a faint lit return) 6px above its bottom edge, so 6px above the artwork, inset 20px. It uses background layers only, with no element and no box. A rule on the band's edge would sit directly on the artwork.
+- **Toolbar count** (`toolbar-count` hook, `COUNT_TYPE`): condensed with tabular figures, neutral (a count is not a live readout). Only its text box narrows (about 4px, about 6px at font scale 1.3) and the flex spacer absorbs it; no control moves. The series-name line keeps its face.
+- **Search section labels** (`search-section-label` hook): the same condensed neutral label type.
+- **List-row play button** (`list-play-key` hook, `LIST_PLAY_KEY`): the mini-player's key face (`TRANSPORT_KEY_MINI`, squared on `RADIUS.key`) with the playback amber legend, on the button's unchanged box. The legend measures 10.9:1, against 5.3:1 for the previous white-on-grey.
+
+**Deliberately unchanged.**
+
+- Navigation labels and the library-selector label. Both are sized by their content, so a narrower face would move the tabs (about 2px) and shrink the selector (about 5.7px), changing hit areas.
+- Cards: artwork frame and shadow, amber progress, success when finished, neutral title and author (titles, authors and long metadata are never condensed).
+- The app bar, its library-selector key, and the bare search, menu and Back glyphs.
+
+**Rejected (Candidate C and variants).** Raised heading strips, green or amber headings, green counts, a green selected-tab label or accent ring, a recessed green library-selector name, and any card chassis. In the audit these read as decoration rather than meaning, and the app became noisy.
+
+**Retained (not changed).** At font scale 1.3 the library selector already truncates its name, and alternative-view card titles sit tight against the artwork. See `docs/future-work.md`.
+
+Dark, Black and Light get no rules. The players carry none of the hooks, and none of these rules reaches them. `tests/theme-llama.test.mjs` (Phase 8B tests) pins:
+
+- the hooks;
+- the frozen primitives;
+- the selected tab's non-color cues;
+- the typography freeze on the navigation, the library selector and the cards;
+- the paint-only heading rule and play key;
+- the absence of Candidate C;
+- LLAMA-only compiled CSS.
+
 ## Content-derived color (intentionally not tokens)
 
 - **Player and mini-player background:** the average color of the cover art (`utils/coverAverageColor.js`), with `coverBgIsLight` choosing dark or light icon colors. The theme overlays (`overlay.player`, `overlay.mini-player`) sit on top of it.

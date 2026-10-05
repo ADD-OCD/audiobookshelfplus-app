@@ -179,6 +179,10 @@ On a wide portrait screen (about 762×986) at font scale 1.3 with Chapter Track 
 
 Measured during the LLAMA mini-player work (Phases 7A/7B) and left unchanged; the panel is fixed at 120px. At font scale 1.3 only about 2px separate the mini artwork from the seek row, and the title/author block extends about 1.2px above the panel. The default "Book | Chapter" title already scrolls at 412px. This rules out any inset well or bezel around the mini readout or artwork without a geometry change; a fix belongs to the shared collapsed-player geometry (all themes).
 
+## Browsing chrome at font scale 1.3
+
+Found during the LLAMA browsing work (Phases 8A/8B) and left unchanged, in every theme. At font scale 1.3 the app bar's library selector truncates the library name ("Restore T…" at 412px). In the alternative bookshelf view, card titles sit tight against the bottom of the artwork. Both come from the shared layout (a content-sized selector, fixed title offsets), not from presentation.
+
 ## Widget ANR on display-size changes
 
 Changing the display size (`adb shell wm size`) sends `APPWIDGET_UPDATE_OPTIONS` to the home-screen widget provider, and its handling has produced an "isn't responding" dialog on the emulator. Needs a separate reliability investigation of the widget's options update path.
