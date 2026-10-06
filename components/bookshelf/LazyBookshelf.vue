@@ -17,6 +17,7 @@
 
 <script>
 import bookshelfCardsHelpers from '@/mixins/bookshelfCardsHelpers'
+import { createPageRetry } from '@/utils/pageRetry'
 
 export default {
   props: {
@@ -45,7 +46,8 @@ export default {
       pagesLoaded: {},
       isFirstInit: false,
       pendingReset: false,
-      localLibraryItems: []
+      localLibraryItems: [],
+      pageRetry: createPageRetry()
     }
   },
   watch: {
@@ -191,6 +193,13 @@ export default {
         this.resetEntities()
         return
       }
+      if (!payload || !payload.results) {
+        // Leave the page unloaded and fetch it again; otherwise its rows stay empty placeholders for good
+        delete this.pagesLoaded[page]
+        if (this.pageRetry.failed(page, this.retryPage)) console.warn('[LazyBookshelf] page', page, 'failed to load, retrying')
+        return
+      }
+      this.pageRetry.succeeded(page)
       if (payload && payload.results) {
         console.log('Received payload', payload)
         if (!this.initialized) {
@@ -225,6 +234,14 @@ export default {
       }
       this.pagesLoaded[page] = true
       await this.fetchEntities(page)
+    },
+    async retryPage(page) {
+      if (this.pagesLoaded[page] || !this.user) return
+      await this.loadPage(page)
+      // Mount the rows now in view: a first page that failed left nothing mounted, and no scroll may come
+      await this.$nextTick()
+      const wrapper = document.getElementById('bookshelf-wrapper')
+      if (this.initialized && wrapper) this.handleScroll(wrapper.scrollTop)
     },
     mountEntites(fromIndex, toIndex) {
       for (let i = fromIndex; i < toIndex; i++) {
@@ -292,6 +309,7 @@ export default {
         return
       }
       this.destroyEntityComponents()
+      this.pageRetry.reset()
       this.entityIndexesMounted = []
       this.entityComponentRefs = {}
       this.pagesLoaded = {}
@@ -552,6 +570,7 @@ export default {
     this.initListeners()
   },
   beforeDestroy() {
+    this.pageRetry.reset()
     this.removeListeners()
 
     // Set bookshelf scroll position for specific bookshelf page and query
