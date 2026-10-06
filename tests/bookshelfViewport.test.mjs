@@ -334,7 +334,7 @@ test('a bookshelf left while its first page is still loading mounts nothing afte
       h.errors.filter((e) => e.includes('invalid shelf')),
       []
     )
-    assert.deepEqual(vm.entityIndexesMounted, [])
+    assert.equal(vm.entityIndexesMounted.length, 0)
   } finally {
     h.restore()
   }
