@@ -1,5 +1,5 @@
-name: 🚀 App Feature Request
-description: Request a feature/enhancement
+name: 🚀 Audiobookshelf+ Feature Request
+description: Request a feature/enhancement for the Audiobookshelf+ Android app
 title: '[Enhancement]: '
 labels: ['enhancement']
 body:
@@ -39,14 +39,12 @@ body:
   - type: dropdown
     id: version
     attributes:
-      label: Audiobookshelf App Version
-      description: Please ensure your app is up to date. *If you are using a 3rd-party app, please reach out to them directly.*
-      multiple: true
+      label: Audiobookshelf+ Version
+      description: Shown at the bottom of the side drawer. Please make sure you are on the latest release.
+      multiple: false
       options:
-        - 'Android App - 0.14.1'
-        - 'iOS App - 0.14.1'
-        - 'Android App - 0.14.0'
-        - 'iOS App - 0.14.0'
+        - '0.14.2-beta (129)'
+        - 'Other (list in "Additional Notes")'
     validations:
       required: true
   - type: textarea

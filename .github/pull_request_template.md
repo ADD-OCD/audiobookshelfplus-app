@@ -19,8 +19,8 @@ If you are a new contributor, the workflows will need to be manually approved be
 ## Pull Request Type
 
 <!--
-Does this affect only Android, only iOS, or both?
-Does this change the frontend or the backend of the apps?
+Audiobookshelf+ is Android-only (the inherited iOS project is not maintained here).
+Does this change the web (Nuxt/Vue) layer, the Android native layer, or both?
 -->
 
 ## In-depth Description
