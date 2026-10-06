@@ -163,7 +163,11 @@ Matching (after the S26 Dungeon Crawler Carl report, where books exist in severa
 
 ## Downloads follow-ups
 
-See `docs/downloads.md`. Retained: a user Retry and an app restart start unfinished files again from byte 0 (byte-range continuation only happens for the automatic retries inside one service session); keeping staging files across sessions would make Retry a true Resume. `AbsFileSystem.checkFolderPermissions` (used when a folder is added in Local Folders) still passes the folder's content URL to SimpleStorage, the same mistake the downloader had, so it can report "Folder permissions failed" for a folder that works; it only affects that toast.
+See `docs/downloads.md`. Retained: a user Retry and an app restart start unfinished files again from byte 0 (byte-range continuation only happens for the automatic retries inside one service session); keeping staging files across sessions would make Retry a true Resume.
+
+## Library list page loading
+
+`LazyBookshelf` now retries a failed page (`utils/pageRetry.js`, up to 3 times, then on the next scroll) instead of leaving its rows as empty placeholders. Still upstream-shaped and left as is: concurrent page fetches after a reset can write a stale response into the new list (a library or filter change while a page is in flight), and `nativeHttp` refreshes an expired token separately for each request that got a 401, so several at once can race on a rotating refresh token.
 
 ## Store-listing branding
 

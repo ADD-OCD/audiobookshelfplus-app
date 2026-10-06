@@ -37,7 +37,7 @@ The download notification's Cancel cancels every download that can be removed, w
 
 ## Folder access
 
-Before a file is started and before it is saved to a device folder, the downloader checks that it can still write there: SimpleStorage access for the folder's file path (or the persisted tree grant), and that the folder exists and is writable. Without it the files fail at once as "Folder access lost" (no retry loop), and Retry is refused until access is back. **Choose folder** opens the folder picker; picking the same folder restores the grant (the same folder keeps its id) and retries the download. Picking a different folder doesn't move the download; the user is told to choose the original folder, or can Clear and download again.
+Before a file is started and before it is saved to a device folder, the downloader checks that it can still write there (`FolderAccess`, the same rule as the Local Folders permission check): SimpleStorage access for the folder's file path (or the persisted tree grant), and that the folder exists and is writable. Without it the files fail at once as "Folder access lost" (no retry loop), and Retry is refused until access is back. **Choose folder** opens the folder picker; picking the same folder restores the grant (the same folder keeps its id) and retries the download. Picking a different folder doesn't move the download; the user is told to choose the original folder, or can Clear and download again.
 
 Before this was fixed, the access check was given the folder's `content://` URL, which SimpleStorage reads as a path, so it always answered "no access": every download into a device folder failed at once as "Lost access" (introduced in `ba008570`).
 
