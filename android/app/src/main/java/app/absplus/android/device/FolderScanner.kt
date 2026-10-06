@@ -115,6 +115,7 @@ class FolderScanner(private val ctx: Context) {
           item: DownloadItem,
           localItem: LocalLibraryItem,
           externalFolder: DocumentFile? = null,
+          keepLocalProgress: Boolean = false,
           callback: (DownloadItemScanResult?) -> Unit
   ) {
     val tracks = mutableListOf<AudioTrack>()
@@ -204,7 +205,14 @@ class FolderScanner(private val ctx: Context) {
     }
 
     val result = DownloadItemScanResult(localItem, null)
-    item.userMediaProgress?.let { progress ->
+    // A relinked item keeps its own local progress, re-pointed to the corrected server item, instead of
+    // being overwritten by that item's server progress (it may hold listening not yet synced anywhere)
+    val savedProgress = if (keepLocalProgress) DeviceManager.dbManager.getLocalMediaProgress(localItem.id) else null
+    if (savedProgress != null) {
+      result.localMediaProgress =
+              repointLocalProgress(savedProgress, item.libraryItemId, item.serverConnectionConfigId, item.serverAddress, item.serverUserId)
+      DeviceManager.dbManager.saveLocalMediaProgress(savedProgress)
+    } else item.userMediaProgress?.let { progress ->
       val progressId =
               if (item.episodeId.isNullOrEmpty()) localItem.id
               else "${localItem.id}-$localEpisodeId"
@@ -331,6 +339,7 @@ class FolderScanner(private val ctx: Context) {
           itemFolder: DocumentFile,
           libraryItem: LibraryItem,
           localFolder: LocalFolder,
+          relink: Boolean,
           callback: (DownloadItemScanResult?) -> Unit
   ) {
     val bookTitle = cleanStringForFileSystem(libraryItem.media.metadata.title)
@@ -400,8 +409,9 @@ class FolderScanner(private val ctx: Context) {
     }
 
     val id = localLibraryItemId(itemFolder.id)
+    val savedItem = DeviceManager.dbManager.getLocalLibraryItem(id)
     val localItem =
-            DeviceManager.dbManager.getLocalLibraryItem(id)
+            savedItem
                     ?: newLocalLibraryItem(
                             id,
                             downloadItem,
@@ -409,13 +419,27 @@ class FolderScanner(private val ctx: Context) {
                             itemFolder.getAbsolutePath(ctx),
                             itemFolder.uri.toString()
                     )
-    scanParts(downloadItem, localItem, itemFolder, callback)
+    if (savedItem != null && relink) {
+      // Same local item (its id, folder and files are unchanged); only the server link and the media
+      // copy are replaced with those of the item the folder's cover file names
+      Log.i(tag, "rescanFolder: relinking ${savedItem.id} from ${savedItem.libraryItemId} to ${libraryItem.id}")
+      savedItem.libraryItemId = libraryItem.id
+      savedItem.ino = libraryItem.ino
+      savedItem.serverConnectionConfigId = downloadItem.serverConnectionConfigId
+      savedItem.serverAddress = downloadItem.serverAddress
+      savedItem.serverUserId = downloadItem.serverUserId
+      savedItem.media = downloadItem.media.getLocalCopy()
+    }
+    scanParts(downloadItem, localItem, itemFolder, keepLocalProgress = relink, callback = callback)
   }
 
   /**
-   * Walks [localFolder] two levels deep (author/title, the same layout used for downloads)
-   * looking for book folders not yet backed by a LocalLibraryItem, matches each against
-   * [itemsByLibrary] by sanitized author/title, and builds a LocalLibraryItem for every match.
+   * Walks [localFolder] two levels deep (author/title, the same layout used for downloads) and
+   * matches each book folder to a server item in [itemsByLibrary] by the Rescan Folder policy
+   * ([resolveRescanMatch]): a `cover-<server item id>.jpg` in the folder names the exact copy it
+   * was downloaded from (and relinks a saved item linked to another copy); otherwise author/title
+   * must match a single book in [currentLibraryId]. Builds or updates a LocalLibraryItem for every
+   * match; folders already linked without such proof are left as they are.
    * Podcasts are not supported by rescan (out of scope -- per-episode local items in a shared
    * folder are a materially different matching problem).
    *
@@ -427,12 +451,17 @@ class FolderScanner(private val ctx: Context) {
   fun rescanFolder(
           localFolder: LocalFolder,
           itemsByLibrary: Map<String, List<LibraryItem>>,
+          currentLibraryId: String?,
           fetchFullItem: (libraryItemId: String, cb: (LibraryItem?) -> Unit) -> Unit,
           onProgress: (RescanProgress, LocalLibraryItem?) -> Unit,
           callback: (RescanOutcome<LocalLibraryItem>) -> Unit
   ) {
-    val pending: List<Pair<DocumentFile, String>>
-    val byAuthorTitlePath: Map<String, LibraryItem>
+    val folders: List<Pair<DocumentFile, String>>
+    val savedByPath: Map<String, LocalLibraryItem>
+    // Every book with the library it was loaded from (the catalog key), by id and by author/title
+    val books = itemsByLibrary.flatMap { (libraryId, items) -> items.filter { it.mediaType == "book" }.map { libraryId to it } }
+    val byId = books.associateBy { it.second.id }
+    val byAuthorTitle = books.groupBy { authorTitleKey(it.second) }
     try {
       val root = DocumentFileCompat.fromUri(ctx, Uri.parse(localFolder.contentUrl))
       if (root == null || !root.canRead()) {
@@ -440,24 +469,37 @@ class FolderScanner(private val ctx: Context) {
         callback(RescanOutcome(emptyList(), emptyList(), RescanError.FOLDER))
         return
       }
-      byAuthorTitlePath = matchIndex(itemsByLibrary)
-      pending = pendingFolders(root, localFolder)
+      folders = authorTitleFolders(root)
+      savedByPath = DeviceManager.dbManager.getLocalLibraryItemsInFolder(localFolder.id).associateBy { it.absolutePath }
     } catch (e: Exception) {
       Log.e(tag, "rescanFolder: Failed to read ${localFolder.contentUrl}", e)
       callback(RescanOutcome(emptyList(), emptyList(), RescanError.FOLDER))
       return
     }
 
-    val total = pending.size
+    val total = folders.size
     onProgress(RescanProgress(localFolder.id, RescanPhase.CHECKING, total = total), null)
     runRescan(
-            pending,
-            match = { relPath -> byAuthorTitlePath[relPath] },
-            fetchFull = { item, cb -> fetchFullItem(item.id, cb) },
-            scan = { folder, fullItem, cb ->
-              scanExistingFolder(folder, fullItem, localFolder) { cb(it?.localLibraryItem) }
+            folders,
+            match = { folder, relPath ->
+              val saved = savedByPath[folder.getAbsolutePath(ctx)]
+              resolveRescanMatch(
+                      coverItemIds(folder.listFiles().filter { it.isFile }.mapNotNull { it.name }),
+                      saved != null,
+                      saved?.libraryItemId,
+                      relPath,
+                      currentLibraryId,
+                      byId = { id -> byId[id] },
+                      matchesByAuthorTitle = { key -> byAuthorTitle[key] ?: emptyList() },
+                      idOf = { it.second.id },
+                      libraryOf = { it.first }
+              )
             },
-            onChecked = { checked, matched, unmatched, latest ->
+            fetchFull = { (libraryId, item), cb -> fetchFullItem(item.id) { full -> cb(full?.let { libraryId to it }) } },
+            scan = { folder, (_, fullItem), relink, cb ->
+              scanExistingFolder(folder, fullItem, localFolder, relink) { cb(it?.localLibraryItem) }
+            },
+            onChecked = { checked, matched, notMatched, latest ->
               onProgress(
                       RescanProgress(
                               localFolder.id,
@@ -465,7 +507,7 @@ class FolderScanner(private val ctx: Context) {
                               checked,
                               total,
                               matched.size,
-                              unmatched.size,
+                              notMatched,
                               latest?.media?.metadata?.title
                       ),
                       latest
@@ -475,27 +517,21 @@ class FolderScanner(private val ctx: Context) {
     )
   }
 
-  private fun matchIndex(itemsByLibrary: Map<String, List<LibraryItem>>): Map<String, LibraryItem> =
-          itemsByLibrary.values.flatten().filter { it.mediaType == "book" }.associateBy { item ->
-            val author = cleanStringForFileSystem(item.media.metadata.getAuthorDisplayName())
-            val title = cleanStringForFileSystem(item.media.metadata.title)
-            "$author/$title"
-          }
+  private fun authorTitleKey(item: LibraryItem): String {
+    val author = cleanStringForFileSystem(item.media.metadata.getAuthorDisplayName())
+    val title = cleanStringForFileSystem(item.media.metadata.title)
+    return "$author/$title"
+  }
 
-  /** Author/title subfolders of [root] not yet backed by a LocalLibraryItem. */
-  private fun pendingFolders(root: DocumentFile, localFolder: LocalFolder): List<Pair<DocumentFile, String>> {
-    val existingPaths =
-            DeviceManager.dbManager.getLocalLibraryItemsInFolder(localFolder.id)
-                    .map { it.absolutePath }
-                    .toSet()
-
+  /** The author/title subfolders of [root] (the layout downloads use), with their relative paths. */
+  private fun authorTitleFolders(root: DocumentFile): List<Pair<DocumentFile, String>> {
     val candidates = mutableListOf<Pair<DocumentFile, String>>()
     root.listFiles().filter { it.isDirectory }.forEach { authorFolder ->
       authorFolder.listFiles().filter { it.isDirectory }.forEach { titleFolder ->
         candidates.add(titleFolder to "${authorFolder.name}/${titleFolder.name}")
       }
     }
-    return candidates.filter { (folder, _) -> folder.getAbsolutePath(ctx) !in existingPaths }
+    return candidates
   }
 
   fun scanDownloadItem(item: DownloadItem, callback: (DownloadItemScanResult?) -> Unit) {
@@ -530,6 +566,6 @@ class FolderScanner(private val ctx: Context) {
                             itemFolder.getAbsolutePath(ctx),
                             itemFolder.uri.toString()
                     )
-    scanParts(item, localItem, itemFolder, callback)
+    scanParts(item, localItem, itemFolder, callback = callback)
   }
 }

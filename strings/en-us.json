@@ -394,6 +394,8 @@
   "MessageRescanErrorRunning": "This folder is already being scanned.",
   "MessageRescanErrorServer": "Could not load an item from the server. Check your connection and try again.",
   "MessageRescanErrorUnexpected": "Something went wrong while scanning this folder.",
+  "MessageRescanFolderAmbiguous": "{0} folder(s) match a book in more than one library, or only in another library, and were not linked. Select the library the books came from and rescan.",
+  "MessageRescanFolderRelinked": "{0} item(s) were relinked to the library copy they were downloaded from.",
   "MessageRescanFolderResult": "Matched {0} item(s). {1} folder(s) could not be matched.",
   "MessageSeriesAlreadyDownloaded": "You have already downloaded all books in this series.",
   "MessageSeriesDownloadConfirm": "Download missing {0} book(s) with {1} file(s), totaling {2} to folder {3}?",

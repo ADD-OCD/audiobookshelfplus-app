@@ -220,6 +220,8 @@ class AbsFileSystem : Plugin() {
   @PluginMethod
   fun rescanFolder(call: PluginCall) {
     val folderId = call.data.getString("folderId", "").toString()
+    // The library selected in the app: the scope for author/title matches without a cover-file id
+    val currentLibraryId = call.data.getString("libraryId")?.takeIf { it.isNotEmpty() }
     val localFolder = DeviceManager.dbManager.getLocalFolder(folderId)
     if (localFolder == null) {
       call.resolve(JSObject("{\"error\":\"Folder not found\"}"))
@@ -256,6 +258,8 @@ class AbsFileSystem : Plugin() {
       val jsobj = JSObject()
       jsobj.put("matched", outcome.matched.size)
       jsobj.put("unmatched", JSONArray(outcome.unmatched))
+      jsobj.put("ambiguous", JSONArray(outcome.ambiguous))
+      jsobj.put("relinked", outcome.relinked.size)
       outcome.error?.let { jsobj.put("error", it) }
       call.resolve(jsobj)
     }
@@ -272,6 +276,7 @@ class AbsFileSystem : Plugin() {
           folderScanner.rescanFolder(
                   localFolder,
                   catalog,
+                  currentLibraryId,
                   { libraryItemId, cb -> apiHandler.getLibraryItem(libraryItemId, cb) },
                   { progress, item ->
                     checked = progress.checked

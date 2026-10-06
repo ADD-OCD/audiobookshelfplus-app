@@ -140,7 +140,8 @@ export default {
       this.rescanCallPending = true
       let result
       try {
-        result = await AbsFileSystem.rescanFolder({ folderId: this.folderId })
+        // The selected library scopes author/title matches for folders without a cover-file id
+        result = await AbsFileSystem.rescanFolder({ folderId: this.folderId, libraryId: this.$store.state.libraries.currentLibraryId })
       } catch (error) {
         console.error('Rescan failed', error)
         result = { error: 'unexpected' }
@@ -151,6 +152,8 @@ export default {
         this.$toast.info(this.$strings.MessageRescanErrorRunning)
         return
       }
+      // Relinked items keep their local progress under a corrected server link: refresh the cached copy
+      await this.$store.dispatch('globals/loadLocalMediaProgress')
       if (result?.error) {
         this.scan = { ...this.scan, phase: 'failed', error: result.error, found: result.matched || 0 }
         await this.init()
@@ -159,7 +162,11 @@ export default {
       }
       this.scan = { ...this.scan, phase: 'complete', found: result?.matched || 0 }
       await this.init()
-      this.$toast.success(this.$getString('MessageRescanFolderResult', [result?.matched || 0, result?.unmatched?.length || 0]))
+      const ambiguous = result?.ambiguous?.length || 0
+      const messages = [this.$getString('MessageRescanFolderResult', [result?.matched || 0, (result?.unmatched?.length || 0) + ambiguous])]
+      if (result?.relinked) messages.push(this.$getString('MessageRescanFolderRelinked', [result.relinked]))
+      if (ambiguous) messages.push(this.$getString('MessageRescanFolderAmbiguous', [ambiguous]))
+      this.$toast.success(messages.join(' '))
     },
     rescanErrorMessage(error) {
       const messages = {
