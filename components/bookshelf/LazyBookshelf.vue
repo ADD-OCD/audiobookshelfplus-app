@@ -244,6 +244,8 @@ export default {
       if (this.initialized && wrapper) this.handleScroll(wrapper.scrollTop)
     },
     mountEntites(fromIndex, toIndex) {
+      // A page load can finish after the bookshelf was left; its shelf ids may now belong to the next bookshelf
+      if (this.isDestroyed) return
       for (let i = fromIndex; i < toIndex; i++) {
         if (!this.entityIndexesMounted.includes(i)) {
           this.cardsHelpers.mountEntityCard(i)
@@ -349,7 +351,11 @@ export default {
       var entitiesPerShelfBefore = this.entitiesPerShelf
 
       var { clientHeight, clientWidth } = bookshelf
-      this.bookshelfHeight = clientHeight
+      // The rows scroll inside #bookshelf-wrapper, so its height is the viewport. #bookshelf itself is only as
+      // tall as its rows when a page wraps it (the series page): 0 before the first page, which left all but
+      // the top one or two rows without cards
+      const wrapper = document.getElementById('bookshelf-wrapper')
+      this.bookshelfHeight = wrapper ? wrapper.clientHeight : clientHeight
       this.bookshelfWidth = clientWidth
       this.entitiesPerShelf = Math.max(1, this.showBookshelfListView ? 1 : Math.floor((this.bookshelfWidth - 16) / this.totalEntityCardWidth))
       this.shelvesPerPage = Math.ceil(this.bookshelfHeight / this.shelfHeight) + 2
@@ -571,6 +577,7 @@ export default {
   },
   beforeDestroy() {
     this.pageRetry.reset()
+    this.isDestroyed = true
     this.removeListeners()
 
     // Set bookshelf scroll position for specific bookshelf page and query
