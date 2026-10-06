@@ -161,6 +161,10 @@ Rescan Folder (`pages/localMedia/folders/_id.vue`, `AbsFileSystem.rescanFolder`,
 
 Matching (after the S26 Dungeon Crawler Carl report, where books exist in several libraries): a `cover-<server item id>.jpg` in a folder names the exact copy it was downloaded from and wins, whatever its library, and it relinks a saved item linked to another copy (same local item, files untouched, local progress kept and re-pointed). Without it, author/title links only a single match in the library selected in the app; anything else is reported as ambiguous and left unlinked (no picker). Left for later: a relinked item keeps the old copy's now-unused local-file record, and local playback sessions not yet synced when a relink happens still name the old copy.
 
+## Downloads follow-ups
+
+See `docs/downloads.md`. Retained: a user Retry and an app restart start unfinished files again from byte 0 (byte-range continuation only happens for the automatic retries inside one service session); keeping staging files across sessions would make Retry a true Resume. `AbsFileSystem.checkFolderPermissions` (used when a folder is added in Local Folders) still passes the folder's content URL to SimpleStorage, the same mistake the downloader had, so it can report "Folder permissions failed" for a folder that works; it only affects that toast.
+
 ## Store-listing branding
 
 A separate release-asset task, not part of code phases. Inherited Audiobookshelf+ identity debt (not Audible-related). Phase 5 rewrote the fastlane listing text (`fastlane/metadata/android/{en-US,de}/`) for Audiobookshelf+, but the imagery (`fastlane/metadata/android/en-US/images/`: the feature graphic, the icon and eight phone screenshots, several in iPhone frames) is still upstream's "audiobookshelf" material with upstream demo content. Replace it with Audiobookshelf+ graphics and current Android screenshots before any public store or release material is prepared. It must also follow the no-Audible rule in `docs/app-identity.md`.
