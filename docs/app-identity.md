@@ -89,4 +89,8 @@ An external Audible screenshot may be kept only as a deliberately retained refer
 
 **User content is not app branding.** Cover art from a user's own library may legitimately contain Audible logos or branding. That is user content, not Audiobookshelf+ branding, and the app does not censor or alter it; it is not a rendering defect. But public Audiobookshelf+ screenshots, mockups, documentation imagery, store graphics and promotional composites must avoid showing library items whose cover art visibly carries Audible branding.
 
-Other inherited identity debt (not Audible-related): the server-connect screen still shows the upstream logo (its title reads Audiobookshelf+ since Phase 5), and the fastlane store-listing imagery carries upstream branding (its text describes Audiobookshelf+ since Phase 5). Both are tracked in `docs/future-work.md`.
+In-app logo: the app bar and the server-connect screen show `static/Logo.png`, which is the Audiobookshelf+ icon with the bronze plus badge (the same artwork as `android/app/src/main/res/drawable/icon.png`, from the launcher-icon rebrand). The playback notification channel is named "Audiobookshelf+ Playback"; its id (`audiobookshelf_channel`) is unchanged so Android renames the existing channel and keeps the user's settings for it.
+
+Audiobookshelf vs Audiobookshelf+: Audiobookshelf+ names this Android client. Audiobookshelf names the server, the upstream project and its ecosystem, and stays in server wording ("Audiobookshelf server"), upstream links and attribution. Technical identifiers (the `audiobookshelf://oauth` redirect, the OIDC client id, the notification channel id, package names in upstream code) are not renamed.
+
+Other inherited identity debt (not Audible-related): the fastlane store-listing imagery carries upstream branding (its text describes Audiobookshelf+ since Phase 5). It is tracked in `docs/future-work.md`.
