@@ -79,7 +79,12 @@
         </div>
 
         <div v-if="downloadItem" class="py-3">
-          <p v-if="downloadItem.itemProgress == 1" class="text-center text-lg">{{ $strings.MessageDownloadCompleteProcessing }}</p>
+          <!-- A stopped download says so and leads to its controls (Retry, Choose folder, Clear) -->
+          <div v-if="downloadStopped" class="text-center">
+            <p class="text-lg">{{ downloadItemState === 'folderAccess' ? $strings.LabelDownloadFolderAccessLost : $strings.LabelDownloadFailed }}</p>
+            <nuxt-link to="/downloading" class="underline text-sm">{{ $strings.ButtonOpenDownloads }}</nuxt-link>
+          </div>
+          <p v-else-if="downloadItem.itemProgress == 1" class="text-center text-lg">{{ $strings.MessageDownloadCompleteProcessing }}</p>
           <p v-else class="text-center text-lg">{{ $strings.MessageDownloading }} ({{ Math.round(downloadItem.itemProgress * 100) }}%)</p>
         </div>
 
@@ -175,6 +180,7 @@ import { AbsFileSystem, AbsDownloader } from '@/plugins/capacitor'
 import { getAverageColorFromCoverUrl } from '@/utils/coverAverageColor'
 import coverPresentation from '@/theme/coverPresentation'
 import cellularPermissionHelpers from '@/mixins/cellularPermissionHelpers'
+import { downloadState, DownloadState } from '@/utils/downloadState'
 
 export default {
   async asyncData({ store, params, redirect, app, query }) {
@@ -474,6 +480,12 @@ export default {
     downloadItem() {
       return this.$store.getters['globals/getDownloadItem'](this.libraryItemId)
     },
+    downloadItemState() {
+      return this.downloadItem ? downloadState(this.downloadItem) : null
+    },
+    downloadStopped() {
+      return this.downloadItemState === DownloadState.FAILED || this.downloadItemState === DownloadState.FOLDER_ACCESS
+    },
     episodes() {
       return this.media.episodes || []
     },
@@ -649,7 +661,9 @@ export default {
       this.download(localFolder)
     },
     async downloadClick() {
-      if (this.downloadItem || this.startingDownload) return
+      // An existing download is managed (Cancel, Retry, Clear) on the Downloads screen
+      if (this.downloadItem) return this.$router.push('/downloading')
+      if (this.startingDownload) return
 
       const hasPermission = await this.checkCellularPermission('download')
       if (!hasPermission) return

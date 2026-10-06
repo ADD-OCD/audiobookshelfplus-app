@@ -7,6 +7,7 @@
 
 <script>
 import { AbsDownloader } from '@/plugins/capacitor'
+import { downloadProgress } from '@/utils/downloadState'
 
 export default {
   data() {
@@ -85,6 +86,16 @@ export default {
     },
     onQueueChanged(data) {
       if (!data.hasWork) this.$store.commit('globals/clearItemDownloads')
+      // The native queue is authoritative: it also drops cancelled and cleared items
+      this.refreshQueue()
+    },
+    async refreshQueue() {
+      const result = await AbsDownloader.getDownloadQueue().catch(() => null)
+      if (!result || !Array.isArray(result.items)) return
+      this.$store.commit(
+        'globals/setItemDownloads',
+        result.items.map((downloadItem) => ({ ...downloadItem, itemProgress: downloadProgress(downloadItem), episodes: downloadItem.downloadItemParts.filter((dip) => dip.episode).map((dip) => dip.episode) }))
+      )
     }
   },
   async mounted() {
@@ -92,6 +103,7 @@ export default {
     this.itemPartUpdateListener = await AbsDownloader.addListener('onDownloadItemPartUpdate', (data) => this.onDownloadItemPartUpdate(data))
     this.queueChangedListener = await AbsDownloader.addListener('onQueueChanged', (data) => this.onQueueChanged(data))
     this.completeListener = await AbsDownloader.addListener('onItemDownloadComplete', (data) => this.onItemDownloadComplete(data))
+    this.refreshQueue()
   },
   beforeDestroy() {
     this.downloadItemListener?.remove()

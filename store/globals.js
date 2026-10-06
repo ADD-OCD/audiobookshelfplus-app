@@ -132,6 +132,10 @@ export const mutations = {
       downloadItem.itemProgress = 0
     }
   },
+  // Replaces the list with the native download queue (getDownloadQueue)
+  setItemDownloads(state, items) {
+    state.itemDownloads = items
+  },
   removeItemDownload(state, id) {
     state.itemDownloads = state.itemDownloads.filter((i) => i.id != id)
   },
