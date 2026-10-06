@@ -276,11 +276,6 @@ class FolderScanner(private val ctx: Context) {
             }
   }
 
-  data class RescanResult(
-          val matched: MutableList<LocalLibraryItem> = mutableListOf(),
-          val unmatchedFolders: MutableList<String> = mutableListOf()
-  )
-
   // Item filenames could be the same if they are in sub-folders, this will make them unique.
   // Mirrors AbsDownloader's filename derivation so rescanned folders match real download output.
   private fun getFilenameFromRelPath(relPath: String): String {
@@ -423,33 +418,76 @@ class FolderScanner(private val ctx: Context) {
    * [itemsByLibrary] by sanitized author/title, and builds a LocalLibraryItem for every match.
    * Podcasts are not supported by rescan (out of scope -- per-episode local items in a shared
    * folder are a materially different matching problem).
+   *
+   * [onProgress] reports the folder total once it is known and every checked folder, with the
+   * item just matched (already saved, so final). [callback] runs exactly once; its error is a
+   * [RescanError] when the folder can't be read, a matched item can't be fetched, or a step
+   * throws, so a failure is never reported as an empty success.
    */
   fun rescanFolder(
           localFolder: LocalFolder,
           itemsByLibrary: Map<String, List<LibraryItem>>,
           fetchFullItem: (libraryItemId: String, cb: (LibraryItem?) -> Unit) -> Unit,
-          callback: (RescanResult) -> Unit
+          onProgress: (RescanProgress, LocalLibraryItem?) -> Unit,
+          callback: (RescanOutcome<LocalLibraryItem>) -> Unit
   ) {
-    val result = RescanResult()
-    val root = DocumentFileCompat.fromUri(ctx, Uri.parse(localFolder.contentUrl))
-    if (root == null) {
-      Log.e(tag, "rescanFolder: Invalid SAF root ${localFolder.contentUrl}")
-      callback(result)
+    val pending: List<Pair<DocumentFile, String>>
+    val byAuthorTitlePath: Map<String, LibraryItem>
+    try {
+      val root = DocumentFileCompat.fromUri(ctx, Uri.parse(localFolder.contentUrl))
+      if (root == null || !root.canRead()) {
+        Log.e(tag, "rescanFolder: Invalid or unreadable SAF root ${localFolder.contentUrl}")
+        callback(RescanOutcome(emptyList(), emptyList(), RescanError.FOLDER))
+        return
+      }
+      byAuthorTitlePath = matchIndex(itemsByLibrary)
+      pending = pendingFolders(root, localFolder)
+    } catch (e: Exception) {
+      Log.e(tag, "rescanFolder: Failed to read ${localFolder.contentUrl}", e)
+      callback(RescanOutcome(emptyList(), emptyList(), RescanError.FOLDER))
       return
     }
 
+    val total = pending.size
+    onProgress(RescanProgress(localFolder.id, RescanPhase.CHECKING, total = total), null)
+    runRescan(
+            pending,
+            match = { relPath -> byAuthorTitlePath[relPath] },
+            fetchFull = { item, cb -> fetchFullItem(item.id, cb) },
+            scan = { folder, fullItem, cb ->
+              scanExistingFolder(folder, fullItem, localFolder) { cb(it?.localLibraryItem) }
+            },
+            onChecked = { checked, matched, unmatched, latest ->
+              onProgress(
+                      RescanProgress(
+                              localFolder.id,
+                              RescanPhase.CHECKING,
+                              checked,
+                              total,
+                              matched.size,
+                              unmatched.size,
+                              latest?.media?.metadata?.title
+                      ),
+                      latest
+              )
+            },
+            done = callback
+    )
+  }
+
+  private fun matchIndex(itemsByLibrary: Map<String, List<LibraryItem>>): Map<String, LibraryItem> =
+          itemsByLibrary.values.flatten().filter { it.mediaType == "book" }.associateBy { item ->
+            val author = cleanStringForFileSystem(item.media.metadata.getAuthorDisplayName())
+            val title = cleanStringForFileSystem(item.media.metadata.title)
+            "$author/$title"
+          }
+
+  /** Author/title subfolders of [root] not yet backed by a LocalLibraryItem. */
+  private fun pendingFolders(root: DocumentFile, localFolder: LocalFolder): List<Pair<DocumentFile, String>> {
     val existingPaths =
             DeviceManager.dbManager.getLocalLibraryItemsInFolder(localFolder.id)
                     .map { it.absolutePath }
                     .toSet()
-
-    val byAuthorTitlePath =
-            itemsByLibrary.values.flatten().filter { it.mediaType == "book" }.associateBy { item
-                ->
-              val author = cleanStringForFileSystem(item.media.metadata.getAuthorDisplayName())
-              val title = cleanStringForFileSystem(item.media.metadata.title)
-              "$author/$title"
-            }
 
     val candidates = mutableListOf<Pair<DocumentFile, String>>()
     root.listFiles().filter { it.isDirectory }.forEach { authorFolder ->
@@ -457,37 +495,7 @@ class FolderScanner(private val ctx: Context) {
         candidates.add(titleFolder to "${authorFolder.name}/${titleFolder.name}")
       }
     }
-    val pending = candidates.filter { (folder, _) -> folder.getAbsolutePath(ctx) !in existingPaths }
-
-    fun processNext(index: Int) {
-      if (index >= pending.size) {
-        callback(result)
-        return
-      }
-      val (folder, relPath) = pending[index]
-      val matchedItem = byAuthorTitlePath[relPath]
-      if (matchedItem == null) {
-        result.unmatchedFolders.add(relPath)
-        processNext(index + 1)
-        return
-      }
-      fetchFullItem(matchedItem.id) { fullItem ->
-        if (fullItem == null) {
-          result.unmatchedFolders.add(relPath)
-          processNext(index + 1)
-          return@fetchFullItem
-        }
-        scanExistingFolder(folder, fullItem, localFolder) { scanResult ->
-          if (scanResult != null) {
-            result.matched.add(scanResult.localLibraryItem)
-          } else {
-            result.unmatchedFolders.add(relPath)
-          }
-          processNext(index + 1)
-        }
-      }
-    }
-    processNext(0)
+    return candidates.filter { (folder, _) -> folder.getAbsolutePath(ctx) !in existingPaths }
   }
 
   fun scanDownloadItem(item: DownloadItem, callback: (DownloadItemScanResult?) -> Unit) {

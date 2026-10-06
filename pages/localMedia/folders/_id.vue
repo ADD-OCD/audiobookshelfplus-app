@@ -11,6 +11,18 @@
 
     <p class="mb-2 text-base text-fg">{{ $strings.HeaderLocalLibraryItems }} ({{ localLibraryItems.length }})</p>
 
+    <div v-if="scan" class="flex items-start mb-2 text-sm" role="status" aria-live="polite">
+      <svg v-if="isScanning" class="animate-spin text-fg-muted mr-2 mt-0.5 shrink-0" style="width: 18px; height: 18px" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M12,4V2A10,10 0 0,0 2,12H4A8,8 0 0,1 12,4Z" />
+      </svg>
+      <span v-else class="material-symbols text-lg mr-2" :class="scan.phase === 'failed' ? 'text-error' : 'text-success'">{{ scan.phase === 'failed' ? 'error' : 'check_circle' }}</span>
+      <div class="min-w-0">
+        <p class="text-fg">{{ scanStatusText }}</p>
+        <p v-if="isScanning && scan.latestTitle" class="text-xs text-fg-muted truncate">{{ $getString('LabelRescanFound', [scan.latestTitle]) }}</p>
+        <p v-else-if="scan.phase === 'failed'" class="text-xs text-fg-muted">{{ rescanErrorMessage(scan.error) }}</p>
+      </div>
+    </div>
+
     <div class="w-full media-item-container overflow-y-auto">
       <template v-for="localLibraryItem in localLibraryItems">
         <nuxt-link :to="`/localMedia/item/${localLibraryItem.id}`" :key="localLibraryItem.id" class="flex my-1">
@@ -48,7 +60,10 @@ export default {
       localLibraryItems: [],
       folder: null,
       removingFolder: false,
-      rescanning: false,
+      // Rescan Folder status from AbsFileSystem "onRescanProgress" events (null until a scan is seen)
+      scan: null,
+      rescanCallPending: false,
+      rescanProgressListener: null,
       showDialog: false
     }
   },
@@ -62,13 +77,30 @@ export default {
     isInternalStorage() {
       return this.folder?.id.startsWith('internal-')
     },
+    isScanning() {
+      return this.scan?.phase === 'loading' || this.scan?.phase === 'checking'
+    },
+    scanStatusText() {
+      const scan = this.scan
+      if (!scan) return ''
+      if (scan.phase === 'loading') return `${this.$strings.LabelRescanScanning} ${this.$strings.LabelRescanLoading}`
+      if (scan.phase === 'checking') {
+        if (scan.total < 0) return this.$strings.LabelRescanScanning
+        return `${this.$strings.LabelRescanScanning} ${this.$getString('LabelRescanChecked', [scan.checked, scan.total, scan.found])}`
+      }
+      if (scan.phase === 'failed') return this.$getString('LabelRescanFailed', [scan.found])
+      return this.$getString('LabelRescanComplete', [scan.found])
+    },
     dialogItems() {
       if (this.isInternalStorage) return []
       const items = []
-      items.push({
-        text: this.$strings.ButtonRescanFolder,
-        value: 'rescan'
-      })
+      // Rescan matches book folders only, one scan per folder at a time
+      if (this.mediaType === 'book' && !this.isScanning) {
+        items.push({
+          text: this.$strings.ButtonRescanFolder,
+          value: 'rescan'
+        })
+      }
       items.push({
         text: this.$strings.ButtonRemove,
         value: 'remove'
@@ -102,15 +134,53 @@ export default {
       this.showDialog = false
     },
     async rescanFolder() {
-      this.rescanning = true
-      const result = await AbsFileSystem.rescanFolder({ folderId: this.folderId })
-      this.rescanning = false
-      if (result?.error) {
-        this.$toast.error(result.error)
+      if (this.isScanning) return
+      // Shown at once; native progress events then fill in the counts
+      this.scan = { folderId: this.folderId, phase: 'loading', checked: 0, total: -1, found: 0, unmatched: 0, latestTitle: null }
+      this.rescanCallPending = true
+      let result
+      try {
+        result = await AbsFileSystem.rescanFolder({ folderId: this.folderId })
+      } catch (error) {
+        console.error('Rescan failed', error)
+        result = { error: 'unexpected' }
+      }
+      this.rescanCallPending = false
+      if (result?.error === 'running') {
+        // A scan of this folder started earlier is still running; its events keep updating the status
+        this.$toast.info(this.$strings.MessageRescanErrorRunning)
         return
       }
+      if (result?.error) {
+        this.scan = { ...this.scan, phase: 'failed', error: result.error, found: result.matched || 0 }
+        await this.init()
+        this.$toast.error(this.rescanErrorMessage(result.error))
+        return
+      }
+      this.scan = { ...this.scan, phase: 'complete', found: result?.matched || 0 }
       await this.init()
       this.$toast.success(this.$getString('MessageRescanFolderResult', [result?.matched || 0, result?.unmatched?.length || 0]))
+    },
+    rescanErrorMessage(error) {
+      const messages = {
+        catalog: this.$strings.MessageRescanErrorCatalog,
+        folder: this.$strings.MessageRescanErrorFolder,
+        server: this.$strings.MessageRescanErrorServer,
+        running: this.$strings.MessageRescanErrorRunning
+      }
+      return messages[error] || this.$strings.MessageRescanErrorUnexpected
+    },
+    onRescanProgress(data) {
+      // Progress for another folder is not this page's
+      if (!data || data.folderId !== this.folderId) return
+      const { localLibraryItem, ...progress } = data
+      // Keep showing the last item found while the folders after it are checked
+      this.scan = { ...(this.scan || {}), ...progress, latestTitle: progress.latestTitle || this.scan?.latestTitle || null }
+      // A matched item is already saved, so it is final: show it now (newLocalLibraryItem skips duplicates)
+      if (localLibraryItem) this.newLocalLibraryItem(localLibraryItem)
+      // A scan this page did not start (e.g. reopened mid-scan) ended: reload the saved items
+      const ended = progress.phase === 'complete' || progress.phase === 'failed'
+      if (ended && !this.rescanCallPending) this.init()
     },
     async removeFolder() {
       var deleteMessage = 'Are you sure you want to remove this folder? (does not delete anything in your file system)'
@@ -158,12 +228,23 @@ export default {
       }
     }
   },
-  mounted() {
+  async mounted() {
     this.$eventBus.$on('new-local-library-item', this.newLocalLibraryItem)
     this.init()
+    const listener = await AbsFileSystem.addListener('onRescanProgress', this.onRescanProgress)
+    // Left the page before the listener was registered
+    if (this._isDestroyed) {
+      listener?.remove()
+      return
+    }
+    this.rescanProgressListener = listener
+    // Reopened while a scan of this folder is still running: show it until its next event fills in the counts
+    const running = await AbsFileSystem.isRescanning({ folderId: this.folderId }).catch(() => null)
+    if (running?.value && !this.scan) this.scan = { folderId: this.folderId, phase: 'checking', checked: 0, total: -1, found: 0, unmatched: 0, latestTitle: null }
   },
   beforeDestroy() {
     this.$eventBus.$off('new-local-library-item', this.newLocalLibraryItem)
+    this.rescanProgressListener?.remove()
   }
 }
 </script>

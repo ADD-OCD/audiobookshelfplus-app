@@ -448,7 +448,12 @@ class ApiHandler(var ctx:Context) {
         Log.e(tag, it.getString("error") ?: "getLibraryItem Failed")
         cb(null)
       } else {
-        val libraryItem = jacksonMapper.readValue<LibraryItem>(it.toString())
+        val libraryItem = try {
+          jacksonMapper.readValue<LibraryItem>(it.toString())
+        } catch (e: Exception) {
+          Log.e(tag, "getLibraryItem: invalid response for $libraryItemId", e)
+          null
+        }
         cb(libraryItem)
       }
     }
@@ -505,6 +510,49 @@ class ApiHandler(var ctx:Context) {
         } else {
           fetchPage(page + 1)
         }
+      }
+    }
+    fetchPage(0)
+  }
+
+  // Rescan Folder variants of getLibraries()/getAllLibraryItems() that report a failure (null)
+  // instead of an empty or partial list, so an unreachable server is never a "0 matched" success.
+  fun getLibrariesOrNull(cb: (List<Library>?) -> Unit) {
+    getRequest("/api/libraries", null, null) {
+      val libraries = try {
+        when {
+          it.has("libraries") -> it.getJSONArray("libraries")
+          it.has("value") -> it.getJSONArray("value")
+          else -> null
+        }?.let { array -> (0 until array.length()).map { i -> jacksonMapper.readValue<Library>(array.get(i).toString()) } }
+      } catch (e: Exception) {
+        Log.e(tag, "getLibrariesOrNull: invalid response", e)
+        null
+      }
+      if (libraries == null) Log.e(tag, "getLibrariesOrNull failed: ${it.optString("error")}")
+      cb(libraries)
+    }
+  }
+
+  fun getAllLibraryItemsOrNull(libraryId:String, cb: (List<LibraryItem>?) -> Unit) {
+    val allItems = mutableListOf<LibraryItem>()
+    val limit = 100
+
+    fun fetchPage(page: Int) {
+      getRequest("/api/libraries/$libraryId/items?limit=$limit&page=$page&minified=1", null, null) {
+        val next = try {
+          val array = it.getJSONArray("results")
+          for (i in 0 until array.length()) {
+            allItems.add(jacksonMapper.readValue<LibraryItem>(array.get(i).toString()))
+          }
+          val total = it.optInt("total", allItems.size)
+          if (array.length() < limit || allItems.size >= total) null else page + 1
+        } catch (e: Exception) {
+          Log.e(tag, "getAllLibraryItemsOrNull: page $page of $libraryId failed: ${it.optString("error")}", e)
+          cb(null)
+          return@getRequest
+        }
+        if (next == null) cb(allItems) else fetchPage(next)
       }
     }
     fetchPage(0)

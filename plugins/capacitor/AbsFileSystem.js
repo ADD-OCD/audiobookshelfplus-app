@@ -8,6 +8,10 @@ class AbsFileSystemWeb extends WebPlugin {
   async selectFolder() { }
 
   async rescanFolder() { }
+
+  async isRescanning() {
+    return { value: false }
+  }
 }
 
 const AbsFileSystem = registerPlugin('AbsFileSystem', {

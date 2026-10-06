@@ -12,10 +12,16 @@ import com.anggrayudi.storage.callback.FolderPickerCallback
 import com.anggrayudi.storage.callback.StorageAccessCallback
 import com.anggrayudi.storage.file.*
 import app.absplus.android.MainActivity
-import app.absplus.android.data.LibraryItem
 import app.absplus.android.data.LocalFolder
+import app.absplus.android.data.LocalLibraryItem
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.FolderScanner
+import app.absplus.android.device.RescanError
+import app.absplus.android.device.RescanGuard
+import app.absplus.android.device.RescanOutcome
+import app.absplus.android.device.RescanPhase
+import app.absplus.android.device.RescanProgress
+import app.absplus.android.device.loadRescanCatalog
 import app.absplus.android.server.ApiHandler
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -220,30 +226,93 @@ class AbsFileSystem : Plugin() {
       return
     }
 
-    apiHandler.getLibraries { libraries ->
-      val itemsByLibrary = mutableMapOf<String, List<LibraryItem>>()
+    // Rescan matches books only (podcast episodes in a shared folder are a different problem)
+    if (localFolder.mediaType != "book") {
+      call.resolve(JSObject().put("error", RescanError.UNSUPPORTED))
+      return
+    }
 
-      fun fetchNextLibrary(index: Int) {
-        if (index >= libraries.size) {
+    if (!rescanGuard.tryStart(folderId)) {
+      call.resolve(JSObject().put("error", RescanError.RUNNING))
+      return
+    }
+
+    // Sends the final event and resolves the call exactly once, then releases the folder
+    var finished = false
+    var checked = 0
+    var total = -1
+    var lastProgressAt = 0L
+    fun finish(outcome: RescanOutcome<LocalLibraryItem>) {
+      synchronized(this) {
+        if (finished) return
+        finished = true
+      }
+      rescanGuard.finish(folderId)
+      val phase = if (outcome.error == null) RescanPhase.COMPLETE else RescanPhase.FAILED
+      notifyRescanProgress(
+              RescanProgress(folderId, phase, checked, total, outcome.matched.size, outcome.unmatched.size, error = outcome.error),
+              null
+      )
+      val jsobj = JSObject()
+      jsobj.put("matched", outcome.matched.size)
+      jsobj.put("unmatched", JSONArray(outcome.unmatched))
+      outcome.error?.let { jsobj.put("error", it) }
+      call.resolve(jsobj)
+    }
+    fun fail(error: String) = finish(RescanOutcome(emptyList(), emptyList(), error))
+
+    try {
+      notifyRescanProgress(RescanProgress(folderId, RescanPhase.LOADING), null)
+      loadRescanCatalog(apiHandler::getLibrariesOrNull, { it.id }, apiHandler::getAllLibraryItemsOrNull) { catalog ->
+        if (catalog == null) {
+          fail(RescanError.CATALOG)
+          return@loadRescanCatalog
+        }
+        try {
           folderScanner.rescanFolder(
                   localFolder,
-                  itemsByLibrary,
-                  { libraryItemId, cb -> apiHandler.getLibraryItem(libraryItemId, cb) }
-          ) { result ->
-            val jsobj = JSObject()
-            jsobj.put("matched", result.matched.size)
-            jsobj.put("unmatched", JSONArray(result.unmatchedFolders))
-            call.resolve(jsobj)
-          }
-          return
-        }
-        val lib = libraries[index]
-        apiHandler.getAllLibraryItems(lib.id) { items ->
-          itemsByLibrary[lib.id] = items
-          fetchNextLibrary(index + 1)
+                  catalog,
+                  { libraryItemId, cb -> apiHandler.getLibraryItem(libraryItemId, cb) },
+                  { progress, item ->
+                    checked = progress.checked
+                    total = progress.total
+                    // Unmatched folders resolve in microseconds: send their counts at most every
+                    // 100ms; matches, the first event and the last folder are always sent
+                    val now = System.currentTimeMillis()
+                    if (item != null || progress.checked == 0 || progress.checked == progress.total || now - lastProgressAt >= 100) {
+                      lastProgressAt = now
+                      notifyRescanProgress(progress, item)
+                    }
+                  },
+                  ::finish
+          )
+        } catch (e: Exception) {
+          Log.e(tag, "rescanFolder failed", e)
+          fail(RescanError.UNEXPECTED)
         }
       }
-      fetchNextLibrary(0)
+    } catch (e: Exception) {
+      Log.e(tag, "rescanFolder failed", e)
+      fail(RescanError.UNEXPECTED)
+    }
+  }
+
+  /** Whether a rescan of the folder is running, so a reopened folder page can show it before its next event. */
+  @PluginMethod
+  fun isRescanning(call: PluginCall) {
+    val folderId = call.data.getString("folderId", "").toString()
+    call.resolve(JSObject().put("value", rescanGuard.isRunning(folderId)))
+  }
+
+  /** Sends "onRescanProgress"; [item] is the local item just matched, already saved. */
+  private fun notifyRescanProgress(progress: RescanProgress, item: LocalLibraryItem?) {
+    try {
+      val data = JSObject(jacksonMapper.writeValueAsString(progress))
+      if (item != null) data.put("localLibraryItem", JSObject(jacksonMapper.writeValueAsString(item)))
+      notifyListeners("onRescanProgress", data)
+    } catch (e: Exception) {
+      // Progress is informational; the call still resolves with the result
+      Log.e(tag, "onRescanProgress failed", e)
     }
   }
 
@@ -368,5 +437,8 @@ class AbsFileSystem : Plugin() {
     const val DEFAULT_CANCEL = "Cancel"
     const val DEFAULT_ACCESS_DENIED = "Access denied"
     const val DEFAULT_PERMISSION_DENIED = "Permission denied"
+
+    // Process-wide: a rescan keeps running if the plugin is reloaded with a new bridge
+    val rescanGuard = RescanGuard()
   }
 }
