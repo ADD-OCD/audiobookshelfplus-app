@@ -131,7 +131,9 @@ be) in the official app.
   progress and reports books it couldn't link.
 - **Library lists recover from loading failures** — if part of a library fails to load (a weak
   mobile connection, or returning to the app after a long time in the background), those rows are
-  loaded again instead of staying blank.
+  loaded again instead of staying blank. A series opened from the Series tab shows all of its books
+  again; in v0.15.0 only the first one or two appeared and the other rows stayed blank (fixed in
+  v0.15.1).
 - **Smaller touches** — the downloaded tick in list rows sits above the Play key instead of on the
   cover, and the connection screen shows the GitHub avatars of the official project and of
   Audiobookshelf+.

@@ -173,6 +173,14 @@ It measures its viewport from `#bookshelf-wrapper`, the element that scrolls. It
 
 Still upstream-shaped and left as is: concurrent page fetches after a reset can write a stale response into the new list (a library or filter change while a page is in flight), and `nativeHttp` refreshes an expired token separately for each request that got a 401, so several at once can race on a rotating refresh token.
 
+## Missing local cover crashes playback
+
+Pre-existing, inherited from upstream (`34710dbd`), and deliberately left out of the v0.15.1 hotfix. When a downloaded book's recorded cover file is missing or unreadable (deleted, renamed, or its device folder lost), `PlaybackSession.resolveCoverBitmapAsync` decodes it with `ImageDecoder` and no error handling, so starting that book crashes the app. This was reproduced on the emulator by hiding the cover file of a downloaded book. The fix is to catch the decode failure and fall back to no artwork, as the server-cover path already does.
+
+## Widget artwork after a failed load
+
+`WidgetRenderer` caches one loaded cover and remembers one failed cover. A failed cover isn't loaded again in that app process until a different cover loads successfully; a cached hit doesn't clear it. Before the responsive widget (`77297c7e`), every widget update started a new load. The emulator shows this: a cover that failed while offline stays the logo for that process. An S26 case (a downloaded book showing the logo) matched this pattern, but it didn't recur after Rescan Folder, so the widget was not changed. A future fix should retry a failed cover on a later update (for example, after some time or on the next playback change) rather than for the whole process.
+
 ## Store-listing branding
 
 A separate release-asset task, not part of code phases. Inherited Audiobookshelf+ identity debt (not Audible-related). Phase 5 rewrote the fastlane listing text (`fastlane/metadata/android/{en-US,de}/`) for Audiobookshelf+, but the imagery (`fastlane/metadata/android/en-US/images/`: the feature graphic, the icon and eight phone screenshots, several in iPhone frames) is still upstream's "audiobookshelf" material with upstream demo content. Replace it with Audiobookshelf+ graphics and current Android screenshots before any public store or release material is prepared. It must also follow the no-Audible rule in `docs/app-identity.md`.
