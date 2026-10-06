@@ -13,11 +13,6 @@
 
         <!-- No progress shown for collapsed series or podcasts in library -->
         <div v-if="!isPodcast && !collapsedSeries" class="absolute bottom-0 left-0 h-1 shadow-sm max-w-full z-10 rounded-b" :class="itemIsFinished ? 'bg-success' : 'bg-yellow-400'" :style="{ width: coverWidth * userProgressPercent + 'px' }"></div>
-
-        <!-- Downloaded: on the artwork corner as on the grid card, clear of the row's Play key -->
-        <div v-if="localLibraryItem || isLocal" class="absolute top-0 right-0 z-20 pointer-events-none" :style="{ top: 0.375 * sizeMultiplier + 'rem', right: 0.375 * sizeMultiplier + 'rem', padding: `${0.1 * sizeMultiplier}rem ${0.25 * sizeMultiplier}rem` }">
-          <span class="material-symbols text-2xl text-success">download_done</span>
-        </div>
       </div>
       <div class="flex-grow pl-2" :class="showPlayButton ? 'pr-12' : 'pr-2'">
         <p class="whitespace-normal line-clamp-2" :style="{ fontSize: 0.8 * sizeMultiplier + 'rem' }">
@@ -43,6 +38,15 @@
             </svg>
           </div>
         </button>
+        <!-- Downloaded: centered above the Play key, clear of it. A fixed 16px SVG with heavier strokes: the
+             Material Symbols font has no weight axis, and its glyph would grow with Android font scaling into the key. -->
+        <div v-if="localLibraryItem || isLocal" class="downloaded-indicator absolute left-0 right-1 flex justify-center text-success pointer-events-none" style="top: -3px">
+          <svg style="width: 16px; height: 16px" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11.5l4 4 8-8M6 20h12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </div>
+      </div>
+      <!-- Without a Play key the indicator keeps the row's top-right corner -->
+      <div v-else-if="localLibraryItem || isLocal" class="downloaded-indicator absolute top-0 right-1 text-success pointer-events-none">
+        <svg style="width: 16px; height: 16px" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11.5l4 4 8-8M6 20h12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></svg>
       </div>
     </div>
   </div>
