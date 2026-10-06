@@ -2,12 +2,12 @@ package app.absplus.android.managers
 
 import android.content.Context
 import android.net.Uri
-import android.provider.DocumentsContract
 import android.os.StatFs
 import androidx.documentfile.provider.DocumentFile
 import com.anggrayudi.storage.SimpleStorage
 import com.anggrayudi.storage.file.fullName
 import app.absplus.android.device.DeviceManager
+import app.absplus.android.device.FolderAccess
 import app.absplus.android.device.FolderScanner
 import app.absplus.android.models.DownloadItem
 import app.absplus.android.models.DownloadItemPart
@@ -230,29 +230,11 @@ class DownloadItemManager(
   }
 
   /**
-   * Whether the app can still write to the item's device folder. SimpleStorage.hasStorageAccess takes
-   * the folder's file path: given the content:// URL it always answered false, so every download into a
-   * device folder failed at once as "Lost access". The persisted tree grant is the fallback for folders
-   * without a resolvable path.
+   * Whether the app can still write to the item's device folder (see [FolderAccess], shared with the
+   * Local Folders permission check).
    */
-  private fun hasFolderAccess(item: DownloadItem): Boolean {
-    if (item.isInternalStorage) return true
-    return try {
-      val uri = Uri.parse(item.localFolder.contentUrl)
-      val path = item.localFolder.absolutePath
-      val granted =
-              (path.isNotEmpty() && SimpleStorage.hasStorageAccess(context, path, true)) ||
-                      context.contentResolver.persistedUriPermissions.any {
-                        it.isWritePermission &&
-                                it.uri == DocumentsContract.buildTreeDocumentUri(uri.authority, DocumentsContract.getTreeDocumentId(uri))
-                      }
-      // A grant outlives its folder: a deleted folder can't be written either
-      granted && DocumentFile.fromTreeUri(context, uri)?.let { it.exists() && it.canWrite() } == true
-    } catch (e: Exception) {
-      AbsLogger.error(tag, "Could not check access to \"${item.localFolder.name}\": ${e.message}")
-      false
-    }
-  }
+  private fun hasFolderAccess(item: DownloadItem): Boolean =
+          item.isInternalStorage || FolderAccess.canWrite(context, item.localFolder)
 
   /** Whether a saved local item already uses this part's finished file. */
   private fun isUsedByLocalItem(part: DownloadItemPart): Boolean =

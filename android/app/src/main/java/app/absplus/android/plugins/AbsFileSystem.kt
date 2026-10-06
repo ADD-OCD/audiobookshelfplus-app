@@ -15,6 +15,7 @@ import app.absplus.android.MainActivity
 import app.absplus.android.data.LocalFolder
 import app.absplus.android.data.LocalLibraryItem
 import app.absplus.android.device.DeviceManager
+import app.absplus.android.device.FolderAccess
 import app.absplus.android.device.FolderScanner
 import app.absplus.android.device.RescanError
 import app.absplus.android.device.RescanGuard
@@ -203,7 +204,9 @@ class AbsFileSystem : Plugin() {
     val folderUrl = call.data.getString("folderUrl", "").toString()
     Log.d(TAG, "Check Folder Permissions for $folderUrl")
 
-    val hasAccess = SimpleStorage.hasStorageAccess(context, folderUrl, true)
+    // The saved folder supplies the file path the storage check needs (the URL alone always failed)
+    val folder = FolderAccess.folderForUrl(folderUrl, DeviceManager.dbManager.getAllLocalFolders())
+    val hasAccess = FolderAccess.canWrite(context, folder)
 
     val jsobj = JSObject()
     jsobj.put("value", hasAccess)
