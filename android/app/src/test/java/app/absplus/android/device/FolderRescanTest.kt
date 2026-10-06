@@ -17,8 +17,10 @@ class FolderRescanTest {
           private val serverFails: Set<String> = emptySet(),
           private val filesMissing: Set<String> = emptySet(),
           private val scanThrows: Set<String> = emptySet(),
-          private val async: Boolean = false
+          private val async: Boolean = false,
+          decisions: Map<String, RescanMatch<String>> = emptyMap()
   ) {
+    val relinkScans = mutableListOf<String>()
     val progress = mutableListOf<Checked>()
     val outcomes = mutableListOf<RescanOutcome<String>>()
     private val queue = ArrayDeque<() -> Unit>()
@@ -26,13 +28,14 @@ class FolderRescanTest {
     init {
       runRescan(
               pending.map { it to it },
-              match = { path -> if (path in known) path else null },
+              match = { _, path -> decisions[path] ?: if (path in known) RescanMatch.Link(path, relink = false) else RescanMatch.Unmatched },
               fetchFull = { item, cb -> later { cb(if (item in serverFails) null else item) } },
-              scan = { _, item, cb ->
+              scan = { _, item, relink, cb ->
+                if (relink) relinkScans.add(item)
                 if (item in scanThrows) throw IllegalStateException("bad folder")
                 later { cb(if (item in filesMissing) null else "local:$item") }
               },
-              onChecked = { checked, matched, unmatched, latest -> progress.add(Checked(checked, matched.size, unmatched.size, latest)) },
+              onChecked = { checked, matched, notMatched, latest -> progress.add(Checked(checked, matched.size, notMatched, latest)) },
               done = { outcomes.add(it) }
       )
     }
@@ -99,9 +102,9 @@ class FolderRescanTest {
     val outcomes = mutableListOf<RescanOutcome<String>>()
     runRescan<String, String, String>(
             listOf("x" to "A/One"),
-            match = { throw IllegalStateException("bad index") },
+            match = { _, _ -> throw IllegalStateException("bad index") },
             fetchFull = { item: String, cb -> cb(item) },
-            scan = { _, item, cb -> cb(item) },
+            scan = { _, item, _, cb -> cb(item) },
             onChecked = { _, _, _, _ -> },
             done = { outcomes.add(it) }
     )
@@ -157,5 +160,129 @@ class FolderRescanTest {
     assertEquals("folder-1", json.get("folderId").asText())
     assertEquals("checking", json.get("phase").asText())
     assertEquals(-1, mapper.valueToTree<com.fasterxml.jackson.databind.JsonNode>(RescanProgress("f", RescanPhase.LOADING)).get("total").asInt())
+  }
+
+  // --- Matching policy: the same book in several libraries (the S26 Dungeon Crawler Carl case) ---
+
+  /** A server book copy: its id and the library it was loaded from. */
+  private data class Copy(val id: String, val library: String, val authorTitle: String = DCC)
+
+  private val main = Copy("main-dcc1", "lib-main")
+  private val dccLib = Copy("dcc-dcc1", "lib-dcc")
+  private val kids = Copy("kids-dcc1", "lib-kids")
+  private val catalog = listOf(main, dccLib, kids, Copy("main-other", "lib-main", "Other Author/Other Book"))
+
+  private fun resolve(
+          coverIds: List<String> = emptyList(),
+          saved: Boolean = false,
+          savedLinkId: String? = null,
+          authorTitle: String = DCC,
+          currentLibrary: String? = "lib-main",
+          books: List<Copy> = catalog
+  ) = resolveRescanMatch(
+          coverIds,
+          saved,
+          savedLinkId,
+          authorTitle,
+          currentLibrary,
+          byId = { id -> books.find { it.id == id } },
+          matchesByAuthorTitle = { key -> books.filter { it.authorTitle == key } },
+          idOf = { it.id },
+          libraryOf = { it.library }
+  )
+
+  @Test
+  fun coverFileNamesOnlyCoverJpgIds() {
+    assertEquals(
+            listOf("dcc-dcc1", "li_8x2"),
+            coverItemIds(listOf("01 - Part.mp3", "cover-dcc-dcc1.jpg", "cover.jpg", "cover-li_8x2.jpg", "cover-dcc-dcc1.jpg", "cover-x.png"))
+    )
+  }
+
+  @Test
+  fun theCoverFileIdIsAuthoritativeWhateverTheSelectedLibrary() {
+    // Downloaded from the Dungeon Crawler Carl library while the main library is selected
+    assertEquals(RescanMatch.Link(dccLib, relink = false), resolve(coverIds = listOf("dcc-dcc1"), currentLibrary = "lib-main"))
+    assertEquals(RescanMatch.Link(kids, relink = false), resolve(coverIds = listOf("kids-dcc1"), currentLibrary = null))
+  }
+
+  @Test
+  fun aCoverIdNotOnTheServerFallsBackToTheSelectedLibrary() {
+    assertEquals(RescanMatch.Link(main, relink = false), resolve(coverIds = listOf("deleted-or-other-server")))
+  }
+
+  @Test
+  fun withoutACoverIdOnlyAUniqueMatchInTheSelectedLibraryLinks() {
+    assertEquals(RescanMatch.Link(main, relink = false), resolve(currentLibrary = "lib-main"))
+    assertEquals(RescanMatch.Link(dccLib, relink = false), resolve(currentLibrary = "lib-dcc"))
+  }
+
+  @Test
+  fun aCopyInAnotherLibraryIsNeverPickedByGuess() {
+    // Not in the selected library, though it exists elsewhere
+    assertEquals(RescanMatch.Ambiguous, resolve(currentLibrary = "lib-podcasts"))
+    assertEquals(RescanMatch.Ambiguous, resolve(currentLibrary = null))
+    // Even a book in only one other library
+    assertEquals(RescanMatch.Ambiguous, resolve(books = listOf(dccLib), currentLibrary = "lib-main"))
+    // Twice in the selected library
+    assertEquals(RescanMatch.Ambiguous, resolve(books = listOf(main, Copy("main-dcc1-again", "lib-main"))))
+    // Cover files naming two different items on the server
+    assertEquals(RescanMatch.Ambiguous, resolve(coverIds = listOf("dcc-dcc1", "kids-dcc1")))
+    // Not on the server at all
+    assertEquals(RescanMatch.Unmatched, resolve(authorTitle = "Nobody/Nothing"))
+  }
+
+  @Test
+  fun aSavedItemLinkedToTheWrongCopyIsRelinkedOnlyOnCoverProof() {
+    // Saved by the earlier last-library-wins matching against the Kids copy; the cover proves the DCC copy
+    assertEquals(RescanMatch.Link(dccLib, relink = true), resolve(coverIds = listOf("dcc-dcc1"), saved = true, savedLinkId = "kids-dcc1"))
+    // Already linked to the proven copy: nothing to do
+    assertEquals(RescanMatch.Keep, resolve(coverIds = listOf("dcc-dcc1"), saved = true, savedLinkId = "dcc-dcc1"))
+    // No proof: a saved link is never changed by author/title
+    assertEquals(RescanMatch.Keep, resolve(saved = true, savedLinkId = "kids-dcc1"))
+    assertEquals(RescanMatch.Keep, resolve(coverIds = listOf("dcc-dcc1", "kids-dcc1"), saved = true, savedLinkId = "kids-dcc1"))
+    // A saved local item that is not linked to the server is left alone
+    assertEquals(RescanMatch.Keep, resolve(coverIds = listOf("dcc-dcc1"), saved = true, savedLinkId = null))
+  }
+
+  @Test
+  fun theScanCountsRelinksKeepsAndAmbiguousFolders() {
+    val run = Run(
+            listOf("A/Relink", "B/Keep", "C/Ambiguous", "D/New", "E/None"),
+            known = emptySet(),
+            decisions = mapOf(
+                    "A/Relink" to RescanMatch.Link("A/Relink", relink = true),
+                    "B/Keep" to RescanMatch.Keep,
+                    "C/Ambiguous" to RescanMatch.Ambiguous,
+                    "D/New" to RescanMatch.Link("D/New", relink = false),
+                    "E/None" to RescanMatch.Unmatched
+            )
+    )
+    assertEquals(listOf("A/Relink"), run.relinkScans)
+    assertEquals(listOf("local:A/Relink", "local:D/New"), run.outcome.matched)
+    assertEquals(listOf("local:A/Relink"), run.outcome.relinked)
+    assertEquals(listOf("C/Ambiguous"), run.outcome.ambiguous)
+    assertEquals(listOf("E/None"), run.outcome.unmatched)
+    // A kept folder is checked but neither matched nor not-matched
+    assertEquals(listOf(Checked(1, 1, 0, "local:A/Relink"), Checked(2, 1, 0, null), Checked(3, 1, 1, null), Checked(4, 2, 1, "local:D/New"), Checked(5, 2, 2, null)), run.progress)
+  }
+
+  @Test
+  fun relinkingKeepsLocalProgressAndOnlyMovesItsServerLink() {
+    val progress = app.absplus.android.data.LocalMediaProgress(
+            "local_folder", "local_folder", null, 3600.0, 0.5, 1800.0, false, null, null,
+            1_700_000_000_000L, 1_690_000_000_000L, null, "config-1", "https://server", "user-1", "kids-dcc1", null
+    )
+    val result = repointLocalProgress(progress, "dcc-dcc1", "config-1", "https://server", "user-1")
+    assertEquals("dcc-dcc1", result.libraryItemId)
+    assertEquals(1800.0, result.currentTime, 0.0)
+    assertEquals(0.5, result.progress, 0.0)
+    assertEquals(1_700_000_000_000L, result.lastUpdate)
+    assertEquals("local_folder", result.localLibraryItemId)
+    assertFalse(result.isFinished)
+  }
+
+  private companion object {
+    const val DCC = "Matt Dinniman/Dungeon Crawler Carl"
   }
 }

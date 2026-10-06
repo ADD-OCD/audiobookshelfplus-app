@@ -79,6 +79,9 @@ test('folder page: rescan status, folder-scoped progress and error handling', as
   const page = await read('../pages/localMedia/folders/_id.vue')
   assert.match(page, /<div v-if="scan" class="flex items-start mb-2 text-sm" role="status" aria-live="polite">/)
   assert.match(page, /this\.scan = \{ folderId: this\.folderId, phase: 'loading'/)
+  // The selected library scopes author/title matches; relinked items refresh the cached local progress
+  assert.ok(page.includes('AbsFileSystem.rescanFolder({ folderId: this.folderId, libraryId: this.$store.state.libraries.currentLibraryId })'))
+  assert.ok(page.includes("await this.$store.dispatch('globals/loadLocalMediaProgress')"))
   assert.match(page, /if \(!data \|\| data\.folderId !== this\.folderId\) return/)
   assert.match(page, /if \(localLibraryItem\) this\.newLocalLibraryItem\(localLibraryItem\)/)
   // Unsupported (podcast) folders and running scans don't offer Rescan
@@ -93,7 +96,7 @@ test('folder page: rescan status, folder-scoped progress and error handling', as
   assert.match(page, /await AbsFileSystem\.isRescanning\(\{ folderId: this\.folderId \}\)/)
   assert.match(page, /this\.rescanProgressListener\?\.remove\(\)/)
   const strings = JSON.parse(await read('../strings/en-us.json'))
-  for (const key of ['LabelRescanChecked', 'LabelRescanComplete', 'LabelRescanFailed', 'LabelRescanFound', 'LabelRescanLoading', 'LabelRescanScanning', 'MessageRescanErrorCatalog', 'MessageRescanErrorFolder', 'MessageRescanErrorRunning', 'MessageRescanErrorServer', 'MessageRescanErrorUnexpected']) {
+  for (const key of ['LabelRescanChecked', 'LabelRescanComplete', 'LabelRescanFailed', 'LabelRescanFound', 'LabelRescanLoading', 'LabelRescanScanning', 'MessageRescanErrorCatalog', 'MessageRescanErrorFolder', 'MessageRescanErrorRunning', 'MessageRescanErrorServer', 'MessageRescanErrorUnexpected', 'MessageRescanFolderAmbiguous', 'MessageRescanFolderRelinked']) {
     assert.ok(strings[key], key)
     assert.ok(page.includes(key), `${key} is used`)
   }
