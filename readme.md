@@ -115,6 +115,26 @@ be) in the official app.
   deep navy chassis, a full player with physical-style transport and utility keys, amber key
   legends and progress, and green readouts for speed, sleep timer and playback time. The home
   screen widget follows it. Black, Dark and Light are unchanged.
+- **Download controls** — the Downloads screen shows each download's real state in words
+  (queued, waiting for space, downloading, failed, folder access lost, finishing) and offers
+  *Retry*, *Cancel* and *Clear*. Retry keeps the files that already finished and starts only the
+  unfinished ones again. A failed download stays failed, with its reason, across app restarts
+  instead of retrying silently. When a device folder can't be written any more, *Choose folder*
+  restores access and continues the download.
+- **Fixed downloads to device folders and the Local Folders permission check** — downloads into a
+  folder on the phone no longer fail at once as "lost access", and adding a working folder no
+  longer reports "Folder permissions failed".
+- **Rescan Folder across libraries** — when the same book is in several of your libraries,
+  Rescan Folder now links each downloaded book to the copy it was actually downloaded from, so
+  covers show and the book opens in the right library. Books that were linked to the wrong copy
+  are repaired on rescan without losing files or listening progress. Rescan also shows live
+  progress and reports books it couldn't link.
+- **Library lists recover from loading failures** — if part of a library fails to load (a weak
+  mobile connection, or returning to the app after a long time in the background), those rows are
+  loaded again instead of staying blank.
+- **Smaller touches** — the downloaded tick in list rows sits above the Play key instead of on the
+  cover, and the connection screen shows the GitHub avatars of the official project and of
+  Audiobookshelf+.
 
 ### Getting builds
 
