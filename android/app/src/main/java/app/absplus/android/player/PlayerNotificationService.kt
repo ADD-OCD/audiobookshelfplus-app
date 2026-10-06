@@ -132,7 +132,8 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
 
   private var notificationId = 10
   private var channelId = "audiobookshelf_channel"
-  private var channelName = "Audiobookshelf Channel"
+  // Display name only: the id stays, so Android renames the existing channel and keeps its settings
+  private var channelName = "Audiobookshelf+ Playback"
 
   var currentPlaybackSession: PlaybackSession? = null
   private var initialPlaybackRate: Float? = null

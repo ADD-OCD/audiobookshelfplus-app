@@ -1,6 +1,6 @@
-# Audiobookshelf Plus (unofficial mobile app fork)
+# Audiobookshelf+ (unofficial Android app)
 
-**Plus** is an unofficial fork of the [Audiobookshelf](https://audiobookshelf.org) mobile app,
+**Audiobookshelf+** is an unofficial Android fork of the [Audiobookshelf](https://audiobookshelf.org) mobile app,
 built and maintained independently of the official project. Audiobookshelf itself is a
 self-hosted audiobook and podcast server.
 
