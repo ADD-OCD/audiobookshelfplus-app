@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 
 /** Shared process owner used by the foreground service and the Capacitor bridge. */
 object DownloadServiceHost {
-  enum class ExistingDownloadResult { NOT_FOUND, ACTIVE, RETRIED, SERVICE_START_FAILED }
+  enum class ExistingDownloadResult { NOT_FOUND, ACTIVE, RETRIED, SERVICE_START_FAILED, FOLDER_ACCESS }
 
   data class NotificationStrings(
           val preparing: String,
@@ -101,8 +101,13 @@ object DownloadServiceHost {
     scope.launch {
       restoreJob?.join()
       val existing = queue.downloadItemQueue.find { it.id == downloadItemId }
+      val missingFolders = if (existing == null) emptyList() else queue.foldersWithoutAccess(downloadItemId)
       if (existing == null) {
         callback(ExistingDownloadResult.NOT_FOUND)
+      } else if (missingFolders.isNotEmpty()) {
+        // Retrying can only fail again until the user re-selects the folder, so the item stays as it is
+        AbsLogger.info(TAG, "Retry of $downloadItemId refused: no access to ${missingFolders.joinToString()}")
+        callback(ExistingDownloadResult.FOLDER_ACCESS)
       } else if (!queue.retryDownloadItem(downloadItemId)) {
         callback(ExistingDownloadResult.ACTIVE)
       } else if (startService(context)) {
@@ -110,6 +115,29 @@ object DownloadServiceHost {
       } else {
         callback(ExistingDownloadResult.SERVICE_START_FAILED)
       }
+    }
+  }
+
+  /** Cancel or Clear one download (see [DownloadItemManager.removeDownloadItem]). */
+  fun remove(
+          context: Context,
+          downloadItemId: String,
+          action: String,
+          callback: (DownloadItemManager.RemoveResult) -> Unit
+  ) {
+    val queue = ensure(context)
+    scope.launch {
+      restoreJob?.join()
+      callback(queue.removeDownloadItem(downloadItemId, action))
+    }
+  }
+
+  /** The current download queue, restored items included, for the Downloads screen. */
+  fun snapshot(context: Context, callback: (List<DownloadItem>) -> Unit) {
+    val queue = ensure(context)
+    scope.launch {
+      restoreJob?.join()
+      callback(synchronized(queue) { queue.downloadItemQueue.toList() })
     }
   }
 

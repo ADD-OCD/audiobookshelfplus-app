@@ -41,7 +41,7 @@ data class DownloadItemPart(
   var bytesDownloaded: Long,
   @JsonIgnore var retryCount: Int = 0,
   @JsonIgnore var authRetryCount: Int = 0,
-  @JsonIgnore var waitingForSpace: Boolean = false,
+  var waitingForSpace: Boolean = false,
   @JsonIgnore var reusedExistingFile: Boolean = false
 ) {
   companion object {

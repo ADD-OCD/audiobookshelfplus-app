@@ -11,6 +11,7 @@ import app.absplus.android.managers.DownloadItemManager
 import app.absplus.android.services.DownloadServiceHost
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -66,6 +67,52 @@ class AbsDownloader : Plugin() {
     call.resolve()
   }
 
+  /** The download queue (active, queued and failed items) for the Downloads screen. */
+  @PluginMethod
+  fun getDownloadQueue(call: PluginCall) {
+    DownloadServiceHost.snapshot(mainActivity) { items ->
+      val array = JSArray()
+      items.forEach { array.put(JSObject(jacksonMapper.writeValueAsString(it))) }
+      call.resolve(JSObject().put("items", array))
+    }
+  }
+
+  /** Retry a stopped download: unfinished files restart from byte 0, finished files are kept. */
+  @PluginMethod
+  fun retryDownload(call: PluginCall) {
+    val downloadItemId = call.getString("downloadItemId") ?: ""
+    AbsLogger.info(tag, "User chose Retry for download $downloadItemId")
+    DownloadServiceHost.retryExisting(mainActivity, downloadItemId) { result ->
+      val errorCode =
+              when (result) {
+                DownloadServiceHost.ExistingDownloadResult.RETRIED -> null
+                DownloadServiceHost.ExistingDownloadResult.NOT_FOUND -> "notFound"
+                DownloadServiceHost.ExistingDownloadResult.ACTIVE -> "active"
+                DownloadServiceHost.ExistingDownloadResult.FOLDER_ACCESS -> "folderAccess"
+                DownloadServiceHost.ExistingDownloadResult.SERVICE_START_FAILED -> "service"
+              }
+      call.resolve(if (errorCode == null) JSObject() else JSObject().put("errorCode", errorCode))
+    }
+  }
+
+  /** Cancel (active or queued) or Clear (failed) one download; see DownloadControls for what is deleted. */
+  @PluginMethod
+  fun removeDownload(call: PluginCall) {
+    val downloadItemId = call.getString("downloadItemId") ?: ""
+    val action = if (call.getString("action") == "clear") "Clear" else "Cancel"
+    AbsLogger.info(tag, "User chose $action for download $downloadItemId")
+    DownloadServiceHost.remove(mainActivity, downloadItemId, action) { result ->
+      val errorCode =
+              when (result) {
+                DownloadItemManager.RemoveResult.REMOVED -> null
+                DownloadItemManager.RemoveResult.NOT_FOUND -> "notFound"
+                DownloadItemManager.RemoveResult.FINISHING -> "finishing"
+                DownloadItemManager.RemoveResult.MOVING -> "moving"
+              }
+      call.resolve(if (errorCode == null) JSObject() else JSObject().put("errorCode", errorCode))
+    }
+  }
+
   /** Replays restored queue items when the frontend subscribes to download events. */
   @PluginMethod(returnType = PluginMethod.RETURN_NONE)
   override fun addListener(call: PluginCall) {
@@ -95,6 +142,8 @@ class AbsDownloader : Plugin() {
         }
         DownloadServiceHost.ExistingDownloadResult.SERVICE_START_FAILED ->
                 call.resolve(JSObject("{\"error\":\"Unable to start the Android download service\"}"))
+        DownloadServiceHost.ExistingDownloadResult.FOLDER_ACCESS ->
+                call.resolve(JSObject().put("error", "Folder access lost: re-select the download folder to retry").put("errorCode", "folderAccess"))
         DownloadServiceHost.ExistingDownloadResult.NOT_FOUND -> {
           apiHandler.getLibraryItemWithProgress(libraryItemId, episodeId) { libraryItem ->
             if (libraryItem == null) {

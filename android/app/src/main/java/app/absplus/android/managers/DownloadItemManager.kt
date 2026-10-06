@@ -2,6 +2,7 @@ package app.absplus.android.managers
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.os.StatFs
 import androidx.documentfile.provider.DocumentFile
 import com.anggrayudi.storage.SimpleStorage
@@ -41,7 +42,8 @@ class DownloadItemManager(
   private val lastPersistTime = mutableMapOf<String, Long>()
   private val finalizingItems = mutableSetOf<String>()
   private val refreshingServerIds = mutableSetOf<String>()
-  private val apiHandler = ApiHandler(context)
+  // Lazy: only token refresh needs it, and building it opens the Android keystore
+  private val apiHandler by lazy { ApiHandler(context) }
   private var watcherRunning = false
   private val jacksonMapper =
           jacksonObjectMapper()
@@ -93,6 +95,10 @@ class DownloadItemManager(
         return@forEach
       }
       var resetFailed = false
+      // A terminal failure keeps its reason after a restart (e.g. lost folder access), so the
+      // Downloads screen still offers the right recovery instead of a generic failure
+      // (by part id: parts are data classes whose hash changes when they are reset)
+      val failures = item.downloadItemParts.associate { it.id to (it.permissionLost to it.failureReason) }
       item.downloadItemParts.forEach { part ->
         if (part.moved) return@forEach
         if (!resetPartForFreshDownload(part)) resetFailed = true
@@ -102,7 +108,13 @@ class DownloadItemManager(
         item.stagingCleanupAt = null
       }
       if (item.terminalFailureAt != null) {
-        item.downloadItemParts.filter { !it.moved }.forEach { it.failed = true }
+        item.downloadItemParts.filter { !it.moved }.forEach { part ->
+          part.failed = true
+          failures[part.id]?.let { (permissionLost, reason) ->
+            part.permissionLost = permissionLost
+            part.failureReason = reason
+          }
+        }
       }
       downloadItemQueue.add(item)
       if (item.terminalFailureAt != null) IncompleteDownloadCleanup.schedule(context, item)
@@ -123,11 +135,22 @@ class DownloadItemManager(
     notifyQueueChanged()
   }
 
+  /** Names of device folders the item can't write to any more (see [DownloadControls.foldersWithoutAccess]). */
+  @Synchronized
+  fun foldersWithoutAccess(downloadItemId: String): List<String> {
+    val item = downloadItemQueue.find { it.id == downloadItemId } ?: return emptyList()
+    return DownloadControls.foldersWithoutAccess(item) { hasFolderAccess(item) }
+  }
+
   @Synchronized
   fun retryDownloadItem(downloadItemId: String): Boolean {
     val item = downloadItemQueue.find { it.id == downloadItemId } ?: return false
-    if (item.downloadItemParts.any { it in currentDownloadItemParts }) return false
-    if (item.isDownloadFinished) return false
+    if (!DownloadControls.canRetry(item) { it in currentDownloadItemParts }) return false
+    val unfinished = item.downloadItemParts.count { !it.moved }
+    AbsLogger.info(
+            tag,
+            "Retry download ${item.id} \"${item.itemTitle}\" (folder ${item.localFolder.name}): restarting $unfinished unfinished file(s) from byte 0, keeping ${item.downloadItemParts.size - unfinished} finished"
+    )
     synchronized(IncompleteDownloadCleanup) {
       var resetFailed = false
       item.downloadItemParts.filter { !it.moved }.forEach { part ->
@@ -154,36 +177,91 @@ class DownloadItemManager(
     notifyQueueChanged()
   }
 
+  enum class RemoveResult { REMOVED, NOT_FOUND, FINISHING, MOVING }
+
+  /**
+   * Cancel (active or queued) or Clear (stopped): stops the item's transfers, drops it from the
+   * queue and deletes what [DownloadControls.removalPlan] allows. [action] is only for the log.
+   */
+  @Synchronized
+  fun removeDownloadItem(downloadItemId: String, action: String): RemoveResult {
+    val item = downloadItemQueue.find { it.id == downloadItemId } ?: return RemoveResult.NOT_FOUND
+    when (DownloadControls.removalRefusal(item, item.id in finalizingItems)) {
+      DownloadControls.Refusal.FINISHING -> return RemoveResult.FINISHING
+      DownloadControls.Refusal.MOVING -> return RemoveResult.MOVING
+      null -> {}
+    }
+    item.downloadItemParts.forEach { part ->
+      // Callbacks of a cancelled transfer ignore parts that are no longer active
+      activeCalls.remove(part.id)?.cancel()
+      currentDownloadItemParts.remove(part)
+      reservations.remove(part.destinationPath)
+    }
+    val plan = DownloadControls.removalPlan(item, ::isUsedByLocalItem)
+    var deleted = 0
+    plan.delete.forEach { path ->
+      val file = File(path)
+      if (file.exists()) {
+        if (file.delete()) deleted++ else AbsLogger.error(tag, "Could not delete ${file.name} of removed download ${item.id}")
+      }
+      // Its now-empty item folder in app storage goes too (never a folder outside the app's own files)
+      file.parentFile?.takeIf {
+        it.path.startsWith(context.filesDir.path) && it != context.filesDir && it.list()?.isEmpty() == true
+      }?.delete()
+    }
+    IncompleteDownloadCleanup.cancel(context, item.id)
+    downloadItemQueue.remove(item)
+    lastPersistTime.remove(item.id)
+    DeviceManager.dbManager.removeDownloadItem(item.id)
+    val state = if (item.downloadItemParts.any { it.permissionLost }) "folder access lost" else if (item.terminalFailureAt != null) "failed" else "in progress"
+    AbsLogger.info(
+            tag,
+            "$action download ${item.id} \"${item.itemTitle}\" (folder ${item.localFolder.name}, was $state): deleted $deleted app-owned file(s), kept ${plan.keptFinishedFiles.size} finished file(s) in the destination"
+    )
+    notifyQueueChanged()
+    return RemoveResult.REMOVED
+  }
+
+  /** Cancels every download that can be removed now (the notification's Cancel). */
   @Synchronized
   fun cancelAll() {
-    activeCalls.values.forEach(InternalDownloadManager.DownloadHandle::cancel)
-    activeCalls.clear()
-    downloadItemQueue.forEach { item ->
-      item.downloadItemParts.forEach { part ->
-        File(part.destinationPath).delete()
-        if (part.moved && !part.reusedExistingFile && part.isInternalStorage) {
-          File(part.finalDestinationPath).delete()
-        } else if (part.moved && !part.reusedExistingFile) {
-          part.completedDestinationUri?.let { uri ->
-            try {
-              DocumentFile.fromSingleUri(context, Uri.parse(uri))?.delete()
-            } catch (e: Exception) {
-              AbsLogger.error(
-                      tag,
-                      "Could not delete cancelled SAF file ${part.filename}: ${e.message}"
-              )
-            }
-          }
-        }
-      }
-      IncompleteDownloadCleanup.cancel(context, item.id)
-      DeviceManager.dbManager.removeDownloadItem(item.id)
-    }
-    currentDownloadItemParts.clear()
-    reservations.clear()
-    downloadItemQueue.clear()
+    downloadItemQueue.map { it.id }.forEach { removeDownloadItem(it, "Cancel all") }
     notifyQueueChanged()
   }
+
+  /**
+   * Whether the app can still write to the item's device folder. SimpleStorage.hasStorageAccess takes
+   * the folder's file path: given the content:// URL it always answered false, so every download into a
+   * device folder failed at once as "Lost access". The persisted tree grant is the fallback for folders
+   * without a resolvable path.
+   */
+  private fun hasFolderAccess(item: DownloadItem): Boolean {
+    if (item.isInternalStorage) return true
+    return try {
+      val uri = Uri.parse(item.localFolder.contentUrl)
+      val path = item.localFolder.absolutePath
+      val granted =
+              (path.isNotEmpty() && SimpleStorage.hasStorageAccess(context, path, true)) ||
+                      context.contentResolver.persistedUriPermissions.any {
+                        it.isWritePermission &&
+                                it.uri == DocumentsContract.buildTreeDocumentUri(uri.authority, DocumentsContract.getTreeDocumentId(uri))
+                      }
+      // A grant outlives its folder: a deleted folder can't be written either
+      granted && DocumentFile.fromTreeUri(context, uri)?.let { it.exists() && it.canWrite() } == true
+    } catch (e: Exception) {
+      AbsLogger.error(tag, "Could not check access to \"${item.localFolder.name}\": ${e.message}")
+      false
+    }
+  }
+
+  /** Whether a saved local item already uses this part's finished file. */
+  private fun isUsedByLocalItem(part: DownloadItemPart): Boolean =
+          DeviceManager.dbManager.getLocalLibraryItems().any { local ->
+            local.localFiles.any { file ->
+              file.absolutePath == part.finalDestinationPath ||
+                      (part.completedDestinationUri != null && file.contentUrl == part.completedDestinationUri)
+            } || local.coverAbsolutePath == part.finalDestinationPath
+          }
 
   @Synchronized
   fun hasWork(): Boolean =
@@ -229,7 +307,7 @@ class DownloadItemManager(
           return@forEach
         }
         if (completeFromExistingInternalCover(item, part)) return@forEach
-        if (!part.isInternalStorage && !SimpleStorage.hasStorageAccess(context, part.localFolderUrl, true)) {
+        if (!part.isInternalStorage && !hasFolderAccess(item)) {
           failPermissionLost(item, part)
           return@forEach
         }
@@ -509,7 +587,7 @@ class DownloadItemManager(
 
   private fun moveDownloadedFile(item: DownloadItem, part: DownloadItemPart) {
     if (part.moved || part.isMoving) return
-    if (!SimpleStorage.hasStorageAccess(context, part.localFolderUrl, true)) {
+    if (!hasFolderAccess(item)) {
       failPermissionLost(item, part)
       return
     }
