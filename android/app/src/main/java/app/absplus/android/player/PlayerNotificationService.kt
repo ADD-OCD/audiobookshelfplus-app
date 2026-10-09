@@ -162,6 +162,13 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   private var isServiceDestroyed = false
   // True while the service is foreground only because of a media-button start, before any media is prepared
   private var isMediaButtonPlaceholderForeground = false
+  // Stops name the latest start id, so a queued start (a key's UP) keeps the service (see ServiceStopper)
+  private val serviceStopper = ServiceStopper { startId -> stopSelfResult(startId) }
+  private val mainHandler = Handler(Looper.getMainLooper())
+  // Releases a placeholder whose key-up never arrived (see MediaButtonLifecycle.KEY_UP_GRACE_MS)
+  private val missingKeyUpRelease = Runnable {
+    if (currentPlaybackSession == null && !isRestoringPlayback) releaseMediaButtonPlaceholderForeground("no key-up received")
+  }
 
   // The following are used for the shake detection
   private var isShakeSensorRegistered: Boolean = false
@@ -203,10 +210,19 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     isStarted = true
+    serviceStopper.onStartCommand(startId)
     DLog.d(tag, "onStartCommand $startId action=${intent?.action}")
 
     if (StickyRestart.isEmptyRestart(intent, currentPlaybackSession != null, isRestoringPlayback)) {
       stopEmptyStickyRestart()
+      return START_NOT_STICKY
+    }
+
+    if (MediaButtonLifecycle.isOrphanForegroundStart(intent, currentPlaybackSession != null, isRestoringPlayback, PlayerNotificationListener.isForegroundService)) {
+      // Android requires startForeground() for this start even though nothing is prepared any more
+      DLog.w(RESTORE_TAG, "Foreground start with nothing prepared - satisfying it and stopping")
+      startMediaButtonPlaceholderForeground()
+      releaseMediaButtonPlaceholderForeground("orphan foreground start")
       return START_NOT_STICKY
     }
 
@@ -255,8 +271,9 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
     }
   }
 
-  // Called once a media button has been handled; drops the placeholder if nothing ended up playing
+  // Called once a media button command has finished; drops the placeholder if nothing ended up playing
   fun onMediaButtonHandled() {
+    mainHandler.removeCallbacks(missingKeyUpRelease)
     if (!isMediaButtonPlaceholderForeground || isRestoringPlayback) return
     if (currentPlaybackSession == null) {
       releaseMediaButtonPlaceholderForeground("nothing to play")
@@ -267,14 +284,23 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
     }
   }
 
+  // Called for the DOWN of a key that acts at UP: keep the placeholder for the UP, but not forever
+  fun onMediaButtonPending() {
+    if (!isMediaButtonPlaceholderForeground) return
+    mainHandler.removeCallbacks(missingKeyUpRelease)
+    mainHandler.postDelayed(missingKeyUpRelease, MediaButtonLifecycle.KEY_UP_GRACE_MS)
+  }
+
   private fun releaseMediaButtonPlaceholderForeground(reason: String) {
     if (!isMediaButtonPlaceholderForeground) return
-    DLog.i(RESTORE_TAG, "Releasing placeholder foreground ($reason)")
+    mainHandler.removeCallbacks(missingKeyUpRelease)
     isMediaButtonPlaceholderForeground = false
     PlayerNotificationListener.isForegroundService = false
     stopForeground(Service.STOP_FOREGROUND_REMOVE)
-    isStarted = false
-    stopSelf()
+    // A newer start (another key event) may already be queued: it keeps the service, and re-enters foreground
+    val stopped = serviceStopper.stop()
+    if (stopped) isStarted = false
+    DLog.i(RESTORE_TAG, "Releasing placeholder foreground ($reason) | stopped=$stopped startId=${serviceStopper.lastStartId}")
   }
 
   @Deprecated("Deprecated in Java")
@@ -312,6 +338,7 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
     DLog.marker("Playback service destroyed")
     DLog.i(RESTORE_TAG, "Player service destroyed | hadSession=${currentPlaybackSession != null} | resumable=${PlaybackRestoreStore.isResumable(this)} | queue=${playlistQueue.size}")
     isServiceDestroyed = true
+    mainHandler.removeCallbacks(missingKeyUpRelease)
     isStarted = false
     isClosed = true
     isMediaButtonPlaceholderForeground = false
@@ -1370,8 +1397,9 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
 
   private fun finishRestore(session: PlaybackSession, playWhenReady: Boolean, playbackRate: Float) {
     isRestoringPlayback = false
-    if (isServiceDestroyed) {
-      DLog.w(RESTORE_TAG, "Service destroyed before restore finished - dropping")
+    if (isServiceDestroyed || serviceStopper.isStopPending) {
+      // Preparing here would start a new service instance that nothing makes foreground
+      DLog.w(RESTORE_TAG, "Service destroyed or stopping before restore finished - dropping")
       return
     }
     if (currentPlaybackSession != null) {
