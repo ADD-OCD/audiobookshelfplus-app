@@ -30,8 +30,8 @@ Items marked **emulator-covered** already pass on an AOSP API 35 emulator (see t
 4. Repeat step 3 in Airplane Mode with a downloaded book.
 5. Repeat step 3 after the process is gone. On Samsung, wait for it to be killed or use `adb shell am kill`.
 6. **Wired headset button, and Bluetooth Play, after step 2.**
-   - Known pre-existing defect, found on the emulator during the upstream v0.14.2-beta synchronization: with no player service running, `KEYCODE_MEDIA_PLAY` and `KEYCODE_HEADSETHOOK` do not restore the session. They are handled on key-up, but the key-down start command already releases the placeholder foreground and stops the service.
-   - `KEYCODE_MEDIA_PLAY_PAUSE` (the widget, and many Bluetooth devices) works.
+   - `KEYCODE_MEDIA_PLAY`, `KEYCODE_HEADSETHOOK` and `KEYCODE_MEDIA_PLAY_PAUSE` must all restore the session, with the service gone and with the process killed. Fixed on `plus` after v0.15.1: these keys act on key-up, and the key-down no longer releases the placeholder foreground or stops the service before the key-up arrives (`MediaButtonLifecycle`). Before the fix, Play and Headset Hook did nothing there and could crash the app with `ForegroundServiceDidNotStartInTimeException`.
+   - Check `adb logcat -b crash` stays empty and no "still waiting for start foreground" line appears.
    - Record which key code each real headset or car kit sends (`adb logcat | grep handleCallMediaButton`) and whether it restores.
 7. Close the player with the X, then press widget Play. Nothing restores.
 8. Force stop in Android Settings, then press Play. Nothing starts. Reopen the app normally.
@@ -59,6 +59,7 @@ Items marked **emulator-covered** already pass on an AOSP API 35 emulator (see t
 
 1. View, Mark, Save (system file picker), Share and Clear all work.
 2. An exported log contains no server host, username, token, device path or `content://` URI.
+3. Raw `adb logcat` (debug build included) contains no token, `Authorization`/`x-refresh-token` header, refresh-token cookie, server connection config or username. Capacitor's own logging is off (`loggingBehavior: "none"`), and the app's logcat copies (`DLog`, `AbsLogger`) go through the same sanitizer as the diagnostic log.
 
 ## 8. Languages and UI
 

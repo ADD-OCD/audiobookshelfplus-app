@@ -101,7 +101,10 @@ be) in the official app.
   (streamed books need to reach your server). Reopening the app reconnects the player screen to
   whatever is already playing. Closing the player with its X ends the session, so it isn't
   brought back later. (Android's *Force stop* is still a hard stop — open the app normally after
-  using it.)
+  using it.) Since v0.15.1, on `plus` for the next release: a headset's Play or call button and a
+  Bluetooth *Play* now restore a paused book reliably after the player was closed in the
+  background; before, only Play/Pause did, and those buttons could do nothing or, rarely, make the
+  app close.
 - **In-app diagnostics** — Settings → Diagnostics can keep a diagnostic log on the phone to help
   troubleshoot problems without a computer or ADB. Choose *Normal*, *Debug* or *Verbose*; the log
   keeps recording while the app is closed or playing in the background, combines the app's
@@ -110,7 +113,9 @@ be) in the official app.
   Android's normal Save As screen, *Share* it, *Mark* the moment something goes wrong with a note,
   or *Clear* it. Logs are sanitized before they're stored or exported — passwords, tokens, server
   addresses and file locations are redacted — but please look over a log before sharing it
-  publicly.
+  publicly. Since v0.15.1, on `plus` for the next release: Android's own system log (what
+  `adb logcat` and bug reports show) no longer receives sign-in tokens, server connection details
+  or your username, including in debug builds.
 - **LLAMA theme** — an optional, original late-1990s audio-equipment theme (Settings → Theme): a
   deep navy chassis, a full player with physical-style transport and utility keys, amber key
   legends and progress, and green readouts for speed, sleep timer and playback time. The home
