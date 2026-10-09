@@ -145,7 +145,18 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
 
   override fun onMediaButtonEvent(mediaButtonEvent: Intent): Boolean {
     val handled = handleCallMediaButton(mediaButtonEvent)
-    playerNotificationService.onMediaButtonHandled()
+    val keyEvent = if (Build.VERSION.SDK_INT >= 33) {
+      mediaButtonEvent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
+    } else {
+      @Suppress("DEPRECATION")
+      mediaButtonEvent.getParcelableExtra(Intent.EXTRA_KEY_EVENT)
+    }
+    // The DOWN of a key that acts at UP has not finished its command: the service must wait for the UP
+    if (MediaButtonLifecycle.completesCommand(keyEvent?.action, keyEvent?.keyCode)) {
+      playerNotificationService.onMediaButtonHandled()
+    } else {
+      playerNotificationService.onMediaButtonPending()
+    }
     return handled
   }
 

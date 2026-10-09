@@ -89,6 +89,13 @@ Milestones on `plus` that weren't distributed builds, so they have no `versionCo
 - **Physical-device validation was pending at the time of this entry.** It was planned for a Samsung Galaxy S22 Ultra; that is historical. The current physical test device is the Galaxy S26 Ultra (`docs/device-regression-checklist.md`).
 - The emulator found a **pre-existing** issue: with no player service running, `KEYCODE_MEDIA_PLAY` and `KEYCODE_HEADSETHOOK` don't restore the last session, while `KEYCODE_MEDIA_PLAY_PAUSE` (the widget) does. It is recorded in `docs/device-regression-checklist.md` (section 3, item 6). It must be verified on physical hardware before any change is made.
 
+**Media-button cold start and logcat credential hardening (2026-10-09).** Merged from `fix/s22-reliability-security-final`; not a distributed build, so `versionCode` stays 131 and 132 is still unused.
+
+- Fixes the pre-existing defect recorded above: `KEYCODE_MEDIA_PLAY` and `KEYCODE_HEADSETHOOK` now restore a paused session with no player service, and the race that could crash with `ForegroundServiceDidNotStartInTimeException` is gone. Stops are start-id aware, and a key-down that acts on key-up keeps the placeholder foreground for its key-up (with a 5 s bound).
+- Raw logcat no longer receives credentials. Capacitor's own logging is off (`loggingBehavior: "none"`); it had logged plugin call data with `Authorization`/`x-refresh-token` headers, server connection configs, console output and the refresh-token cookie in debug builds. The app's logcat copies are sanitized, and device data and server configs are logged only as summaries.
+- Automated results: JS 235/235, Kotlin 169/169, `lintDebug` 0 errors / 108 warnings, `lintRelease` 0 errors / 103 warnings, debug build and release Kotlin compile passed.
+- Physical validation on a Samsung Galaxy S22 Ultra (Android 16, One UI 8.0) with `adb` key events: Play, Headset Hook and Play/Pause cold starts 10/10 each, 9/9 after process death, 4/4 offline, plus queue, widget, notification, lock screen, Close and Force stop; no crashes. A final smoke test passed and found no credentials in raw logcat or in the diagnostic export. Real wired-headset, Bluetooth and car-kit buttons were not part of that S22 testing.
+
 ## Announcements
 
 Audiobookshelf+ has no in-app "what's new"/announcements screen (checked during the v0.14.0

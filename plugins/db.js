@@ -1,11 +1,12 @@
 import { AbsDatabase } from './capacitor/AbsDatabase'
+import { deviceDataSummary, serverConnectionConfigSummary } from '@/utils/logSummary'
 
 class DbService {
   constructor() {}
 
   getDeviceData() {
     return AbsDatabase.getDeviceData().then((data) => {
-      console.log('Loaded device data', JSON.stringify(data))
+      console.log('Loaded device data', deviceDataSummary(data))
       return data
     })
   }
@@ -32,7 +33,7 @@ class DbService {
 
   setServerConnectionConfig(serverConnectionConfig) {
     return AbsDatabase.setCurrentServerConnectionConfig(serverConnectionConfig).then((data) => {
-      console.log('Set server connection config', JSON.stringify(data))
+      console.log('Set server connection config', serverConnectionConfigSummary(data))
       return data
     })
   }
