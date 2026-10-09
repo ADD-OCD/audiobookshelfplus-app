@@ -423,12 +423,13 @@ object DiagnosticLog {
  * persists to the diagnostic log when the level allows (d/i/w/e at DEBUG+, v at VERBOSE).
  */
 object DLog {
-  fun v(tag: String, msg: String): Int { DiagnosticLog.write('V', tag, msg, DiagnosticLog.Persist.VERBOSE); return Log.v(tag, msg) }
-  fun d(tag: String, msg: String): Int { DiagnosticLog.write('D', tag, msg, DiagnosticLog.Persist.DEBUG); return Log.d(tag, msg) }
-  fun i(tag: String, msg: String): Int { DiagnosticLog.write('I', tag, msg, DiagnosticLog.Persist.DEBUG); return Log.i(tag, msg) }
-  fun w(tag: String, msg: String): Int { DiagnosticLog.write('W', tag, msg, DiagnosticLog.Persist.DEBUG); return Log.w(tag, msg) }
-  fun w(tag: String, msg: String, tr: Throwable): Int { DiagnosticLog.write('W', tag, "$msg\n${Log.getStackTraceString(tr)}", DiagnosticLog.Persist.DEBUG); return Log.w(tag, msg, tr) }
-  fun e(tag: String, msg: String): Int { DiagnosticLog.write('E', tag, msg, DiagnosticLog.Persist.DEBUG); return Log.e(tag, msg) }
+  // The logcat copy is sanitized like the diagnostic log: raw logcat is readable over adb and in bug reports
+  fun v(tag: String, msg: String): Int { DiagnosticLog.write('V', tag, msg, DiagnosticLog.Persist.VERBOSE); return Log.v(tag, DiagnosticLog.safeSanitize(msg)) }
+  fun d(tag: String, msg: String): Int { DiagnosticLog.write('D', tag, msg, DiagnosticLog.Persist.DEBUG); return Log.d(tag, DiagnosticLog.safeSanitize(msg)) }
+  fun i(tag: String, msg: String): Int { DiagnosticLog.write('I', tag, msg, DiagnosticLog.Persist.DEBUG); return Log.i(tag, DiagnosticLog.safeSanitize(msg)) }
+  fun w(tag: String, msg: String): Int { DiagnosticLog.write('W', tag, msg, DiagnosticLog.Persist.DEBUG); return Log.w(tag, DiagnosticLog.safeSanitize(msg)) }
+  fun w(tag: String, msg: String, tr: Throwable): Int { DiagnosticLog.write('W', tag, "$msg\n${Log.getStackTraceString(tr)}", DiagnosticLog.Persist.DEBUG); return Log.w(tag, DiagnosticLog.safeSanitize(msg), tr) }
+  fun e(tag: String, msg: String): Int { DiagnosticLog.write('E', tag, msg, DiagnosticLog.Persist.DEBUG); return Log.e(tag, DiagnosticLog.safeSanitize(msg)) }
   fun e(tag: String, msg: String, tr: Throwable): Int { DiagnosticLog.write('E', tag, "$msg\n${Log.getStackTraceString(tr)}", DiagnosticLog.Persist.DEBUG); return Log.e(tag, msg, tr) }
   fun marker(text: String) = DiagnosticLog.marker(text)
 }

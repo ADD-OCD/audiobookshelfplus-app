@@ -67,12 +67,13 @@ class AbsLogger : Plugin() {
       val absLog = AbsLog(id = UUID.randomUUID().toString(), tag, level, message, timestamp = System.currentTimeMillis())
       onLogEmitter?.let { it(absLog) }
     }
+    // The logcat copy is sanitized like the diagnostic log (server names carry the username)
     fun info(tag:String, message:String) {
-      Log.i("AbsLogger", message)
+      Log.i("AbsLogger", DiagnosticLog.safeSanitize(message))
       log("info", tag, message)
     }
     fun error(tag:String, message:String) {
-      Log.e("AbsLogger", message)
+      Log.e("AbsLogger", DiagnosticLog.safeSanitize(message))
       log("error", tag, message)
     }
   }
