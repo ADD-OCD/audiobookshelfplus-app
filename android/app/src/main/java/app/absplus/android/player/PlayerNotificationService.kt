@@ -9,14 +9,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.graphics.ImageDecoder
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.net.*
 import android.net.wifi.WifiManager
 import android.os.*
 import android.os.PowerManager
-import android.provider.MediaStore
 import android.provider.Settings
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaDescriptionCompat
@@ -493,23 +491,15 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
                   return MediaDescriptionCompat.Builder().build()
                 }
 
-                val coverUri = currentPlaybackSession!!.getCoverUri(ctx)
-
-
                 var bitmap: Bitmap? = null
                 // Local covers get bitmap
                 // Note: In Android Auto for local cover images, setting the icon uri to a local path does not work (cover is blank)
                 // so we create and set the bitmap here instead of AbMediaDescriptionAdapter
                 if (currentPlaybackSession!!.localLibraryItem?.coverContentUrl != null) {
-                  bitmap =
-                    if (Build.VERSION.SDK_INT < 28) {
-                      MediaStore.Images.Media.getBitmap(ctx.contentResolver, coverUri)
-                    } else {
-                      val source: ImageDecoder.Source =
-                        ImageDecoder.createSource(ctx.contentResolver, coverUri)
-                      ImageDecoder.decodeBitmap(source)
-                    }
+                  bitmap = CoverArt.decodeLocal(ctx, currentPlaybackSession!!.getCoverUri(ctx), "media session")
                 }
+                // The default artwork when a local cover can't be decoded
+                val coverUri = currentPlaybackSession!!.getDisplayCoverUri(ctx)
 
                 // Fix for local images crashing on Android 11 for specific devices
                 // https://stackoverflow.com/questions/64186578/android-11-mediastyle-notification-crash/64232958#64232958

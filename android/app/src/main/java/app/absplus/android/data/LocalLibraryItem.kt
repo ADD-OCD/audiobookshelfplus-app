@@ -2,21 +2,15 @@ package app.absplus.android.data
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.ImageDecoder
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
 import android.support.v4.media.MediaDescriptionCompat
 import android.util.Log
-import androidx.core.content.FileProvider
-import androidx.core.net.toFile
 import androidx.media.utils.MediaConstants
-import app.absplus.android.BuildConfig
-import app.absplus.android.R
 import app.absplus.android.device.DeviceManager
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import app.absplus.android.player.CoverArt
 import app.absplus.android.player.PLAYMETHOD_LOCAL
 import java.io.File
 import java.util.*
@@ -51,10 +45,7 @@ class LocalLibraryItem(
 
   @JsonIgnore
   fun getCoverUri(ctx:Context): Uri {
-    if (coverContentUrl?.startsWith("file:") == true) {
-      return FileProvider.getUriForFile(ctx, "${BuildConfig.APPLICATION_ID}.fileprovider", Uri.parse(coverContentUrl).toFile())
-    }
-    return if (coverContentUrl != null) Uri.parse(coverContentUrl) else Uri.parse("android.resource://${BuildConfig.APPLICATION_ID}/" + R.drawable.icon)
+    return coverContentUrl?.let { CoverArt.localCoverUri(ctx, it) } ?: CoverArt.defaultUri()
   }
 
   @JsonIgnore
@@ -143,12 +134,7 @@ class LocalLibraryItem(
 
     var bitmap:Bitmap? = null
     if (coverContentUrl != null) {
-      bitmap = if (Build.VERSION.SDK_INT < 28) {
-        MediaStore.Images.Media.getBitmap(ctx.contentResolver, coverUri)
-      } else {
-        val source: ImageDecoder.Source = ImageDecoder.createSource(ctx.contentResolver, coverUri)
-        ImageDecoder.decodeBitmap(source)
-      }
+      bitmap = CoverArt.decodeLocal(ctx, coverUri, "browse")
     }
 
     val extras = Bundle()

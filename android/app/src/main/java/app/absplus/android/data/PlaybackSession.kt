@@ -2,13 +2,8 @@ package app.absplus.android.data
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.ImageDecoder
 import android.net.Uri
-import android.os.Build
-import android.provider.MediaStore
 import android.support.v4.media.MediaMetadataCompat
-import androidx.core.content.FileProvider
-import androidx.core.net.toFile
 import app.absplus.android.BuildConfig
 import app.absplus.android.R
 import app.absplus.android.device.DeviceManager
@@ -24,6 +19,8 @@ import com.google.android.gms.common.images.WebImage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 class PlaybackSession(
@@ -165,20 +162,7 @@ class PlaybackSession(
 
   @JsonIgnore
   fun getCoverUri(ctx: Context): Uri {
-    if (localLibraryItem?.coverContentUrl != null) {
-      var coverUri = Uri.parse(localLibraryItem?.coverContentUrl.toString())
-      if (coverUri.toString().startsWith("file:")) {
-        coverUri =
-                FileProvider.getUriForFile(
-                        ctx,
-                        "${BuildConfig.APPLICATION_ID}.fileprovider",
-                        coverUri.toFile()
-                )
-      }
-
-      return coverUri
-              ?: Uri.parse("android.resource://${BuildConfig.APPLICATION_ID}/" + R.drawable.icon)
-    }
+    localLibraryItem?.coverContentUrl?.let { return CoverArt.localCoverUri(ctx, it) }
 
     if (coverPath == null)
             return Uri.parse("android.resource://${BuildConfig.APPLICATION_ID}/" + R.drawable.icon)
@@ -213,9 +197,16 @@ class PlaybackSession(
   /**
    * Builds the current session metadata, including the cover art bitmap if it has already been resolved.
    */
+  /** The cover to show: the default artwork while a local cover can't be decoded (see CoverArt). */
+  @JsonIgnore
+  fun getDisplayCoverUri(ctx: Context): Uri {
+    val coverUri = getCoverUri(ctx)
+    return if (localLibraryItem?.coverContentUrl != null && CoverArt.isUnavailable(coverUri)) CoverArt.defaultUri() else coverUri
+  }
+
   @JsonIgnore
   fun getMediaMetadataCompat(ctx: Context): MediaMetadataCompat {
-    val coverUri = getCoverUri(ctx)
+    val coverUri = getDisplayCoverUri(ctx)
 
     val metadataBuilder =
             MediaMetadataCompat.Builder()
@@ -248,10 +239,11 @@ class PlaybackSession(
   }
 
   /**
-   * Resolves the cover art bitmap (local covers are decoded synchronously, server-side covers
-   * are fetched asynchronously) and calls `onArtResolved` once it's available
+   * Resolves the cover art bitmap off the main thread and calls `onArtResolved` once it's settled.
+   * A local cover that can't be decoded leaves no bitmap (the metadata then shows the default
+   * artwork, see getDisplayCoverUri) and never throws into playback preparation.
    *
-   * Returns the Job for the async fetch, or `null` if the bitmap was resolved synchronously.
+   * Returns the Job for the async work.
    */
   @JsonIgnore
   fun resolveCoverBitmapAsync(
@@ -261,18 +253,11 @@ class PlaybackSession(
   ): Job? {
     val coverUri = getCoverUri(ctx)
 
-    // Local covers get bitmap synchronously, no async fetch needed
     if (localLibraryItem?.coverContentUrl != null) {
-      resolvedCoverBitmap =
-              if (Build.VERSION.SDK_INT < 28) {
-                MediaStore.Images.Media.getBitmap(ctx.contentResolver, coverUri)
-              } else {
-                val source: ImageDecoder.Source =
-                        ImageDecoder.createSource(ctx.contentResolver, coverUri)
-                ImageDecoder.decodeBitmap(source)
-              }
-      onArtResolved()
-      return null
+      return coroutineScope.launch {
+        resolvedCoverBitmap = withContext(Dispatchers.IO) { CoverArt.decodeLocal(ctx, coverUri, "session") }
+        onArtResolved()
+      }
     }
 
     // Server-side cover: resolve the art bitmap async
