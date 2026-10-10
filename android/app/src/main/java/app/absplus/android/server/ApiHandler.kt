@@ -558,6 +558,36 @@ class ApiHandler(var ctx:Context) {
     fetchPage(0)
   }
 
+  fun getLibraryItemsPage(libraryId: String, page: Int, limit: Int, cb: (LibraryItemsPage?) -> Unit) {
+    getRequest("/api/libraries/$libraryId/items?limit=$limit&page=$page&minified=1", null, null) {
+      if (it.has("error")) {
+        AbsLogger.error(tag, "getLibraryItemsPage: ${it.getString("error") ?: "request failed"}")
+        cb(null)
+        return@getRequest
+      }
+      val result = try {
+        val items = mutableListOf<LibraryItem>()
+        var rawCount = 0
+        if (it.has("results")) {
+          val array = it.getJSONArray("results")
+          rawCount = array.length()
+          for (i in 0 until array.length()) {
+            try {
+              items.add(jacksonMapper.readValue<LibraryItem>(array.get(i).toString()))
+            } catch (e: Exception) {
+              AbsLogger.error(tag, "getLibraryItemsPage: skipping unparsable item at index $i: ${e.message}")
+            }
+          }
+        }
+        LibraryItemsPage(items, it.optInt("total", rawCount), it.optInt("page", page), it.optInt("limit", limit), rawCount)
+      } catch (e: Exception) {
+        AbsLogger.error(tag, "getLibraryItemsPage: failed to parse response: ${e.message}")
+        null
+      }
+      cb(result)
+    }
+  }
+
   fun getLibrarySeries(libraryId:String, cb: (List<LibrarySeriesItem>) -> Unit) {
     Log.d(tag, "Getting series")
     getRequest("/api/libraries/$libraryId/series?minified=1&sort=name&limit=10000", null, null) {
