@@ -105,6 +105,10 @@ be) in the official app.
   Bluetooth *Play* now restore a paused book reliably after the player was closed in the
   background; before, only Play/Pause did, and those buttons could do nothing or, rarely, make the
   app close.
+- **Downloaded books with a broken cover keep playing** — since v0.15.1, on `plus` for the next
+  release: if a downloaded book's cover image is missing, unreadable or damaged, the book still
+  plays and resumes normally, and the notification and lock screen show the Audiobookshelf+
+  artwork instead. Before, starting or resuming such a book could make the app close.
 - **In-app diagnostics** — Settings → Diagnostics can keep a diagnostic log on the phone to help
   troubleshoot problems without a computer or ADB. Choose *Normal*, *Debug* or *Verbose*; the log
   keeps recording while the app is closed or playing in the background, combines the app's

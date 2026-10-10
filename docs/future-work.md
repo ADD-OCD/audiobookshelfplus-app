@@ -175,7 +175,11 @@ Still upstream-shaped and left as is: concurrent page fetches after a reset can 
 
 ## Missing local cover crashes playback
 
-Pre-existing, inherited from upstream (`34710dbd`), and deliberately left out of the v0.15.1 hotfix. When a downloaded book's recorded cover file is missing or unreadable (deleted, renamed, or its device folder lost), `PlaybackSession.resolveCoverBitmapAsync` decodes it with `ImageDecoder` and no error handling, so starting that book crashes the app. This was reproduced on the emulator by hiding the cover file of a downloaded book. The fix is to catch the decode failure and fall back to no artwork, as the server-cover path already does.
+**Fixed on `plus` after v0.15.1** (`575c330d`; see "Local artwork crash hardening" in `docs/release-process.md`). A local cover that can't be decoded now falls back to the default artwork through `player/CoverArt.kt`. Kept here for history. Still not checked on a device: a revoked folder grant (simulated in unit tests) and Android Auto browsing.
+
+## Raw local paths in `cleanLocalLibraryItems` logs
+
+Pre-existing, inherited from upstream. Found during the local artwork fix and deliberately left out of it. `DbManager.cleanLocalLibraryItems` runs when the app UI starts and logs with plain `Log.d`, not `DLog`, so its lines skip the sanitizer. They reach raw logcat with a removed local file's absolute path, a removed cover's path and the book title. They don't reach the in-app diagnostic log. A fix would route these lines through `DLog` (or log the item id instead of the path), checked the same way as `docs/device-regression-checklist.md` section 7.
 
 ## Widget artwork after a failed load
 

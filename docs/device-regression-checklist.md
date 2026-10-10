@@ -42,6 +42,7 @@ Items marked **emulator-covered** already pass on an AOSP API 35 emulator (see t
 2. Samsung's Now Bar or media card (One UI) matches the playing book, and its controls work.
 3. Bluetooth disconnect pauses playback, and a reconnect doesn't resume it on its own.
 4. Android Auto, if available: browsing and playback start.
+5. A downloaded book whose cover file is missing or damaged still restores and plays. Rename or truncate the cover after closing the app, then restore with the widget or a media key. The notification and lock screen show the Audiobookshelf+ artwork, and `adb logcat -b crash` stays empty. Fixed on `plus` after v0.15.1 (`CoverArt`).
 
 ## 5. Downloads
 
