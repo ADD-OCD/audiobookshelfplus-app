@@ -6,6 +6,8 @@ import app.absplus.android.device.DeviceManager
 import app.absplus.android.models.DownloadItem
 import app.absplus.android.models.DownloadItemPart
 import app.absplus.android.server.ApiHandler
+import app.absplus.android.managers.AutoDownloadManager
+import app.absplus.android.managers.AutoDownloadStore
 import app.absplus.android.managers.DownloadItemManager
 import app.absplus.android.managers.LibraryItemDownloadStarter
 import app.absplus.android.services.DownloadServiceHost
@@ -17,6 +19,11 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 @CapacitorPlugin(name = "AbsDownloader")
 class AbsDownloader : Plugin() {
@@ -140,7 +147,7 @@ class AbsDownloader : Plugin() {
           call.resolve(JSObject("{\"error\":\"Download already started for this media entity\"}"))
         }
         DownloadServiceHost.ExistingDownloadResult.SERVICE_START_FAILED ->
-                call.resolve(JSObject("{\"error\":\"Unable to start the Android download service\"}"))
+                call.resolve(JSObject().put("error", DownloadServiceHost.SERVICE_START_FAILED_MESSAGE))
         DownloadServiceHost.ExistingDownloadResult.FOLDER_ACCESS ->
                 call.resolve(JSObject().put("error", "Folder access lost: re-select the download folder to retry").put("errorCode", "folderAccess"))
         DownloadServiceHost.ExistingDownloadResult.NOT_FOUND -> {
@@ -171,6 +178,78 @@ class AbsDownloader : Plugin() {
             }
           }
         }
+      }
+    }
+  }
+
+  @OptIn(DelicateCoroutinesApi::class)
+  @PluginMethod
+  fun checkAutoDownloads(call: PluginCall) {
+    GlobalScope.launch(Dispatchers.IO) {
+      try {
+        val status = AutoDownloadManager.startCheck(mainActivity, AutoDownloadManager.Trigger.APP)
+        call.resolve(JSObject().put("status", status.jsValue))
+      } catch (e: Exception) {
+        AbsLogger.error(tag, "checkAutoDownloads failed (${e.javaClass.simpleName}: ${e.message})")
+        call.reject(e.message ?: "checkAutoDownloads failed")
+      }
+    }
+  }
+
+  @OptIn(DelicateCoroutinesApi::class)
+  @PluginMethod
+  fun getPodcastAutoDownload(call: PluginCall) {
+    val libraryItemId = call.getString("libraryItemId")
+    if (libraryItemId.isNullOrBlank()) return call.reject("libraryItemId is required")
+    val serverConfigId = DeviceManager.serverConnectionConfig?.id ?: return call.reject("No active server connection")
+    GlobalScope.launch(Dispatchers.IO) {
+      try {
+        val entry = AutoDownloadStore.get(serverConfigId, libraryItemId)
+        call.resolve(JSObject().put("enabled", entry.enabled).put("keepCount", entry.keepCount ?: JSONObject.NULL))
+      } catch (e: Exception) {
+        AbsLogger.error(tag, "getPodcastAutoDownload failed (${e.javaClass.simpleName}: ${e.message})")
+        call.reject(e.message ?: "getPodcastAutoDownload failed")
+      }
+    }
+  }
+
+  @OptIn(DelicateCoroutinesApi::class)
+  @PluginMethod
+  fun setPodcastAutoDownload(call: PluginCall) {
+    val libraryItemId = call.getString("libraryItemId")
+    if (libraryItemId.isNullOrBlank()) return call.reject("libraryItemId is required")
+    val enabled = call.getString("enabled")
+    if (enabled != PodcastAutoDownloadEntry.ENABLED_DEFAULT && enabled != PodcastAutoDownloadEntry.ENABLED_ON && enabled != PodcastAutoDownloadEntry.ENABLED_OFF) {
+      return call.reject("enabled must be DEFAULT, ON or OFF")
+    }
+    val rawKeepCount = call.data.opt("keepCount")
+    val keepCount: Int? = when {
+      rawKeepCount == null || rawKeepCount == JSONObject.NULL -> null
+      rawKeepCount !is Number -> return call.reject("keepCount must be a number or null")
+      rawKeepCount.toDouble() != Math.rint(rawKeepCount.toDouble()) -> return call.reject("keepCount must be an integer")
+      rawKeepCount.toDouble() < 0 || rawKeepCount.toDouble() > 999 -> return call.reject("keepCount must be between 0 and 999")
+      else -> rawKeepCount.toInt()
+    }
+    val serverConfigId = DeviceManager.serverConnectionConfig?.id ?: return call.reject("No active server connection")
+    GlobalScope.launch(Dispatchers.IO) {
+      try {
+        AutoDownloadStore.setSettings(serverConfigId, libraryItemId, enabled, keepCount)
+        call.resolve()
+      } catch (e: Exception) {
+        AbsLogger.error(tag, "setPodcastAutoDownload failed (${e.javaClass.simpleName}: ${e.message})")
+        call.reject(e.message ?: "setPodcastAutoDownload failed")
+        return@launch
+      }
+      try {
+        val settings = DeviceManager.deviceData.deviceSettings ?: DeviceSettings.default()
+        val applies = enabled == PodcastAutoDownloadEntry.ENABLED_ON ||
+                (enabled == PodcastAutoDownloadEntry.ENABLED_DEFAULT && settings.autoDownloadAllPodcasts)
+        if (settings.autoDownloadEnabled && applies) {
+          val status = AutoDownloadManager.startCheck(mainActivity, AutoDownloadManager.Trigger.APP)
+          android.util.Log.d(tag, "Auto download check after settings change: ${status.jsValue}")
+        }
+      } catch (e: Exception) {
+        AbsLogger.error(tag, "Auto download check after settings change failed (${e.javaClass.simpleName}: ${e.message})")
       }
     }
   }

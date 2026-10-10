@@ -19,6 +19,8 @@ import kotlinx.coroutines.launch
 
 /** Shared process owner used by the foreground service and the Capacitor bridge. */
 object DownloadServiceHost {
+  const val SERVICE_START_FAILED_MESSAGE = "Unable to start the Android download service"
+
   enum class ExistingDownloadResult { NOT_FOUND, ACTIVE, RETRIED, SERVICE_START_FAILED, FOLDER_ACCESS }
 
   data class NotificationStrings(
@@ -88,7 +90,7 @@ object DownloadServiceHost {
       restoreJob?.join()
       queue.addDownloadItem(item)
       if (startService(context)) callback(null)
-      else callback("Unable to start the Android download service")
+      else callback(SERVICE_START_FAILED_MESSAGE)
     }
   }
 
@@ -129,6 +131,18 @@ object DownloadServiceHost {
     scope.launch {
       restoreJob?.join()
       callback(queue.removeDownloadItem(downloadItemId, action))
+    }
+  }
+
+  fun queuedState(
+          context: Context,
+          downloadItemId: String,
+          callback: (DownloadItemManager.QueuedState) -> Unit
+  ) {
+    val queue = ensure(context)
+    scope.launch {
+      restoreJob?.join()
+      callback(queue.queuedState(downloadItemId))
     }
   }
 
