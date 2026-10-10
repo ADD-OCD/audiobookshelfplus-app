@@ -11,6 +11,7 @@ import app.absplus.android.managers.AutoDownloadStore
 import app.absplus.android.managers.DownloadItemManager
 import app.absplus.android.managers.LibraryItemDownloadStarter
 import app.absplus.android.services.DownloadServiceHost
+import app.absplus.android.managers.AutoDownloadScheduler
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.getcapacitor.JSArray
@@ -54,6 +55,15 @@ class AbsDownloader : Plugin() {
     apiHandler = ApiHandler(mainActivity)
     downloadItemManager = DownloadServiceHost.ensure(mainActivity)
     DownloadServiceHost.attachBridge(mainActivity, clientEventEmitter)
+
+    @OptIn(DelicateCoroutinesApi::class)
+    GlobalScope.launch(Dispatchers.IO) {
+      try {
+        AutoDownloadScheduler.reschedule(mainActivity)
+      } catch (e: Exception) {
+        AbsLogger.error(tag, "Failed to schedule auto download: ${e.message}")
+      }
+    }
   }
 
   override fun handleOnDestroy() {
