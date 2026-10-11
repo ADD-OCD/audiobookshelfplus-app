@@ -25,15 +25,18 @@ export function podcastSortOverrideKey(libraryItem, isLocal) {
   return libraryItem.id
 }
 
-// Per-podcast override wins over the global setting; a null global direction means "auto by podcast type"
+const isValidOverride = (o) => !!o && typeof o.orderBy === 'string' && !!o.orderBy && typeof o.desc === 'boolean'
+
+// Per-podcast override wins over the global setting; a null global direction means "auto by podcast type".
+// Downloaded podcasts carry no type, so only an explicit 'serial' sorts ascending.
 export function resolvePodcastEpisodeSort(userSettings, overrideKey, podcastType) {
   const override = (overrideKey && userSettings?.podcastEpisodesOrderOverrides?.[overrideKey]) || null
-  if (override) return { orderBy: override.orderBy, desc: override.desc, override }
+  if (isValidOverride(override)) return { orderBy: override.orderBy, desc: override.desc, override }
 
   const desc = userSettings?.podcastEpisodesOrderDesc
   return {
     orderBy: userSettings?.podcastEpisodesOrderBy || 'publishedAt',
-    desc: desc == null ? podcastType === 'episodic' : desc,
+    desc: desc == null ? podcastType !== 'serial' : desc,
     override: null
   }
 }

@@ -30,6 +30,14 @@ test('global sort with auto direction follows the podcast type', () => {
   assert.deepEqual(resolvePodcastEpisodeSort(settings, 'li_1', 'episodic'), { orderBy: 'title', desc: true, override: null })
   assert.deepEqual(resolvePodcastEpisodeSort(settings, 'li_1', 'serial'), { orderBy: 'title', desc: false, override: null })
   assert.deepEqual(resolvePodcastEpisodeSort({}, null, 'serial'), { orderBy: 'publishedAt', desc: false, override: null })
+  // Downloaded podcasts have no type: keep the newest-first default Play always used for them
+  assert.deepEqual(resolvePodcastEpisodeSort({}, null, undefined), { orderBy: 'publishedAt', desc: true, override: null })
+})
+
+test('a malformed override falls back to the global sort', () => {
+  const settings = { podcastEpisodesOrderBy: 'title', podcastEpisodesOrderDesc: false, podcastEpisodesOrderOverrides: { li_1: {}, li_2: { orderBy: 'title', desc: null } } }
+  assert.deepEqual(resolvePodcastEpisodeSort(settings, 'li_1', 'episodic'), { orderBy: 'title', desc: false, override: null })
+  assert.deepEqual(resolvePodcastEpisodeSort(settings, 'li_2', 'episodic'), { orderBy: 'title', desc: false, override: null })
 })
 
 test('a per-podcast override wins over the global sort only for its own podcast', () => {
