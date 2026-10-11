@@ -2,7 +2,8 @@
   <div id="epub-frame" class="w-full">
     <div id="viewer" class="h-full w-full"></div>
 
-    <div class="fixed left-0 h-8 w-full px-4 flex items-center" :class="isLightTheme ? 'bg-white text-black' : isDarkTheme ? 'bg-[#232323] text-white/80' : 'bg-black text-white/80'" :style="{ bottom: isPlayerOpen ? '120px' : '0px' }">
+    <!-- Above the collapsed player: its projected plate height (--mini-player-height; 120px by default) -->
+    <div class="fixed left-0 h-8 w-full px-4 flex items-center" :class="isLightTheme ? 'bg-white text-black' : isDarkTheme ? 'bg-[#232323] text-white/80' : 'bg-black text-white/80'" :style="{ bottom: isPlayerOpen ? 'var(--mini-player-height, 120px)' : '0px' }">
       <p v-if="totalLocations" class="text-xs text-slate-600">Location {{ currentLocationNum }} of {{ totalLocations }}</p>
       <div class="flex-grow" />
       <p class="text-xs">{{ progress }}%</p>
@@ -12,6 +13,7 @@
 
 <script>
 import ePub from 'epubjs'
+import { miniPlayerHeight } from '@/utils/miniPlayerHeight'
 
 export default {
   props: {
@@ -73,8 +75,10 @@ export default {
     isPlayerOpen() {
       return this.$store.getters['getIsPlayerOpen']
     },
+    // The rendition's height offset: 104px without the player; with it, the previous 100px more for a 120px plate, i.e.
+    // 84px plus the collapsed player's projected plate height (204 at 120px)
     readerHeightOffset() {
-      return this.isPlayerOpen ? 204 : 104
+      return this.isPlayerOpen ? 84 + miniPlayerHeight() : 104
     },
     /** @returns {Array<ePub.NavItem>} */
     chapters() {
@@ -452,8 +456,8 @@ export default {
   overflow: hidden;
 }
 .reader-player-open #epub-frame {
-  height: calc(100% - 132px);
-  max-height: calc(100% - 132px);
+  height: calc(100% - 12px - var(--mini-player-height, 120px));
+  max-height: calc(100% - 12px - var(--mini-player-height, 120px));
   overflow: hidden;
 }
 </style>

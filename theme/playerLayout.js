@@ -73,6 +73,23 @@ function legacyCoverWidth({ width, height, aspectRatio }) {
   return 190 * heightScale
 }
 
+// Collapsed player (finishing corrections, 2026-10-10). The previous mini-player is a 120px plate whose seek/time strip sits
+// 35px up from its bottom, leaving an empty band under the strip. It is not a system inset: on Android the WebView already
+// ends above the navigation bar (safe-area-inset-bottom is 0), and nothing is drawn or tappable in it. The equipment finish
+// trims the band down to the strip's own 7px lip, so the plate is 92px and every module moves down by the trim; module
+// sizes, keys and touch targets are unchanged. Other themes keep the previous 120px plate
+const MINI = Object.freeze({ legacyHeight: 120, trim: 28 })
+
+/**
+ * @param {{ tokens: object }|null} theme a validated theme (engine.getTheme)
+ * @returns {{ classes: string[], vars: object, height: number }} the collapsed player's hook classes, CSS variables and
+ *          plate height (the page content above it is sized from the height)
+ */
+function miniLayout(theme) {
+  if (!isEquipment(theme)) return { classes: [], vars: {}, height: MINI.legacyHeight }
+  return { classes: ['mini-compact'], vars: { '--mini-trim': px(MINI.trim) }, height: MINI.legacyHeight - MINI.trim }
+}
+
 function isEquipment(theme) {
   return !!(theme && theme.tokens && theme.tokens['presentation.finish'] === 'equipment')
 }
@@ -164,4 +181,4 @@ function fullscreenLayout(theme, { width, height, aspectRatio, twoRail }) {
   }
 }
 
-module.exports = { fullscreenLayout, legacyCoverWidth, budget, TIERS, FACEPLATE, MIN_ARTWORK_RATIO }
+module.exports = { fullscreenLayout, miniLayout, legacyCoverWidth, budget, TIERS, FACEPLATE, MINI, MIN_ARTWORK_RATIO }

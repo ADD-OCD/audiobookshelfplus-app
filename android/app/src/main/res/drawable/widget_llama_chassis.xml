@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- LLAMA widget chassis: navy/blue-gray base with a restrained 1dp bevel (light top/left, dark bottom/right).
-     Corners follow the launcher's widget radius like the standard background (app_widget_background). -->
+<!-- LLAMA widget chassis: the app's steel plate. A dark outer edge, a lit top/left bevel (full-strength 1dp lit top/left, dark
+     bottom/right) and a steel face lit from the top: raised steel through panel steel to the navy base at the bottom
+     (the collapsed player's plate gradient carried one step deeper). No grain: shape drawables cannot render the app's
+     brushing cleanly at launcher scale. Corners follow the launcher's widget radius like the standard background. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
   <item>
     <shape android:shape="rectangle">
@@ -11,13 +13,17 @@
   <item android:bottom="1dp" android:right="1dp">
     <shape android:shape="rectangle">
       <corners android:radius="?attr/appWidgetRadius" />
-      <solid android:color="@color/widget_llama_edge_light_35" />
+      <solid android:color="@color/widget_llama_edge_light" />
     </shape>
   </item>
   <item android:bottom="1dp" android:left="1dp" android:right="1dp" android:top="1dp">
     <shape android:shape="rectangle">
       <corners android:radius="?attr/appWidgetRadius" />
-      <solid android:color="@color/widget_llama_base" />
+      <gradient
+        android:angle="270"
+        android:centerColor="@color/widget_llama_content"
+        android:endColor="@color/widget_llama_base"
+        android:startColor="@color/widget_llama_raised" />
     </shape>
   </item>
 </layer-list>

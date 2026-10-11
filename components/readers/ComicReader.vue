@@ -23,7 +23,8 @@
       </div>
     </div>
 
-    <div class="fixed left-0 h-8 w-full bg-bg px-4 flex items-center text-fg-muted transition-transform" :class="showingToolbar ? 'translate-y-0' : isPlayerOpen ? 'translate-y-[120px]' : 'translate-y-32'" :style="{ bottom: isPlayerOpen ? '120px' : '0px' }">
+    <!-- Page toolbar above the collapsed player (its projected plate height, --mini-player-height; 120px by default), above the page (z-20); hidden by sliding it behind the player -->
+    <div class="fixed left-0 h-8 w-full bg-bg px-4 flex items-center text-fg-muted transition-transform z-20" :class="showingToolbar ? 'translate-y-0' : isPlayerOpen ? 'translate-y-[var(--mini-player-height,120px)]' : 'translate-y-32'" :style="{ bottom: isPlayerOpen ? 'var(--mini-player-height, 120px)' : '0px' }">
       <div class="flex-grow" />
       <p class="text-xs">{{ page }} / {{ numPages }}</p>
     </div>
@@ -372,8 +373,8 @@ export default {
   max-height: 100%;
 }
 .reader-player-open #comic-reader {
-  height: calc(100% - 120px);
-  max-height: calc(100% - 120px);
+  height: calc(100% - var(--mini-player-height, 120px));
+  max-height: calc(100% - var(--mini-player-height, 120px));
 }
 
 .comicimg {

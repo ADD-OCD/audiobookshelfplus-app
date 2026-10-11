@@ -28,7 +28,7 @@
 
       <div class="flex items-center pt-2">
         <!-- Play/Pause Button -->
-        <div class="h-9 px-4 border border-border hover:bg-white hover:bg-opacity-10 rounded-full flex items-center justify-center cursor-pointer" :class="userIsFinished ? 'text-fg text-opacity-40' : ''" @click.stop="playClick">
+        <div class="episode-play-control h-9 px-4 border border-border hover:bg-white hover:bg-opacity-10 rounded-full flex items-center justify-center cursor-pointer" :class="userIsFinished ? 'text-fg text-opacity-40' : ''" @click.stop="playClick">
           <span v-if="!playerIsStartingForThisMedia" class="material-symbols text-2xl fill leading-none" :class="streamIsPlaying ? '' : 'text-success'">
             {{ streamIsPlaying ? 'pause' : 'play_arrow' }}
           </span>

@@ -18,6 +18,7 @@
 <script>
 import bookshelfCardsHelpers from '@/mixins/bookshelfCardsHelpers'
 import { createPageRetry } from '@/utils/pageRetry'
+import { textScale } from '@/utils/textScale'
 
 export default {
   props: {
@@ -145,7 +146,8 @@ export default {
     shelfHeight() {
       if (this.showBookshelfListView) return this.entityHeight + 16
       if (this.altViewEnabled) {
-        var extraTitleSpace = this.isBookEntity ? 80 : 40
+        // Book cards hang their title, author and sort line below the cover: that space grows with the text scale
+        var extraTitleSpace = this.isBookEntity ? 80 * textScale() : 40
         return this.entityHeight + extraTitleSpace * this.sizeMultiplier
       }
       return this.entityHeight + 40

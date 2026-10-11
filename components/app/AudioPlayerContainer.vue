@@ -14,6 +14,7 @@ import { AbsAudioPlayer, AbsLogger } from '@/plugins/capacitor'
 import { Dialog } from '@capacitor/dialog'
 import CellularPermissionHelpers from '@/mixins/cellularPermissionHelpers'
 import { nativeQueueItems, resolvePlaybackQueue, resolveQueueSourceAppendItems, sessionToQueueItem } from '@/utils/playbackQueue'
+import { refocusDisplayTime, refocusServerAction } from '@/utils/livePosition'
 
 export default {
   data() {
@@ -503,6 +504,15 @@ export default {
         this.$refs.audioPlayer?.setIsCheckingServerProgress(false)
       }
     },
+    // The native player's loaded session and live position (AbsAudioPlayer.getCurrentPlaybackState), or null when the
+    // platform has none or the call fails, so callers fall back to their previous behaviour
+    async getNativePlaybackState() {
+      try {
+        return (await AbsAudioPlayer.getCurrentPlaybackState()) || null
+      } catch (error) {
+        return null
+      }
+    },
     getLocalMediaProgressForCurrentSession() {
       if (!this.currentPlaybackSession) return null
       return this.$store.getters['globals/getLocalMediaProgressById'](this.currentPlaybackSession.localLibraryItem?.id, this.currentPlaybackSession.localEpisodeId)
@@ -578,8 +588,11 @@ export default {
           return
         }
 
-        console.log('[AudioPlayerContainer] device visibility: found local media progress', localMediaProgress.currentTime, 'last time in player is', this.currentTime)
-        this.$refs.audioPlayer.currentTime = localMediaProgress.currentTime
+        // Show the native player's live position when it holds this session (it may have moved while the UI was in the
+        // background); otherwise the saved local progress as before. Display only: no seek, no progress write
+        const { time, source } = refocusDisplayTime(this.currentPlaybackSession, await this.getNativePlaybackState(), localMediaProgress.currentTime)
+        console.log('[AudioPlayerContainer] device visibility: found local media progress', localMediaProgress.currentTime, 'showing', source, 'position', time, 'last time in player is', this.currentTime)
+        this.$refs.audioPlayer.currentTime = time
         this.$refs.audioPlayer.timeupdate()
 
         await this.checkSyncServerProgressWithLocalProgress(localMediaProgress)
@@ -589,11 +602,16 @@ export default {
         const data = await this.getServerMediaProgressForCurrentSession()
         if (!data) return
         if (!this.$refs.audioPlayer?.isPlaying) {
-          console.log('[AudioPlayerContainer] device visibility: got server media progress', data.currentTime, 'last time in player is', this.currentTime)
-          // Only seek if the difference is greater than 1 second
-          if (Math.abs(data.currentTime - this.currentTime) > 1) {
+          // Another device's newer progress is applied as before; a position the native player moved to while paused
+          // (not yet synced) stands and is displayed instead of being sought back to the older server position
+          const decision = refocusServerAction(this.currentPlaybackSession, await this.getNativePlaybackState(), data, this.currentTime)
+          console.log('[AudioPlayerContainer] device visibility: got server media progress', data.currentTime, 'last time in player is', this.currentTime, 'decision', decision.action)
+          if (decision.action === 'seek') {
             // Use seek() so the native audio player's current session is updated
-            this.$refs.audioPlayer.seek(data.currentTime)
+            this.$refs.audioPlayer.seek(decision.time)
+          } else if (decision.action === 'display') {
+            this.$refs.audioPlayer.currentTime = decision.time
+            this.$refs.audioPlayer.timeupdate()
           }
         }
       }

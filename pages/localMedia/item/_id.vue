@@ -1,11 +1,11 @@
 <template>
   <div class="w-full h-full py-6 px-2">
-    <div v-if="localLibraryItem" class="w-full h-full">
+    <div v-if="localLibraryItem" class="w-full h-full flex flex-col">
       <div class="px-2 flex items-center mb-2">
         <p class="text-base font-semibold truncate">{{ mediaMetadata.title }}</p>
         <div class="flex-grow" />
 
-        <button v-if="audioTracks.length && !isPodcast" class="shadow-sm text-success flex items-center justify-center rounded-full mx-2" @click.stop="play">
+        <button v-if="audioTracks.length && !isPodcast" class="local-play-action shadow-sm text-success flex items-center justify-center rounded-full mx-2" @click.stop="play">
           <span class="material-symbols fill" style="font-size: 2rem">play_arrow</span>
         </button>
         <span class="material-symbols text-2xl" @click="showItemDialog">more_vert</span>
@@ -118,7 +118,8 @@
       <p class="text-lg text-center px-8">{{ failed ? 'Failed to get local library item ' + localLibraryItemId : 'Loading..' }}</p>
     </div>
 
-    <div v-if="orderChanged" class="fixed left-0 w-full py-4 px-4 bg-bg box-shadow-book flex items-center" :style="{ bottom: isPlayerOpen ? '120px' : '0px' }">
+    <!-- Above the collapsed player: its projected plate height (--mini-player-height, set by AudioPlayer.vue; 120px by default) -->
+    <div v-if="orderChanged" class="fixed left-0 w-full py-4 px-4 bg-bg box-shadow-book flex items-center" :style="{ bottom: isPlayerOpen ? 'var(--mini-player-height, 120px)' : '0px' }">
       <div class="flex-grow" />
       <ui-btn small color="success" @click="saveTrackOrder">{{ $strings.ButtonSaveOrder }}</ui-btn>
     </div>
@@ -445,21 +446,17 @@ export default {
 </script>
 
 <style scoped>
+/* The list takes the height left under the header, down to the page bottom: the page fills #content, which ends at the
+   collapsed player (its projected height) or the screen. Measured, not estimated, so it holds at any font scale (the
+   previous 100vh - 200px / 100vh - 300px ran under the player once the header grew). -24px reaches through the page's
+   bottom padding, as the previous height did; with the Save Order bar it ends 80px higher, as before */
 .media-item-container {
-  height: calc(100vh - 200px);
-  max-height: calc(100vh - 200px);
+  flex: 1 1 0;
+  min-height: 0;
+  margin-bottom: -24px;
 }
 .media-item-container.media-order-changed {
-  height: calc(100vh - 280px);
-  max-height: calc(100vh - 280px);
-}
-.playerOpen .media-item-container {
-  height: calc(100vh - 300px);
-  max-height: calc(100vh - 300px);
-}
-.playerOpen .media-item-container.media-order-changed {
-  height: calc(100vh - 380px);
-  max-height: calc(100vh - 380px);
+  margin-bottom: 56px;
 }
 .sortable-ghost {
   opacity: 0.5;

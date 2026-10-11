@@ -30,10 +30,12 @@ textarea {
   max-height: calc(100% - 64px);
 }
 
+/* The app bar (64px) and the collapsed player's plate (AudioPlayer.vue sets --mini-player-height; 120px unless a theme's
+   collapsed layout is compact, theme/playerLayout.js) */
 #content.playerOpen {
-  height: calc(100% - 184px);
-  min-height: calc(100% - 184px);
-  max-height: calc(100% - 184px);
+  height: calc(100% - 64px - var(--mini-player-height, 120px));
+  min-height: calc(100% - 64px - var(--mini-player-height, 120px));
+  max-height: calc(100% - 64px - var(--mini-player-height, 120px));
 }
 
 #bookshelf {

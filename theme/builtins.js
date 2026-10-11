@@ -145,11 +145,16 @@ const llama = {
     'progress.track': [40, 46, 56], // recessed channel
     'progress.buffered': [86, 98, 116], // visibly lighter than the track
     'progress.played': [245, 190, 40], // yellow-amber
-    'overlay.item-header': linear(169, [[10, 13, 18, 0.4], 0], [[39, 54, 87, 1], 80]),
-    'overlay.player': linear(180, [[22, 33, 58, 0], 0], [[22, 33, 58, 1], 80]),
-    'overlay.mini-player': linear(145, [[22, 33, 58, 0.5], 0], [[22, 33, 58, 0.9], 20], [[22, 33, 58], 60]),
+    // Faithful pass: the item header fades into the graphite page, the full player's chassis behind its steel plates is
+    // the mockup's near-black (the same graphite as the browsing pages), and the collapsed player is a steel panel lit
+    // from the top (raised steel to panel steel), like the mockup's mini-player plate
+    'overlay.item-header': linear(169, [[10, 13, 18, 0.4], 0], [[13, 18, 28, 1], 80]),
+    'overlay.player': solid([13, 18, 28]),
+    'overlay.mini-player': linear(180, [[63, 81, 120], 0], [[39, 54, 87], 100]),
     ...states,
-    'accent.primary': [96, 232, 104], // phosphor green readout/accent
+    // Phosphor readout green: the approved mockup's pale yellow-green display glow (its glyph cores sample #A8F05A to
+    // #C6F24F), lighter and less saturated than the earlier #60E868. 14.4:1 on the recessed wells
+    'accent.primary': [170, 240, 100],
     ...systemBars,
     'presentation.finish': 'equipment',
     'presentation.cover-color': 'theme'

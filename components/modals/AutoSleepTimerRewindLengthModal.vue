@@ -13,7 +13,7 @@
         manualTimerModal = false
       "
     >
-      <div class="w-full overflow-x-hidden overflow-y-auto bg-primary rounded-lg border border-white border-opacity-20" style="max-height: 75%" @click.stop>
+      <div class="playback-option-panel w-full overflow-x-hidden overflow-y-auto bg-primary rounded-lg border border-white border-opacity-20" style="max-height: 75%" @click.stop>
         <div v-if="manualTimerModal" class="p-4">
           <div class="flex mb-4" @click="manualTimerModal = false">
             <span class="material-symbols text-3xl">arrow_back</span>

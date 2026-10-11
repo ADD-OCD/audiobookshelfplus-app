@@ -1,9 +1,10 @@
 <template>
-  <div class="browse-toolbar w-full h-9 bg-bg relative z-20">
-    <div id="bookshelf-toolbar" class="absolute top-0 left-0 w-full h-full z-20 flex items-center px-2">
+  <!-- At least 36px; taller when a long title wraps at a large font scale (the shelf below takes the remaining height) -->
+  <div class="browse-toolbar w-full min-h-9 bg-bg relative z-20">
+    <div id="bookshelf-toolbar" class="relative w-full min-h-9 z-20 flex items-center px-2">
       <div class="flex items-center w-full text-sm">
         <p v-show="!selectedSeriesName" class="toolbar-count pt-1">{{ $formatNumber(totalEntities) }} {{ entityTitle }}</p>
-        <p v-show="selectedSeriesName" class="ml-2 pt-1">{{ selectedSeriesName }} ({{ $formatNumber(totalEntities) }})</p>
+        <p v-show="selectedSeriesName" class="ml-2 pt-1 min-w-0 break-words line-clamp-2">{{ selectedSeriesName }} ({{ $formatNumber(totalEntities) }})</p>
         <div class="flex-grow" />
         <span v-if="page == 'library' || seriesBookPage" class="material-symbols text-2xl px-2" @click="changeView">{{ !bookshelfListView ? 'view_list' : 'grid_view' }}</span>
         <template v-if="page === 'library'">
@@ -13,7 +14,7 @@
           </div>
           <span class="material-symbols text-2xl px-2" @click="showSortModal = true">sort</span>
         </template>
-        <button v-if="seriesBookPage && $platform === 'android'" type="button" class="flex items-center px-2 text-success" :disabled="$store.state.playerIsStartingPlayback" @click="$eventBus.$emit('play-series-click')"><span class="material-symbols text-2xl">play_arrow</span>{{ $strings.ButtonPlay }}</button>
+        <button v-if="seriesBookPage && $platform === 'android'" type="button" class="series-play-action flex items-center px-2 text-success" :disabled="$store.state.playerIsStartingPlayback" @click="$eventBus.$emit('play-series-click')"><span class="material-symbols text-2xl">play_arrow</span>{{ $strings.ButtonPlay }}</button>
         <span v-if="seriesBookPage && $platform === 'android'" class="material-symbols text-2xl px-2" @click="$eventBus.$emit('add-series-to-queue-click')">queue_music</span>
         <span v-if="seriesBookPage" class="material-symbols text-2xl px-2" @click="downloadSeries">download</span>
         <span v-if="(page == 'library' && isBookLibrary) || seriesBookPage" class="material-symbols text-2xl px-2" @click="showMoreMenuDialog = true">more_vert</span>
