@@ -25,6 +25,7 @@ import app.absplus.android.plugins.AbsDatabase
 import app.absplus.android.plugins.AbsDownloader
 import app.absplus.android.plugins.AbsFileSystem
 import app.absplus.android.plugins.AbsLogger
+import app.absplus.android.plugins.AbsUpdater
 import com.getcapacitor.BridgeActivity
 
 
@@ -50,6 +51,7 @@ class MainActivity : BridgeActivity() {
     registerPlugin(AbsFileSystem::class.java)
     registerPlugin(AbsDatabase::class.java)
     registerPlugin(AbsLogger::class.java)
+    registerPlugin(AbsUpdater::class.java)
 
     super.onCreate(savedInstanceState)
     DLog.d(tag, "onCreate")
