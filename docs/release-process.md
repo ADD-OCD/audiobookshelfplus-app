@@ -103,6 +103,15 @@ Milestones on `plus` that weren't distributed builds, so they have no `versionCo
 - Automated results: JS 235/235, Kotlin 184/184 (15 new in `CoverArtTest` and `SessionCoverArtTest`; decoder failures are simulated because Robolectric can't decode images), `lintDebug` 0 errors / 108 warnings, `lintRelease` 0 errors / 103 warnings, debug build and release Kotlin compile passed.
 - Physical validation on the Samsung Galaxy S22 Ultra: before the fix, a missing and a corrupt cover crashed widget and media-key restores after process death. After it, valid, missing, corrupt, zero-byte and text-file covers all restored and kept playing (position and 1.5× speed kept; one service, session and notification; no crash). Notification, lock-screen and widget controls worked with a missing cover, a series queue advanced past a book with a corrupt cover, and raw logcat had no paths or credentials. A revoked folder grant was simulated only, and Android Auto was not run.
 
+**LLAMA faithful finish and accompanying fixes (2026-10-10).** Merged from `feature/llama-faithful-first-draft`; not a distributed build, so `versionCode` stays 131 and 132 is still unused. The changes are listed under "Unreleased" in `CHANGELOG.md`.
+
+- The accepted test build was a debug APK (`app.absplus.android.debug`, versionCode 131), SHA-256 `1157fb12dea30686d840353f9c6796477a2e7ae29a312f50f7d847c82bbd990e`.
+- **Automated results:** JS 264/264, Kotlin 184/184, `lintDebug` 0 errors / 108 warnings (the baseline register), debug build passed.
+- **Physical validation:** Samsung Galaxy S22 Ultra (Android 16), LLAMA at font scales 1.0 and 1.3, Dark, Black and Light for regressions.
+  - **Coverage:** Home, Library and series grids and lists; the full player with both progress rails, chapter only, book only and the queue key; collapse and expand; series and row Play; bookmarks online and offline; refocus of downloaded and streamed books; the PDF reader; downloaded-media screens.
+  - **Evidence scope:** the final grid-title fix was validated on the accepted build. The rest of the on-device evidence comes from the build before it (`a5828114`), which differed only in that fix.
+- **Not tested on a device** (no test content): the EPUB, MOBI, comic and podcast flows; see `docs/future-work.md`. The S26 Ultra was not part of this validation.
+
 ## Announcements
 
 Audiobookshelf+ has no in-app "what's new"/announcements screen (checked during the v0.14.0

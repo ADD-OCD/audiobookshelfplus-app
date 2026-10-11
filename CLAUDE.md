@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Audiobookshelf mobile app built with **NuxtJS 2** (SSR disabled, static target) and **Capacitor 7**, sharing one JS codebase across Android and iOS. Requires a running Audiobookshelf server to connect to.
+Audiobookshelf+ is an Android app built with **NuxtJS 2** (SSR disabled, static target) and **Capacitor 7**. The codebase inherited from upstream is cross-platform (one JS app inside Android and iOS shells), but Audiobookshelf+ ships, builds and tests Android only. Requires a running Audiobookshelf server to connect to.
 
 This repo (`plus` branch) is an unofficial fork that is **Android-only** — the iOS project is not maintained here. Don't spend effort on iOS builds, native iOS code, or iOS-specific testing unless explicitly asked.
 
@@ -15,11 +15,11 @@ Branding: production-facing Audiobookshelf+ material (app UI, widgets and their 
 ```bash
 npm install                  # install dependencies
 npm run generate             # build static web app into dist/
-npx cap sync                 # copy dist/ into android/ios native shells
+npx cap sync                 # copy dist/ into the native shells (Android; the inherited iOS shell is updated too)
 npm run sync                 # shortcut: generate + cap sync (use after JS changes)
 npm run dev                  # local web dev server at http://0.0.0.0:1337
 npx cap open android         # open Android Studio
-npx cap open ios             # open Xcode
+npx cap open ios             # inherited from upstream; iOS is not built or supported in this fork
 npm run devlive              # live reload via ionic cap run on connected device
 ```
 
