@@ -126,6 +126,12 @@ object AutoDownloadManager {
     }
   }
 
+  private fun isDownloadedLocally(libraryItemId: String, episodeId: String): Boolean {
+    return DeviceManager.dbManager.getLocalLibraryItems().any { local ->
+      local.libraryItemId == libraryItemId && (local.media as? Podcast)?.episodes?.any { it.serverEpisodeId == episodeId } == true
+    }
+  }
+
   private suspend fun runCheck(appContext: Context, trigger: Trigger, settings: DeviceSettings) {
     try {
       val serverConfigId = DeviceManager.serverConnectionConfig?.id ?: return
@@ -257,7 +263,8 @@ object AutoDownloadManager {
             }
           }
           DownloadItemManager.QueuedState.NOT_QUEUED -> {
-            if (episode.id in downloadedEpisodeIds || episode.id in knownIds) {
+            // The local snapshot is taken before network calls; a manual download may have finished since
+            if (episode.id in downloadedEpisodeIds || episode.id in knownIds || isDownloadedLocally(id, episode.id)) {
               AutoDownloadStore.addEpisodeId(serverConfigId, id, episode.id)
               continue
             }

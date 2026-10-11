@@ -76,6 +76,16 @@ object DownloadServiceHost {
       deferredCompletions.toList().also { deferredCompletions.clear() }
     }
     completions.forEach(bridgeEmitter::onDownloadItemComplete)
+    startServiceIfIdle(context)
+  }
+
+  /** Starts the service for queued work restored or enqueued while the app was in background (e.g. by a worker). */
+  fun startServiceIfIdle(context: Context) {
+    val appContext = context.applicationContext
+    scope.launch {
+      restoreJob?.join()
+      if (service == null && manager?.hasWork() == true) startService(appContext)
+    }
   }
 
   @Synchronized

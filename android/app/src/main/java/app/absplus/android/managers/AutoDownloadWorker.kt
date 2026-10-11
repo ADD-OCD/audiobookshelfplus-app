@@ -1,6 +1,7 @@
 package app.absplus.android.managers
 
 import android.content.Context
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -30,7 +31,7 @@ object AutoDownloadScheduler {
 
     if (!settings.autoDownloadEnabled) {
       workManager.cancelUniqueWork(WORK_NAME)
-      AbsLogger.info(tag, "Auto download disabled, periodic work cancelled")
+      Log.d(tag, "Auto download disabled, periodic work cancelled")
       return
     }
 

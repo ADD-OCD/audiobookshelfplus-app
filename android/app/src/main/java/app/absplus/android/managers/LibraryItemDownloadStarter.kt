@@ -28,7 +28,9 @@ object LibraryItemDownloadStarter {
       callback("Invalid library item not a podcast")
       return
     }
-    val localFolder = getOrCreateLocalFolder("internal-podcast", "podcast")
+    // Keep new episodes in the podcast's existing folder: a second local item there would hide them in the UI
+    val existingFolder = DeviceManager.dbManager.getLocalLibraryItemByLId(libraryItem.id)?.folderId?.let { DeviceManager.dbManager.getLocalFolder(it) }
+    val localFolder = existingFolder ?: getOrCreateLocalFolder("internal-podcast", "podcast")
     if (localFolder == null) {
       callback("Local Folder Not Found")
       return

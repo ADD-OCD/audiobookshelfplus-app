@@ -197,6 +197,8 @@ class AbsDownloader : Plugin() {
   fun checkAutoDownloads(call: PluginCall) {
     GlobalScope.launch(Dispatchers.IO) {
       try {
+        // The app is in foreground now, so work a background worker could not start can run
+        DownloadServiceHost.startServiceIfIdle(mainActivity)
         val status = AutoDownloadManager.startCheck(mainActivity, AutoDownloadManager.Trigger.APP)
         call.resolve(JSObject().put("status", status.jsValue))
       } catch (e: Exception) {

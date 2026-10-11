@@ -2,6 +2,7 @@ package app.absplus.android.managers
 
 import app.absplus.android.data.PodcastAutoDownloadEntry
 import app.absplus.android.device.DeviceManager
+import app.absplus.android.plugins.AbsLogger
 
 /** Single entry point for auto download state; serializes read-modify-write cycles. */
 object AutoDownloadStore {
@@ -14,11 +15,21 @@ object AutoDownloadStore {
     return PodcastAutoDownloadEntry(enabled, entry.keepCount, ids.toMutableList())
   }
 
+  // An unreadable record must not block every check; it reads as OFF so a lost opt-out is never overridden
+  private fun read(key: String): PodcastAutoDownloadEntry? {
+    return try {
+      DeviceManager.dbManager.getPodcastAutoDownloadEntry(key)
+    } catch (e: Exception) {
+      AbsLogger.error("AutoDownloadStore", "Could not read auto download entry $key (${e.javaClass.simpleName}: ${e.message})")
+      PodcastAutoDownloadEntry(PodcastAutoDownloadEntry.ENABLED_OFF, null, mutableListOf())
+    }
+  }
+
   private fun defaultEntry() = PodcastAutoDownloadEntry(PodcastAutoDownloadEntry.ENABLED_DEFAULT, null, mutableListOf())
 
   @Synchronized
   fun get(serverConfigId: String, libraryItemId: String): PodcastAutoDownloadEntry {
-    val entry = DeviceManager.dbManager.getPodcastAutoDownloadEntry(key(serverConfigId, libraryItemId))
+    val entry = read(key(serverConfigId, libraryItemId))
     return if (entry == null) defaultEntry() else normalize(entry)
   }
 
@@ -41,7 +52,7 @@ object AutoDownloadStore {
   @Synchronized
   fun removeEpisodeId(serverConfigId: String, libraryItemId: String, episodeId: String) {
     val k = key(serverConfigId, libraryItemId)
-    val stored = DeviceManager.dbManager.getPodcastAutoDownloadEntry(k) ?: return
+    val stored = read(k) ?: return
     val entry = normalize(stored)
     if (!entry.autoDownloadedEpisodeIds.remove(episodeId)) return
     DeviceManager.dbManager.savePodcastAutoDownloadEntry(k, entry)
@@ -52,7 +63,7 @@ object AutoDownloadStore {
     val prefix = "$serverConfigId:"
     val result = mutableMapOf<String, PodcastAutoDownloadEntry>()
     DeviceManager.dbManager.getPodcastAutoDownloadKeys().filter { it.startsWith(prefix) }.forEach { k ->
-      DeviceManager.dbManager.getPodcastAutoDownloadEntry(k)?.let {
+      read(k)?.let {
         result[k.removePrefix(prefix)] = normalize(it)
       }
     }
