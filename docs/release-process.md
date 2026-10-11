@@ -64,7 +64,7 @@ published (release, prerelease, or test build):
 | 130 | **Audiobookshelf+ v0.15.0** (upstream v0.14.2-beta), versionName `0.14.2-beta`: the normal release, built from `plus` at `b6f139c0` and tagged `v0.14.2-beta-plus-v0.15.0`. It is published as the Latest GitHub release with the asset `audiobookshelf-plus-v0.15.0-release.apk` (SHA-256 `7b1ad3e91ab6e0083308aa6347d0ec7222ce55fbeb2867ce986e0c52619d4519`), and announced in Discussions #16. It includes playback restoration and diagnostics (129), the LLAMA theme and widget layouts, download Retry/Cancel/Clear, the device-folder access fixes, Rescan Folder across libraries and library page retry. Physical-device release validation was pending at publication. |
 | 131 | **Audiobookshelf+ v0.15.1** (upstream v0.14.2-beta), versionName `0.14.2-beta`: hotfix release, built from `plus` at `d2795e4c` and tagged `v0.14.2-beta-plus-v0.15.1`. It is published as the Latest GitHub release with the asset `audiobookshelf-plus-v0.15.1-release.apk` (SHA-256 `1c391c9367e4e9f6d5204d6d08924b4d27633e8c789dfda5e2cff80a9e02db1d`), and announced in Discussions #17. It fixes the series bookshelf that showed only its first one or two books (`defb3cf8`; physical S26 debug validation passed before release). |
 
-**Next distributed versionCode: 132.** The temporary GitHub prereleases/tags for 124–126 were
+**Next distributed versionCode: 132,** assigned to the Audiobookshelf+ v0.16.0 candidate (built from `plus` at `6505177b`); its row is added here when it is published. The temporary GitHub prereleases/tags for 124–126 were
 deleted after approval; these ledger rows are the permanent record, and those numbers (and 127,
 128, 129, 130, 131) must never be reused.
 
@@ -103,7 +103,7 @@ Milestones on `plus` that weren't distributed builds, so they have no `versionCo
 - Automated results: JS 235/235, Kotlin 184/184 (15 new in `CoverArtTest` and `SessionCoverArtTest`; decoder failures are simulated because Robolectric can't decode images), `lintDebug` 0 errors / 108 warnings, `lintRelease` 0 errors / 103 warnings, debug build and release Kotlin compile passed.
 - Physical validation on the Samsung Galaxy S22 Ultra: before the fix, a missing and a corrupt cover crashed widget and media-key restores after process death. After it, valid, missing, corrupt, zero-byte and text-file covers all restored and kept playing (position and 1.5× speed kept; one service, session and notification; no crash). Notification, lock-screen and widget controls worked with a missing cover, a series queue advanced past a book with a corrupt cover, and raw logcat had no paths or credentials. A revoked folder grant was simulated only, and Android Auto was not run.
 
-**LLAMA faithful finish and accompanying fixes (2026-10-10).** Merged from `feature/llama-faithful-first-draft`; not a distributed build, so `versionCode` stays 131 and 132 is still unused. The changes are listed under "Unreleased" in `CHANGELOG.md`.
+**LLAMA faithful finish and accompanying fixes (2026-10-10).** Merged from `feature/llama-faithful-first-draft`; not a distributed build, so `versionCode` stays 131 and 132 is still unused. The changes are listed under v0.16.0 in `CHANGELOG.md`.
 
 - The accepted test build was a debug APK (`app.absplus.android.debug`, versionCode 131), SHA-256 `1157fb12dea30686d840353f9c6796477a2e7ae29a312f50f7d847c82bbd990e`.
 - **Automated results:** JS 264/264, Kotlin 184/184, `lintDebug` 0 errors / 108 warnings (the baseline register), debug build passed.

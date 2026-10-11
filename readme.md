@@ -101,12 +101,11 @@ be) in the official app.
   (streamed books need to reach your server). Reopening the app reconnects the player screen to
   whatever is already playing. Closing the player with its X ends the session, so it isn't
   brought back later. (Android's *Force stop* is still a hard stop — open the app normally after
-  using it.) Since v0.15.1, on `plus` for the next release: a headset's Play or call button and a
+  using it.) New in v0.16.0: a headset's Play or call button and a
   Bluetooth *Play* now restore a paused book reliably after the player was closed in the
   background; before, only Play/Pause did, and those buttons could do nothing or, rarely, make the
   app close.
-- **Downloaded books with a broken cover keep playing** — since v0.15.1, on `plus` for the next
-  release: if a downloaded book's cover image is missing, unreadable or damaged, the book still
+- **Downloaded books with a broken cover keep playing** — new in v0.16.0: if a downloaded book's cover image is missing, unreadable or damaged, the book still
   plays and resumes normally, and the notification and lock screen show the Audiobookshelf+
   artwork instead. Before, starting or resuming such a book could make the app close.
 - **In-app diagnostics** — Settings → Diagnostics can keep a diagnostic log on the phone to help
@@ -117,20 +116,19 @@ be) in the official app.
   Android's normal Save As screen, *Share* it, *Mark* the moment something goes wrong with a note,
   or *Clear* it. Logs are sanitized before they're stored or exported — passwords, tokens, server
   addresses and file locations are redacted — but please look over a log before sharing it
-  publicly. Since v0.15.1, on `plus` for the next release: Android's own system log (what
+  publicly. New in v0.16.0: Android's own system log (what
   `adb logcat` and bug reports show) no longer receives sign-in tokens, server connection details
   or your username, including in debug builds.
 - **LLAMA theme** — an optional, original late-1990s audio-equipment theme (Settings → Theme): a
   deep navy chassis, a full player with physical-style transport and utility keys, amber key
   legends and progress, and green readouts for speed, sleep timer and playback time. The home
-  screen widget follows it. Black, Dark and Light are unchanged. Since v0.15.1, on `plus` for the
-  next release: a more faithful finish across the app — brushed-steel panels and keys, steel home
+  screen widget follows it. Black, Dark and Light are unchanged. New in v0.16.0: a more faithful finish across the app — brushed-steel panels and keys, steel home
   screen widget keys, black recessed dialogs with steel frames, steel action buttons with amber
   labels, amber Play controls in lists, series, collections, playlists and downloaded books, cover
   frames that are complete on the Home shelves, a slimmer collapsed player without the empty strip
   under its progress bar, and a fainter page texture. Green stays the color of selection, focus
   and readouts.
-- **Fixes in every theme** — since v0.15.1, on `plus` for the next release:
+- **Fixes in every theme** — new in v0.16.0:
   - The full player's bookmark button stays available when the app can't reach the server (it
     used to disappear); your saved bookmarks can still be viewed offline.
   - A paused book shows its real position when you return to the app. Before, a downloaded book

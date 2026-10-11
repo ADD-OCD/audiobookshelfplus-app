@@ -215,13 +215,37 @@ Found during the LLAMA browsing work (Phases 8A/8B), in every theme. At font sca
 
 **Fixed on `plus` (2026-10-10):** in the alternative bookshelf view, book-card titles sat tight against, then over, the bottom of the artwork at 1.3 (a fixed upward title offset). The title block now hangs from the cover and the shelves size their title space by the measured text scale (`utils/textScale.js`), in every theme.
 
-## Reader and podcast flows without device test content
+## Reader and podcast formats not tested on a device
 
-The 2026-10-10 LLAMA finish changed the comic, EPUB and MOBI readers' offsets above the collapsed player, the comic and PDF page bars' stacking, and the podcast episode Play legends. The test server has no EPUB, MOBI or comic (CBZ/CBR) files and no podcast library, so those were checked by source and unit tests (`tests/closure.test.mjs`) and, for the podcast legend, a synthetic element in the running app. Only the PDF reader was tested on a device. Check them on a device when such content is available.
+The 2026-10-10 LLAMA finish changed the comic, EPUB and MOBI readers' offsets above the collapsed player, the comic and PDF page bars' stacking, and the podcast episode Play legends.
+
+**Tested on the Galaxy S22 for the v0.16.0 release (2026-10-11),** with the paused collapsed player showing, at font scales 1.0 and 1.3, in LLAMA and in Dark:
+- **Readers:**
+  - generated EPUB 3, MOBI (PalmDOC, uncompressed) and CBZ fixtures, plus a real PDF;
+  - real swipes turn the page (EPUB location, comic and PDF page counters);
+  - the EPUB and PDF bars sit on the player and are the topmost element;
+  - the comic bar hides behind the player and returns onto it on a tap;
+  - the MOBI view ends above the player.
+- **Podcasts:** a podcast library built from a local folder (two public-domain LibriVox MP3s):
+  - the episode and Latest-episode Play pills start playback;
+  - an episode downloads and plays from the phone;
+  - the legends are amber in LLAMA and green in Dark.
+
+**Still not tested on a device:** comic CBR files, compressed or KF8/AZW3 MOBI files, and real podcast RSS feeds (feed refresh, remote episode downloads).
 
 ## Streamed refocus and recent remote progress
 
-Returning to the app with a paused streamed book keeps the native player's position unless the server's progress is another device's newer update (`utils/livePosition.js` `refocusServerAction`). The server copy counts as newer only when it is more than 10 seconds newer than this session's last update, because this device's own sync is stamped by the server a moment later. A remote update made within 10 seconds of this device's last sync is therefore not applied on refocus; it is applied at the next sync or play.
+Returning to the app with a paused streamed book keeps the native player's position unless the server's progress is another device's newer update (`utils/livePosition.js` `refocusServerAction`). The server copy counts as newer only when it is more than 10 seconds newer than this session's last update, because this device's own sync is stamped by the server a moment later. A remote update made within 10 seconds of this device's last sync is therefore not applied on refocus.
+
+Nothing applies it later either. Pressing Play does not check the server (that check is commented out upstream in `PlayerListener`), and this device's next sync writes its own position over the remote one: last writer wins.
+
+The session's last sync time comes from the native playback state's `lastSyncedAt` (`player/SessionSyncTime.kt`). The service's session copy keeps its creation time, and before v0.16.0 that made every own sync older than 10 seconds look like a remote update.
+
+**Verified on the S22 (2026-10-11), with a server-side write standing in for another device:**
+- this phone's own sync is kept;
+- a paused native seek is kept;
+- a remote update 12 seconds after the last sync is applied on refocus, and playback stays paused;
+- a remote update 3 seconds after it is not applied, and the next Play and sync replace it.
 
 ## Widget ANR on display-size changes
 
