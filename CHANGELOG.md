@@ -42,8 +42,9 @@ LLAMA only; Black, Dark and Light are unchanged by these.
   - A downloaded book no longer shows an older saved position (which a new bookmark could also use).
   - A streamed book moved from the notification, widget or a headset while paused no longer jumps back to the server's
     older position.
-  - Progress saved from another device more than 10 seconds after this phone's last sync is still applied when you
-    return.
+  - Progress saved from another device after this phone's last save is applied when you return, however soon after
+    that save it came, and this phone's next save continues from it. The phone tells its own saved position from
+    another device's by what it saved and the server confirmed, not by how close the two save times are.
 - **Large text** (Android font size):
   - book titles in the Library, series and Home grids sit below the covers instead of over them;
   - long series names wrap (up to two lines) in the series toolbar without covering the navigation;
@@ -67,9 +68,8 @@ LLAMA only; Black, Dark and Light are unchanged by these.
 ### Known limitations
 
 See `docs/future-work.md`:
-- **Progress from another device inside the 10-second window:** progress saved there within 10 seconds of this phone's
-  own last sync is not applied when you return to a paused streamed book. This phone's next sync then replaces it
-  (whichever device saves last wins).
+- **Progress from another device while this phone is playing:** it is not applied while you listen, and this phone's
+  next save replaces it, as in earlier releases. It is applied only when you return to the app with the book paused.
 - **Formats not tested on a device:** comic CBR, compressed or KF8/AZW3 MOBI files, and real-world podcast feeds. The
   readers and podcast controls were tested on a device with generated EPUB, MOBI (uncompressed) and CBZ files, the PDF
   reader with a real PDF, and podcasts with a local podcast folder.

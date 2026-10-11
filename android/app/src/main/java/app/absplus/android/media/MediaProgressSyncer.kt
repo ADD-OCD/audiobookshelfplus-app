@@ -9,6 +9,7 @@ import app.absplus.android.data.MediaProgress
 import app.absplus.android.data.PlaybackSession
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.player.PlayerNotificationService
+import app.absplus.android.player.ServerProgressAck
 import app.absplus.android.plugins.AbsLogger
 import app.absplus.android.server.ApiHandler
 import java.util.*
@@ -41,6 +42,22 @@ class MediaProgressSyncer(
 
   var currentPlaybackSession: PlaybackSession? = null // copy of pb session currently syncing
   var currentLocalMediaProgress: LocalMediaProgress? = null
+
+  // What this phone last wrote to the server for the streamed session it holds (see ServerProgressAck)
+  @Volatile var serverProgressAck: ServerProgressAck? = null
+    private set
+
+  /** A streamed session prepared from the server: its position is the server's progress until this phone syncs */
+  @Synchronized
+  fun noteServerSessionStart(playbackSession: PlaybackSession) {
+    if (playbackSession.isLocal || serverProgressAck?.sessionId == playbackSession.id) return
+    serverProgressAck = ServerProgressAck.sessionStart(playbackSession.id, playbackSession.currentTime)
+  }
+
+  @Synchronized
+  private fun noteServerSync(sessionId: String, currentTime: Double, acknowledged: Boolean) {
+    serverProgressAck = serverProgressAck?.let { if (acknowledged) it.acknowledged(sessionId, currentTime, System.currentTimeMillis()) else it.sent(sessionId, currentTime) }
+  }
 
   private val currentDisplayTitle
     get() = currentPlaybackSession?.displayTitle ?: "Unset"
@@ -315,8 +332,11 @@ class MediaProgressSyncer(
     } else if (hasNetworkConnection && shouldSyncServer) {
       AbsLogger.info("MediaProgressSyncer", "sync: Sending progress sync to server (title: \"$syncedTitle\") (currentTime: $currentTime) (session id: ${currentSessionId}) (${DeviceManager.serverConnectionConfigName})")
 
+      val sentSessionId = currentSessionId
+      noteServerSync(sentSessionId, currentTime, false)
       apiHandler.sendProgressSync(currentSessionId, syncData) { syncSuccess, errorMsg ->
         if (syncSuccess) {
+          noteServerSync(sentSessionId, currentTime, true)
           AbsLogger.info("MediaProgressSyncer", "sync: Successfully synced progress (title: \"$syncedTitle\") (currentTime: $currentTime) (session id: ${currentSessionId}) (${DeviceManager.serverConnectionConfigName})")
 
           failedSyncs = 0

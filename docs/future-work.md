@@ -233,19 +233,25 @@ The 2026-10-10 LLAMA finish changed the comic, EPUB and MOBI readers' offsets ab
 
 **Still not tested on a device:** comic CBR files, compressed or KF8/AZW3 MOBI files, and real podcast RSS feeds (feed refresh, remote episode downloads).
 
-## Streamed refocus and recent remote progress
+## Streamed refocus and remote progress
 
-Returning to the app with a paused streamed book keeps the native player's position unless the server's progress is another device's newer update (`utils/livePosition.js` `refocusServerAction`). The server copy counts as newer only when it is more than 10 seconds newer than this session's last update, because this device's own sync is stamped by the server a moment later. A remote update made within 10 seconds of this device's last sync is therefore not applied on refocus.
+Returning to the app with a paused streamed book compares the server's progress with what this phone wrote (`utils/livePosition.js` `refocusServerAction`):
+- **This phone's own write:** the position of its last sync the server acknowledged, a sync sent without an answer yet, or, before any sync, the position the server created the session with. The native side reports these as `serverProgressAck` (`player/ServerProgressAck.kt`, recorded by `MediaProgressSyncer`). The native player's position stands, so a move made while paused is kept and saved by the next sync.
+- **Already handled:** a server state an earlier refocus dealt with (same session, server `lastUpdate` not newer). It is kept in the WebView's storage so it survives a recreated UI.
+- **Anything else is another device's update** and is applied (seek, still paused), however soon after this phone's last save it came. The next sync continues from it.
 
-Nothing applies it later either. Pressing Play does not check the server (that check is commented out upstream in `PlayerListener`), and this device's next sync writes its own position over the remote one: last writer wins.
+No timestamp from this phone is compared with the server's. The earlier 10-second rule (unpublished v0.16.0 candidate) missed remote updates inside that window and let the next sync overwrite them.
 
-The session's last sync time comes from the native playback state's `lastSyncedAt` (`player/SessionSyncTime.kt`). The service's session copy keeps its creation time, and before v0.16.0 that made every own sync older than 10 seconds look like a remote update.
+**Remaining limits:**
+- While this phone is playing, refocus does not check the server and its syncs overwrite another device's update (last writer wins, as upstream: the Play-time server check is commented out in `PlayerListener`).
+- A remote position within 1 second of this phone's last saved position counts as this phone's own.
+- Downloaded books follow the separate local-progress rules (`checkSyncServerProgressWithLocalProgress`).
 
-**Verified on the S22 (2026-10-11), with a server-side write standing in for another device:**
-- this phone's own sync is kept;
-- a paused native seek is kept;
-- a remote update 12 seconds after the last sync is applied on refocus, and playback stays paused;
-- a remote update 3 seconds after it is not applied, and the next Play and sync replace it.
+**Verified on the S22 (2026-10-11)** with a server-side write standing in for another device, real Home and relaunch refocus, and media-session fast-forward keys for paused moves:
+- the phone's own save is kept, and a paused move is kept and then saved;
+- remote updates 3.1 and 15.1 seconds after the phone's save are applied, and the next save continues from them;
+- a paused move after an applied remote update is kept;
+- on a fresh session before any save, a paused move is kept and a remote update is applied.
 
 ## Widget ANR on display-size changes
 

@@ -11,7 +11,6 @@ import app.absplus.android.media.MediaEventManager
 import app.absplus.android.player.CastManager
 import app.absplus.android.player.PlayerListener
 import app.absplus.android.player.PlayerNotificationService
-import app.absplus.android.player.SessionSyncTime
 import app.absplus.android.server.ApiHandler
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -153,9 +152,10 @@ class AbsAudioPlayer : Plugin() {
       ret.put("duration", session.getTotalDuration())
       ret.put("playbackRate", pns.currentPlayer.playbackParameters.speed.toDouble())
       ret.put("mediaPlayer", pns.getMediaPlayer())
-      // Syncs update the progress syncer's copy, not this one (see SessionSyncTime)
-      val synced = runCatching { pns.mediaProgressSyncer.currentPlaybackSession }.getOrNull()
-      ret.put("lastSyncedAt", SessionSyncTime.lastSyncedAt(session.id, session.updatedAt, synced?.id, synced?.updatedAt))
+      // What this phone last wrote to the server for this session, for the UI's refocus check (see ServerProgressAck)
+      runCatching { pns.mediaProgressSyncer.serverProgressAck }.getOrNull()?.takeIf { it.sessionId == session.id }?.let {
+        ret.put("serverProgressAck", JSObject(jacksonMapper.writeValueAsString(it)))
+      }
     }
     val queue = JSObject()
     queue.put("items", JSArray(jacksonMapper.writeValueAsString(pns.playlistQueue)))
