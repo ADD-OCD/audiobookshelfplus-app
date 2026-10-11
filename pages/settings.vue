@@ -438,7 +438,7 @@ export default {
       return this.$platform === 'android'
     },
     autoDownloadKeepCountItems() {
-      return [1, 2, 3, 5, 10].map((n) => ({ text: String(n), value: n }))
+      return [1, 2, 3, 5, 10, 15, 20, 30, 50, 100].map((n) => ({ text: String(n), value: n }))
     },
     autoDownloadIntervalItems() {
       return [1, 6, 12, 24].map((h) => ({ text: h === 1 ? this.$strings.LabelEveryHour : this.$getString('LabelEveryHours', [h]), value: h }))
