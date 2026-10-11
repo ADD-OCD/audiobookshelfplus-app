@@ -33,6 +33,9 @@ New in v0.16.0:
 - Fixed crashes caused by damaged downloaded cover images.
 - Prevented sign-in details from appearing in system logs.
 
+**Coming in a future release (not in v0.16.0):** in-app updates. Settings → Updates checks the official GitHub
+releases, downloads and verifies an update, and hands it to Android's installer for you to confirm.
+
 ### What's different from official
 
 **Playback and queue**

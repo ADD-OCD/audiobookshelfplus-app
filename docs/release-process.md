@@ -149,9 +149,25 @@ finalize docs), not before.
 
 ## Summary checklist for any new distributed APK
 
-1. Check the `versionCode` table above; use `last + 1`.
+1. Check the `versionCode` table above; use `last + 1`. Set `PLUS_VERSION` in `android/app/build.gradle` to the
+   release's public version (`X.Y.Z`, the tag's `-plus-vX.Y.Z`) in the same commit (in-app updater, once merged).
 2. Build the **release** variant (`app.absplus.android`), not debug.
 3. Confirm it's signed with the fingerprint above (`apksigner verify --verbose --print-certs`).
 4. For a normal release (not a test/RC build): write/post the Announcements entry for it first,
    and make sure every completed feature/fix it includes is documented in the README.
 5. Publish it, then update the `versionCode` table in this document.
+
+## What the in-app updater expects of a release
+
+Once the updater (docs/in-app-updates.md) ships, installed apps rely on these. Changing them stops updates for those
+copies.
+- **Release type:** a normal published release (not a draft or prerelease), marked Latest, with a tag of the form
+  `v<upstream>-plus-vX.Y.Z`.
+- **APK:** exactly one asset named `audiobookshelf-plus-vX.Y.Z-release.apk` (same `X.Y.Z` as the tag), between 1 MB and
+  200 MB. GitHub's asset digest is used; the `.sha256` file is checked too when attached (keep it to one line,
+  `<hex>  <apk name>`).
+- **Signing:** signed with the permanent release key above. A future key rotation must use APK Signature Scheme v3
+  rotation (lineage) from this key, or installed apps reject the update.
+- **Version code:** higher than the previous release's, as always. The updater refuses same-version and older APKs.
+- **Public version:** `PLUS_VERSION` set to `X.Y.Z`, or the next check reports the release as newer than the app that
+  contains it.

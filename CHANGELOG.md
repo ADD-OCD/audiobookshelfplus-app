@@ -3,6 +3,19 @@
 Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and dates are recorded in
 `docs/release-process.md`, and the feature list in `readme.md` describes what the app contains.
 
+## Unreleased
+
+Committed on `feature/in-app-github-updater` for a future release; not part of v0.16.0.
+
+- **In-app updates** (Settings → Updates): check the official GitHub releases, download the latest stable release with
+  progress, Cancel and Retry, and install it through Android's installer after verification.
+  - The download must match its published size and digests.
+  - It must be the Audiobookshelf+ package, newer than the installed version code, not debuggable, and signed with the
+    Audiobookshelf+ release key.
+  - Nothing downloads or installs on its own.
+  - Installing needs Android's "Install unknown apps" permission. The app asks for it only when you tap Install.
+  - Details: `docs/in-app-updates.md`.
+
 ## v0.16.0 — LLAMA visual refresh and stability fixes
 
 **Released 2026-10-11:** versionCode 132, versionName `0.14.2-beta` (upstream base unchanged), tag
