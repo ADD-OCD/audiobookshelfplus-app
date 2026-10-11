@@ -400,7 +400,12 @@ class ApiHandler(var ctx:Context) {
         Log.e(tag, it.getString("error") ?: "getCurrentUser Failed")
         cb(null)
       } else {
-        val user = jacksonMapper.readValue<User>(it.toString())
+        val user = try {
+          jacksonMapper.readValue<User>(it.toString())
+        } catch (e: Exception) {
+          Log.e(tag, "getCurrentUser: invalid response", e)
+          null
+        }
         cb(user)
       }
     }
@@ -419,7 +424,11 @@ class ApiHandler(var ctx:Context) {
       }
 
       for (i in 0 until array.length()) {
-        libraries.add(mapper.readValue(array.get(i).toString()))
+        try {
+          libraries.add(mapper.readValue(array.get(i).toString()))
+        } catch (e: Exception) {
+          Log.e(tag, "getLibraries: skipping unparsable library at index $i", e)
+        }
       }
       cb(libraries)
     }
@@ -467,7 +476,12 @@ class ApiHandler(var ctx:Context) {
         Log.e(tag, it.getString("error") ?: "getLibraryItemWithProgress Failed")
         cb(null)
       } else {
-        val libraryItem = jacksonMapper.readValue<LibraryItem>(it.toString())
+        val libraryItem = try {
+          jacksonMapper.readValue<LibraryItem>(it.toString())
+        } catch (e: Exception) {
+          Log.e(tag, "getLibraryItemWithProgress: invalid response for $libraryItemId", e)
+          null
+        }
         cb(libraryItem)
       }
     }

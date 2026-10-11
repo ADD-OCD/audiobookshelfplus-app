@@ -15,7 +15,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Shared process owner used by the foreground service and the Capacitor bridge. */
 object DownloadServiceHost {
@@ -141,6 +143,20 @@ object DownloadServiceHost {
     scope.launch {
       restoreJob?.join()
       callback(queue.removeDownloadItem(downloadItemId, action))
+    }
+  }
+
+  /**
+   * Runs queued transfers inside a background worker's execution window. From the background on
+   * Android 12+ the foreground service can't be started, so the worker keeps the process alive.
+   */
+  suspend fun runQueueWhileWorking(context: Context, budgetMs: Long) {
+    val queue = ensure(context)
+    restoreJob?.join()
+    if (service != null) return
+    queue.resumeWork()
+    withTimeoutOrNull(budgetMs) {
+      while (service == null && synchronized(queue) { queue.hasWork() }) delay(WORKER_POLL_MS)
     }
   }
 
@@ -274,4 +290,5 @@ object DownloadServiceHost {
   private const val DEFAULT_DOWNLOADS = "Downloads"
   private const val DEFAULT_CANCEL = "Cancel"
   private const val TAG = "DownloadServiceHost"
+  private const val WORKER_POLL_MS = 5_000L
 }

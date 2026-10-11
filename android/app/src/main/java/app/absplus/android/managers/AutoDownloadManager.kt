@@ -40,6 +40,8 @@ object AutoDownloadManager {
   private const val PAGE_LIMIT = 100
   private const val MAX_PAGES = 1000
   private const val DEFAULT_TIMEOUT_MS = 120_000L
+  // WorkManager stops a worker after 10 minutes; unfinished transfers resume on the next run or app open
+  private const val WORKER_TRANSFER_BUDGET_MS = 8 * 60_000L
 
   private val mutex = Mutex()
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -56,6 +58,7 @@ object AutoDownloadManager {
     } finally {
       mutex.unlock()
     }
+    if (trigger == Trigger.WORKER) DownloadServiceHost.runQueueWhileWorking(appContext, WORKER_TRANSFER_BUDGET_MS)
     return Status.STARTED
   }
 
@@ -93,7 +96,7 @@ object AutoDownloadManager {
   }
 
   private fun constraintsMet(appContext: Context, settings: DeviceSettings): Boolean {
-    if (settings.autoDownloadWifiOnly) {
+    if (AutoDownloadPolicy.requiresUnmeteredNetwork(settings)) {
       val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
       val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
       if (caps == null || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) return false
@@ -113,9 +116,7 @@ object AutoDownloadManager {
     val current = DeviceManager.deviceData.deviceSettings ?: DeviceSettings.default()
     if (!current.autoDownloadEnabled) return Recheck.ABORT_CHECK
     val entry = AutoDownloadStore.get(serverConfigId, libraryItemId)
-    val allowed = entry.enabled == PodcastAutoDownloadEntry.ENABLED_ON ||
-            (entry.enabled == PodcastAutoDownloadEntry.ENABLED_DEFAULT && current.autoDownloadAllPodcasts)
-    return if (allowed) Recheck.OK else Recheck.SKIP_PODCAST
+    return if (AutoDownloadPolicy.isEnabledFor(entry, current)) Recheck.OK else Recheck.SKIP_PODCAST
   }
 
   private suspend fun <T> await(timeoutMs: Long = DEFAULT_TIMEOUT_MS, block: ((T) -> Unit) -> Unit): T? {
@@ -204,9 +205,8 @@ object AutoDownloadManager {
         return
       }
       val entry = AutoDownloadStore.get(serverConfigId, id)
-      if (entry.enabled == PodcastAutoDownloadEntry.ENABLED_OFF) continue
-      if (entry.enabled == PodcastAutoDownloadEntry.ENABLED_DEFAULT && !current.autoDownloadAllPodcasts) continue
-      val keepCount = entry.keepCount ?: current.autoDownloadKeepCount
+      if (!AutoDownloadPolicy.isEnabledFor(entry, current)) continue
+      val keepCount = AutoDownloadPolicy.keepCountFor(entry, current)
       if (keepCount <= 0) continue
 
       val item = await<app.absplus.android.data.LibraryItem?> { api.getLibraryItemWithProgress(id, null, it) }
@@ -221,10 +221,9 @@ object AutoDownloadManager {
       }
       val podcast = item.media as? Podcast ?: continue
 
-      val window = (podcast.episodes ?: mutableListOf())
-        .filter { it.audioFile != null && "$id/${it.id}" !in finished }
-        .sortedWith(compareByDescending(nullsFirst<Long>()) { it.publishedAt })
-        .take(keepCount)
+      val window = AutoDownloadPolicy.newestWindow(podcast.episodes ?: mutableListOf(), keepCount, { it.publishedAt }) {
+        it.audioFile != null && "$id/${it.id}" !in finished
+      }
 
       val downloadedEpisodeIds = localItems.filter { it.libraryItemId == id }
         .flatMap { local -> (local.media as? Podcast)?.episodes?.mapNotNull { it.serverEpisodeId } ?: emptyList() }

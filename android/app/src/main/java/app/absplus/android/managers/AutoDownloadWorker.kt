@@ -39,7 +39,7 @@ object AutoDownloadScheduler {
             if (settings.autoDownloadIntervalHours in VALID_INTERVAL_HOURS)
                     settings.autoDownloadIntervalHours
             else DEFAULT_INTERVAL_HOURS
-    val wifiOnly = settings.autoDownloadWifiOnly
+    val wifiOnly = AutoDownloadPolicy.requiresUnmeteredNetwork(settings)
     val chargingOnly = settings.autoDownloadChargingOnly
     val constraints =
             Constraints.Builder()
