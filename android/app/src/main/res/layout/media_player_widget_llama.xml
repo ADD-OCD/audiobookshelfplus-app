@@ -93,7 +93,7 @@
             android:layout_margin="3dp"
             android:padding="7dp"
             android:background="@drawable/widget_llama_button"
-            android:tint="@color/widget_llama_played"
+            android:tint="@color/widget_llama_legend"
             android:contentDescription="@string/action_jump_backward"
             android:src="@drawable/exo_icon_rewind" />
 
@@ -105,7 +105,7 @@
             android:layout_margin="3dp"
             android:padding="7dp"
             android:background="@drawable/widget_llama_button_primary"
-            android:tint="@color/widget_llama_played"
+            android:tint="@color/widget_llama_legend"
             android:contentDescription="@string/widget_play_pause"
             android:src="@drawable/ic_media_play_dark" />
 
@@ -117,7 +117,7 @@
             android:layout_margin="3dp"
             android:padding="7dp"
             android:background="@drawable/widget_llama_button"
-            android:tint="@color/widget_llama_played"
+            android:tint="@color/widget_llama_legend"
             android:contentDescription="@string/action_jump_forward"
             android:src="@drawable/exo_icon_fastforward" />
         </LinearLayout>

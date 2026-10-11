@@ -18,6 +18,9 @@ const BLACK = [0, 0, 0]
 // Fixed, repository-owned blend factors (not theme data)
 const EDGE_LIGHT_TOWARD_WHITE = 0.45
 const EDGE_DARK_TOWARD_BLACK = 0.6
+const PAGE_TOWARD_BASE = 0.25
+const LEGEND_GLOW = [255, 236, 96]
+const LEGEND_TOWARD_GLOW = 0.4
 
 const mix = (from, to, t) => from.map((channel, i) => Math.round(channel + (to[i] - channel) * t))
 const channels = (c) => `${c[0]} ${c[1]} ${c[2]}`
@@ -28,7 +31,13 @@ function equipmentDerivedDeclarations(tokens) {
     // Lighter top/left bevel edge, from the raised surface
     '--color-edge-light': channels(mix(tokens['surface.raised'], WHITE, EDGE_LIGHT_TOWARD_WHITE)),
     // Darker bottom/right bevel edge, from the base surface
-    '--color-edge-dark': channels(mix(tokens['surface.base'], BLACK, EDGE_DARK_TOWARD_BLACK))
+    '--color-edge-dark': channels(mix(tokens['surface.base'], BLACK, EDGE_DARK_TOWARD_BLACK)),
+    // Graphite page behind the equipment (the approved mockup's near-black browsing background, sampled #0B151A): the
+    // recessed well color with a quarter of the chassis in it, so content pages read as the dark room the steel panels sit in
+    '--color-page': channels(mix(tokens['surface.recessed'], tokens['surface.base'], PAGE_TOWARD_BASE)),
+    // Illuminated key legend: the played-progress amber lifted toward a warm yellow, as the mockup's lit key legends are
+    // brighter and yellower than its amber progress fill
+    '--color-legend': channels(mix(tokens['progress.played'], LEGEND_GLOW, LEGEND_TOWARD_GLOW))
   }
 }
 
@@ -55,7 +64,50 @@ const PRESSED_BEVEL = 'inset 1px 1px 0 rgb(var(--color-edge-dark)), inset -1px -
 const RECESSED_WELL = 'inset 1px 1px 0 rgb(var(--color-edge-dark)), inset -1px -1px 0 rgb(var(--color-edge-light) / 0.25), inset 0 2px 6px rgb(0 0 0 / 0.45)'
 const STEEL_SHEEN = 'linear-gradient(180deg, rgb(var(--color-edge-light) / 0.18) 0%, rgb(var(--color-edge-light) / 0) 55%, rgb(0 0 0 / 0.18) 100%)'
 const CHASSIS_SHEEN = 'linear-gradient(180deg, rgb(var(--color-edge-light) / 0.1) 0%, rgb(var(--color-edge-light) / 0) 40%, rgb(0 0 0 / 0.2) 100%)'
-const ARTWORK_FRAME = '0 0 0 1px rgb(var(--color-edge-dark)), 0 0 0 2px rgb(var(--color-edge-light) / 0.45)'
+// Faithful pass: the mockup frames every cover in a bevelled steel band (~3px, lit #899FC9 on top) seated on a dark seam,
+// with a dark outer line. Drawn outside the artwork with spread shadows, so the image keeps its size, crop and layout
+// Material polish: the frame is a recessed window. Out from the art: a near-black channel, the window's inner wall (in shade
+// at the top and left, catching light at the bottom and right, so the art sits below the frame), the n px steel band lit
+// by direction (one strip per side over the raised steel), the band's outer lip (lit upper-left, dark lower-right) and a
+// dark outer ring of r px. Outer shadows only, so the artwork's box, crop and layout never change; the drop is added by
+// each rule and kept short (ARTWORK_DROP) so it never reaches neighbouring text
+const artFrame = (n, r) =>
+  [
+    '0 0 0 1px rgb(0 0 0 / 0.9)',
+    '0 -2px 0 0 rgb(0 0 0 / 0.3)',
+    '-2px 0 0 0 rgb(0 0 0 / 0.25)',
+    '0 2px 0 0 rgb(var(--color-edge-light) / 0.3)',
+    '2px 0 0 0 rgb(var(--color-edge-light) / 0.18)',
+    `0 -${n}px 0 0 rgb(var(--color-edge-light) / 0.34)`,
+    `-${n}px 0 0 0 rgb(var(--color-edge-light) / 0.16)`,
+    `${n}px 0 0 0 rgb(0 0 0 / 0.3)`,
+    `0 ${n}px 0 0 rgb(0 0 0 / 0.45)`,
+    `0 0 0 ${n}px rgb(var(--color-edge-light) / 0.22)`,
+    `0 0 0 ${n}px rgb(var(--color-secondary))`,
+    `-1px -1px 0 ${n}px rgb(var(--color-edge-light) / 0.85)`,
+    `1px 1px 0 ${n}px rgb(var(--color-edge-dark))`,
+    `0 0 0 ${n + r}px rgb(0 0 0 / 0.7)`
+  ].join(', ')
+// Covers (cards, detail pages, the mini-player): a 3px band and a 1px ring, 4px in all, the same footprint as before
+const ARTWORK_FRAME = artFrame(3, 1)
+const ARTWORK_DROP = '0 2px 3px rgb(0 0 0 / 0.55)'
+// The same frame drawn inside a cover's own box (finishing corrections), for covers whose container clips everything
+// outside them (the Home shelves scroll sideways, so they clip vertically too): from the edge in, the dark outer ring, the
+// band's lips (lit upper-left, dark lower-right), the n px steel band lit by direction, and the near-black channel at the art
+const artFrameInset = (n) =>
+  [
+    'inset 0 0 0 1px rgb(0 0 0 / 0.7)',
+    'inset 2px 2px 0 0 rgb(var(--color-edge-light) / 0.85)',
+    'inset -2px -2px 0 0 rgb(var(--color-edge-dark))',
+    `inset 0 ${n}px 0 0 rgb(var(--color-edge-light) / 0.34)`,
+    `inset ${n}px 0 0 0 rgb(var(--color-edge-light) / 0.16)`,
+    `inset -${n}px 0 0 0 rgb(0 0 0 / 0.3)`,
+    `inset 0 -${n}px 0 0 rgb(0 0 0 / 0.45)`,
+    `inset 0 0 0 ${n}px rgb(var(--color-edge-light) / 0.22)`,
+    `inset 0 0 0 ${n}px rgb(var(--color-secondary))`,
+    `inset 0 0 0 ${n + 1}px rgb(0 0 0 / 0.9)`
+  ].join(', ')
+const ARTWORK_FRAME_INSET = artFrameInset(3)
 // A seam cut into the bottom of an element: dark inset line with a faint light return line below it.
 // Drawn inside the element's own box (inset), so row dimensions never change.
 const ENGRAVED_SEPARATOR = 'inset 0 -1px 0 rgb(var(--color-edge-light) / 0.12), inset 0 -2px 0 rgb(var(--color-edge-dark))'
@@ -107,27 +159,73 @@ const PLAYER_KEY_PRESSED = Object.freeze({
 // player key's lit/dark inner bevel with its faint second highlight, a 1px dark channel, a lit return ring outside it
 // and a 0 3px 5px drop (player keys: 0 2px 3px). Squared on the key radius. Paint only, on the existing box.
 // Pressed: sheen and drop shadow go, the face deepens, the bevel inverts with an inner shade; channel and ring stay
-const PRIMARY_KEY_FACE = 'linear-gradient(rgb(var(--color-recessed) / 0.72), rgb(var(--color-recessed) / 0.72))'
-const PRIMARY_KEY_FACE_MINI = 'linear-gradient(rgb(var(--color-recessed) / 0.85), rgb(var(--color-recessed) / 0.85))'
-const PRIMARY_KEY_RING = `${PLAYER_KEY_RING}, 0 0 0 2px rgb(var(--color-edge-light) / 0.3)`
-const PRIMARY_KEY = Object.freeze({
-  'border-radius': RADIUS.key,
-  'background-image': `${PLAYER_KEY_SHEEN}, ${PRIMARY_KEY_FACE}`,
-  'box-shadow': `inset 1px 1px 0 rgb(var(--color-edge-light) / 0.6), inset 2px 2px 0 rgb(var(--color-edge-light) / 0.12), inset -1px -1px 0 rgb(var(--color-edge-dark)), ${PRIMARY_KEY_RING}, 0 3px 5px rgb(0 0 0 / 0.55)`
-})
-const PRIMARY_KEY_MINI = Object.freeze({ 'background-image': `${PLAYER_KEY_SHEEN}, ${PRIMARY_KEY_FACE_MINI}` })
-const PRIMARY_KEY_PRESSED = Object.freeze({
-  'background-image': 'linear-gradient(rgb(var(--color-recessed) / 0.86), rgb(var(--color-recessed) / 0.86))',
-  'box-shadow': `inset 1px 1px 0 rgb(var(--color-edge-dark)), inset -1px -1px 0 rgb(var(--color-edge-light) / 0.3), inset 0 3px 6px rgb(0 0 0 / 0.6), ${PRIMARY_KEY_RING}`
-})
-const PRIMARY_KEY_PRESSED_MINI = Object.freeze({ 'background-image': 'linear-gradient(rgb(var(--color-recessed) / 0.94), rgb(var(--color-recessed) / 0.94))' })
+// --- Steel keys (faithful pass, 2026-10-10) ---
+// The approved mockup's keys are raised steel, lighter than the deck they sit in (its key faces sample #384B6E at the top
+// to #23324D at the bottom, in a near-black channel, #0B111D), and each has a framed inner face: a steel bezel band, a dark
+// groove and a lit lip, with the legend on the inner face. Built from paint only on each key's existing box: the face is a
+// top-lit gradient from the raised steel to the panel steel; the outer bevel (lit upper-left, dark lower-right) is drawn
+// first, then the bezel band k px wide in the raised steel, the groove (1px dark) and the inner face's lit upper-left lip;
+// outside, the channel ring and a short drop. k follows the key's size, so every key keeps the same proportions:
+// mini 3px (34px keys), utility/chrome 4px, transport 5px, primary 6px. Pressed: the face darkens and inverts its light,
+// the outer bevel inverts and an inner shade falls from the top; the frame and channel stay, so the key reads as pushed in
+// Material polish (2026-10-10): the faces were flat. The face now falls off like the mockup's (#384C6F at the top to
+// #202F49 at the bottom): the steel gradient reaches the panel steel by mid-key, a shade deepens the lower half and a faint
+// diagonal shade darkens the lower right. Nothing lightens the face, so its brightest point (the top edge, the raised
+// steel under 8% shade) stays darker than the draft's raised-steel top and the legend's contrast only rises. The bezel
+// band is lit directionally (see keyBevel) and the inner face is a raised panel inside its groove (lit upper-left lip,
+// shaded lower-right lip)
+const STEEL_FACE = 'linear-gradient(135deg, rgb(0 0 0 / 0) 45%, rgb(0 0 0 / 0.1) 100%), linear-gradient(180deg, rgb(0 0 0 / 0.08) 0%, rgb(0 0 0 / 0) 30%, rgb(0 0 0 / 0) 45%, rgb(0 0 0 / 0.3) 100%), linear-gradient(180deg, rgb(var(--color-secondary)) 0%, rgb(var(--color-bg)) 65%, rgb(var(--color-bg)) 100%)'
+// Pressed: the panel steel, shaded from the top where the bezel overhangs it (never lighter than the panel steel)
+const STEEL_FACE_PRESSED = 'linear-gradient(180deg, rgb(0 0 0 / 0.3) 0%, rgb(0 0 0 / 0.08) 45%, rgb(0 0 0 / 0.04) 100%), linear-gradient(180deg, rgb(var(--color-bg)) 0%, rgb(var(--color-bg)) 100%)'
+// The channel a key sits in: a near-black line and a soft dark socket 2px beyond it (the mockup's keys sit in dark wells)
+const STEEL_CHANNEL = '0 0 0 1px rgb(0 0 0 / 0.85), 0 0 0 3px rgb(0 0 0 / 0.22)'
+// Directional bevel inside a key's box, starting o px in (0 for a key, 3 for a navigation tab inside its gap): a bright 1px
+// specular top edge, a softer lit left edge and dark right and bottom edges, then the k px bezel band shaded by direction
+// (top lit, left faintly lit, right and bottom in shade: inset strips, one per side, over the band's flat raised steel).
+// With framed = true the band ends in the dark groove and the inner face's two lips; without, the face runs to the band
+const keyBevel = (o, k, framed = true) => {
+  const at = o ? ` ${o}px` : ''
+  return [
+    `inset 0 1px 0${at} rgb(var(--color-edge-light))`,
+    `inset 1px 0 0${at} rgb(var(--color-edge-light) / 0.5)`,
+    `inset -1px 0 0${at} rgb(var(--color-edge-dark) / 0.9)`,
+    `inset 0 -1px 0${at} rgb(var(--color-edge-dark))`,
+    `inset 0 ${k}px 0${at} rgb(var(--color-edge-light) / 0.28)`,
+    `inset ${k}px 0 0${at} rgb(var(--color-edge-light) / 0.12)`,
+    `inset -${k}px 0 0${at} rgb(0 0 0 / 0.22)`,
+    `inset 0 -${k}px 0${at} rgb(0 0 0 / 0.42)`,
+    ...(framed ? [`inset 0 0 0 ${o + k}px rgb(var(--color-secondary))`, `inset 0 0 0 ${o + k + 1}px rgb(0 0 0 / 0.8)`, `inset 1px 1px 0 ${o + k + 1}px rgb(var(--color-edge-light) / 0.75)`, `inset -1px -1px 0 ${o + k + 1}px rgb(0 0 0 / 0.5)`] : [])
+  ].join(', ')
+}
+// Pressed: the edges and the band's light invert (dark top, faint lit bottom), the groove stays and a shade falls from the top
+const keyBevelPressed = (k) =>
+  ['inset 0 1px 0 rgb(var(--color-edge-dark))', 'inset 1px 0 0 rgb(var(--color-edge-dark) / 0.8)', 'inset 0 -1px 0 rgb(var(--color-edge-light) / 0.35)', `inset 0 ${k}px 0 rgb(0 0 0 / 0.3)`, `inset 0 -${k}px 0 rgb(var(--color-edge-light) / 0.1)`, `inset 0 0 0 ${k}px rgb(var(--color-secondary) / 0.85)`, `inset 0 0 0 ${k + 1}px rgb(0 0 0 / 0.85)`, `inset 0 ${k + 3}px 6px rgb(0 0 0 / 0.4)`].join(', ')
+const steelKey = (k, drop) =>
+  Object.freeze({
+    'background-color': 'rgb(var(--color-bg))',
+    'background-image': STEEL_FACE,
+    'box-shadow': `${keyBevel(0, k)}, ${STEEL_CHANNEL}, ${drop}`
+  })
+const steelKeyPressed = (k) =>
+  Object.freeze({
+    'background-color': 'rgb(var(--color-bg))',
+    'background-image': STEEL_FACE_PRESSED,
+    'box-shadow': `${keyBevelPressed(k)}, ${STEEL_CHANNEL}`
+  })
+const KEY_DEPTH = Object.freeze({ mini: 3, utility: 4, transport: 5, primary: 6 })
+// Primary Play/Pause: the same steel key, made primary by its size, the widest frame and the deepest drop. The player sets
+// the button's fill inline (surface.raised), so the face is painted with background-image only
+const PRIMARY_KEY = Object.freeze({ 'border-radius': RADIUS.key, ...steelKey(KEY_DEPTH.primary, '0 3px 5px rgb(0 0 0 / 0.7)') })
+const PRIMARY_KEY_MINI = Object.freeze({ ...steelKey(KEY_DEPTH.mini, '0 2px 3px rgb(0 0 0 / 0.55)') })
+const PRIMARY_KEY_PRESSED = steelKeyPressed(KEY_DEPTH.primary)
+const PRIMARY_KEY_PRESSED_MINI = steelKeyPressed(KEY_DEPTH.mini)
 // Its legend (Play, Pause, the seek-pending glyph and the loading spinner alike) is the playback amber, solid and large:
 // 2.8rem in the full player (from 2.1rem) and 1.875rem collapsed (from 1.5rem, the jump glyphs' size). The glyph size is
 // the recipe's second authorized geometry (Phase 4H): it sizes the glyph inside the unchanged 65px / 40px box only
 const PRIMARY_GLYPH_SIZE = Object.freeze({ full: Object.freeze({ 'font-size': '2.8rem' }), mini: Object.freeze({ 'font-size': '1.875rem' }) })
 // Control legend: the played-progress amber, the illuminated legend of the deck's physical keys (transport and utility).
 // LLAMA's equipment rule: amber = an illuminated physical-control legend, green = a readout or live display
-const PLAYBACK_LEGEND = Object.freeze({ color: 'rgb(var(--color-track-cursor))' })
+const PLAYBACK_LEGEND = Object.freeze({ color: 'rgb(var(--color-legend))' })
 // Heavier playback glyphs. The bundled icon font has only a FILL axis (no weight axis, and FILL leaves these stroke
 // glyphs unchanged), so the transport glyphs get a hairline stroke in their own color. It adds ink, never layout, and
 // the utility keys stay at the font's regular weight, which keeps the transport legends the heavier tier
@@ -168,15 +266,12 @@ const UTILITY_ROW = Object.freeze({ bottom: `${Math.floor((UTILITY_SECTION_DEPTH
 const KEY_FACE_BEVEL = 'inset 1px 1px 0 rgb(var(--color-edge-light) / 0.6), inset 2px 2px 0 rgb(var(--color-edge-light) / 0.12), inset -1px -1px 0 rgb(var(--color-edge-dark))'
 const keyPressedBevel = (shade) => `inset 1px 1px 0 rgb(var(--color-edge-dark)), inset -1px -1px 0 rgb(var(--color-edge-light) / 0.3), inset 0 3px 6px rgb(0 0 0 / ${shade})`
 const TRANSPORT_KEY_RING = `${PLAYER_KEY_RING}, 0 0 0 2px rgb(var(--color-edge-light) / 0.18)`
-const TRANSPORT_KEY = Object.freeze({
-  'background-color': 'rgb(var(--color-recessed) / 0.66)',
-  'background-image': PLAYER_KEY_SHEEN,
-  'box-shadow': `${KEY_FACE_BEVEL}, ${TRANSPORT_KEY_RING}, 0 2px 4px rgb(0 0 0 / 0.5)`
-})
-const TRANSPORT_KEY_PRESSED = Object.freeze({ 'background-color': 'rgb(var(--color-recessed) / 0.84)', 'background-image': 'none', 'box-shadow': `${keyPressedBevel(0.6)}, ${TRANSPORT_KEY_RING}` })
-// Collapsed player: its deck is already close to the recessed color, so the face goes deeper (as the primary's does)
-const TRANSPORT_KEY_MINI = Object.freeze({ ...TRANSPORT_KEY, 'background-color': PLAYER_KEY_FACE_MINI })
-const TRANSPORT_KEY_PRESSED_MINI = Object.freeze({ ...TRANSPORT_KEY_PRESSED, 'background-color': 'rgb(var(--color-recessed) / 0.94)' })
+// Steel keys since the faithful pass (see steelKey); the dark-face family above stays as the reference finish
+const TRANSPORT_KEY = steelKey(KEY_DEPTH.transport, '0 3px 4px rgb(0 0 0 / 0.65)')
+const TRANSPORT_KEY_PRESSED = steelKeyPressed(KEY_DEPTH.transport)
+// Collapsed player and list rows: the same key at the small keys' frame depth
+const TRANSPORT_KEY_MINI = steelKey(KEY_DEPTH.mini, '0 2px 3px rgb(0 0 0 / 0.5)')
+const TRANSPORT_KEY_PRESSED_MINI = steelKeyPressed(KEY_DEPTH.mini)
 // Unavailable key: a sunken socket in the same place, unavailable by shape and luminance rather than color. A flat, darker
 // face cut into the deck (dark inner edge, inner shade, a faint lit lip below), no raised bevel, ring or drop, and a
 // strongly dimmed legend
@@ -190,15 +285,12 @@ const KEY_SOCKET_LEGEND = Object.freeze({ color: 'rgb(var(--color-fg) / 0.22)' }
 // channel only (no lit return) and the player keys' short drop, on a smaller face in the row below. Their legends are the
 // deck's illuminated amber, like the transport keys' (the tiers differ by size, bezel and row, and the transport glyphs are
 // heavier), at the font's regular weight; never the success green, which is the readouts'
-const UTILITY_KEY = Object.freeze({
-  'background-color': 'rgb(var(--color-recessed) / 0.6)',
-  'background-image': PLAYER_KEY_SHEEN,
-  'box-shadow': `${KEY_FACE_BEVEL}, ${PLAYER_KEY_RING}, 0 2px 3px rgb(0 0 0 / 0.5)`
-})
-const UTILITY_KEY_PRESSED = Object.freeze({ 'background-color': 'rgb(var(--color-recessed) / 0.8)', 'background-image': 'none', 'box-shadow': `${keyPressedBevel(0.55)}, ${PLAYER_KEY_RING}` })
+const UTILITY_KEY = steelKey(KEY_DEPTH.utility, '0 2px 4px rgb(0 0 0 / 0.55)')
+const UTILITY_KEY_PRESSED = steelKeyPressed(KEY_DEPTH.utility)
 const UTILITY_LEGEND = Object.freeze({ ...PLAYBACK_LEGEND })
 // The top chrome (navigation and menus, not deck controls) keeps a neutral legend, the primary text at 0.8
-const CHROME_LEGEND = Object.freeze({ color: 'rgb(var(--color-fg) / 0.8)' })
+// (faithful pass: the mockup lights its top chrome keys, collapse and overflow, with the same amber legend as the deck)
+const CHROME_LEGEND = Object.freeze({ ...PLAYBACK_LEGEND })
 // Top player chrome: collapse, cast and the overflow menu are neutral utility-family keys of one fixed size, aligned on one
 // line (their containers sit 16px and 24px down, so each key is shifted onto the line by a margin), with a 2rem glyph that
 // stays inside the key at font scale 1.3. The click stays on the same element, now the whole key: collapse goes from its
@@ -234,7 +326,9 @@ const READOUT_BOX = Object.freeze({
   'line-height': '1',
   'border-radius': RADIUS.key,
   'background-color': 'rgb(var(--color-recessed))',
-  'box-shadow': `${RECESSED_WELL}, 0 0 0 1px rgb(var(--color-edge-dark)), 0 1px 0 1px rgb(var(--color-edge-light) / 0.2)`
+  // Faithful pass: a steel key holding a glass display (the mockup's 1.5x key): the utility key's outer bevel and steel
+  // band, a dark groove, then the glass with its top shade; the channel and drop outside
+  'box-shadow': `${keyBevel(0, KEY_DEPTH.utility, false)}, inset 0 0 0 ${KEY_DEPTH.utility}px rgb(var(--color-secondary)), inset 0 0 0 ${KEY_DEPTH.utility + 1}px rgb(0 0 0 / 0.9), inset 0 ${KEY_DEPTH.utility + 3}px 6px -2px rgb(0 0 0 / 0.7), ${STEEL_CHANNEL}, 0 2px 4px rgb(0 0 0 / 0.55)`
 })
 // Transport legends, sized for the 60px keys. The jump arrow is 2rem (from 1.875rem) and sits 2px lower so the arrow and its
 // bold dynamic duration are centered as one legend (a transform, so nothing moves): at font scale 1.3 the legend is
@@ -248,6 +342,57 @@ const CHAPTER_GLYPH = Object.freeze({ 'font-size': '2.25rem' })
 const MINI_JUMP_GLYPH = Object.freeze({ transform: 'translateY(1px) scale(0.78)' })
 // Selected equipment key: pressed in (inset bevel and inner shade, so it reads as a different physical state,
 // not just a color) with an accent ring inside the edge
+// LCD glow: the mockup's green readouts bloom slightly on their glass. A soft text shadow in the readout's own color
+const LCD_GLOW = Object.freeze({ 'text-shadow': '0 0 6px rgb(var(--color-accent) / 0.35)' })
+const LCD_TEXT = Object.freeze({ color: 'rgb(var(--color-accent))', ...LCD_GLOW })
+// Lit label: the mockup's amber section strips (NOW PLAYING, UP NEXT, Playlist Items), condensed caps in the legend amber
+const LIT_LABEL = Object.freeze({ color: 'rgb(var(--color-legend))', 'font-family': 'sans-serif-condensed, sans-serif', 'letter-spacing': '0.06em' })
+// Faint horizontal scan lines on the graphite page (the mockup's dark backgrounds carry a fine line texture). Finishing
+// corrections: 0.02 read as stripes across the screen on the device; at 0.007 the lines are a graphite texture seen on
+// close inspection (about 2 levels of 255 over the near-black page)
+const SCANLINES = 'repeating-linear-gradient(180deg, rgb(255 255 255 / 0.007) 0, rgb(255 255 255 / 0.007) 1px, rgb(0 0 0 / 0) 1px, rgb(0 0 0 / 0) 3px)'
+// A steel frame drawn around a glass panel (the mockup's Up Next and list frames): a dark seam at the glass, a 5px steel
+// band with a lit upper-left lip and a dark lower-right lip, and a dark outer line. Outer spread shadows: no layout
+const STEEL_FRAME_OUTSIDE = '0 0 0 1px rgb(0 0 0 / 0.85), 0 0 0 5px rgb(var(--color-secondary)), -1px -1px 0 5px rgb(var(--color-edge-light) / 0.6), 1px 1px 0 5px rgb(var(--color-edge-dark)), 0 0 0 6px rgb(0 0 0 / 0.7)'
+// Seek thumb: a steel slider block (10x20, the mockup's knob) with a lit top, a dark base and a center grip line. It is
+// the decorative inner element of the thumb (pointer-events-none); the touch target is the separate hit element
+const SEEK_THUMB = Object.freeze({
+  width: '10px',
+  height: '20px',
+  'border-radius': '2px',
+  'background-color': 'rgb(var(--color-bg))',
+  'background-image': `linear-gradient(90deg, rgb(0 0 0 / 0) 4px, rgb(0 0 0 / 0.45) 4px, rgb(0 0 0 / 0.45) 5px, rgb(var(--color-edge-light) / 0.45) 5px, rgb(var(--color-edge-light) / 0.45) 6px, rgb(0 0 0 / 0) 6px), ${STEEL_FACE}`,
+  'box-shadow': `inset 1px 1px 0 rgb(var(--color-edge-light) / 0.85), inset -1px -1px 0 rgb(var(--color-edge-dark)), 0 0 0 1px rgb(0 0 0 / 0.8), 0 2px 3px rgb(0 0 0 / 0.6)`
+})
+// Navigation tab keys: each tab is drawn as a separate steel key inside its own box. A 2px ring in the page color makes the
+// gap between neighbouring keys (the tabs touch), then a dark channel line and the key's lit upper-left and dark lower-right
+// lips. Selected: a black glass key with a 2px green ring and a soft green glow inside the same gap (the mockup's Home key)
+const NAV_KEY = Object.freeze({
+  'background-image': STEEL_FACE,
+  // Material polish: the steel keys' directional bevel and band (3px), inside the gap and channel
+  'box-shadow': `inset 0 0 0 2px rgb(var(--color-page)), inset 0 0 0 3px rgb(0 0 0 / 0.75), ${keyBevel(3, 4, false)}`
+})
+const NAV_KEY_SELECTED = Object.freeze({
+  'background-color': 'rgb(var(--color-recessed))',
+  'background-image': 'none',
+  'box-shadow': 'inset 0 0 0 2px rgb(var(--color-page)), inset 0 0 0 4px rgb(var(--color-accent) / 0.85), inset 0 0 12px 4px rgb(var(--color-accent) / 0.22)',
+  color: 'rgb(var(--color-accent))',
+  'text-shadow': '0 0 6px rgb(var(--color-accent) / 0.35)'
+})
+// Action key (final consistency pass, 2026-10-10): an app-owned primary action (the success-colored ui-btn: Play, Stream,
+// Create, Update, Create New Playlist, Save, New Folder) is the deck's steel key with the lit amber legend, instead of a
+// green rectangle. The same steel face, bevel, band, groove and channel as the player keys (utility depth; small buttons
+// the mini depth), on the button's own box (paint only: its size, padding and hit area are unchanged). Pressed: the
+// player keys' pressed state. Unavailable: the deck's sunken socket with the dimmed legend. Destructive (bg-error) and
+// secondary buttons keep their own finishes, so primary, secondary and destructive stay distinct
+const ACTION_KEY = Object.freeze({ 'border-radius': RADIUS.key, 'border-color': 'rgb(var(--color-edge-dark))', ...steelKey(KEY_DEPTH.utility, '0 2px 4px rgb(0 0 0 / 0.55)'), color: 'rgb(var(--color-legend))' })
+const ACTION_KEY_SMALL = Object.freeze({ 'box-shadow': steelKey(KEY_DEPTH.mini, '0 2px 3px rgb(0 0 0 / 0.5)')['box-shadow'] })
+const ACTION_KEY_PRESSED = steelKeyPressed(KEY_DEPTH.utility)
+const ACTION_KEY_PRESSED_SMALL = Object.freeze({ 'box-shadow': steelKeyPressed(KEY_DEPTH.mini)['box-shadow'] })
+const ACTION_KEY_UNAVAILABLE = Object.freeze({ ...KEY_SOCKET, ...KEY_SOCKET_LEGEND, 'border-color': 'rgb(var(--color-edge-dark))' })
+// Dialog panel (final consistency pass): every app-owned dialog panel is a black recessed glass surface inside a steel
+// frame drawn outside it (Up Next's and Chapters' finish), never a broad brushed face; steel is kept for keys and frames
+const DIALOG_PANEL = Object.freeze({ 'background-color': 'rgb(var(--color-recessed))', 'background-image': 'none', 'border-color': 'rgb(0 0 0 / 0.8)', 'box-shadow': `${RECESSED_WELL}, ${STEEL_FRAME_OUTSIDE}, ${ELEVATION.overlay}` })
 const SELECTED_KEY = Object.freeze({
   'background-image': 'none',
   'box-shadow': `inset 0 0 0 1px rgb(var(--color-accent) / 0.9), ${PRESSED_BEVEL}, inset 0 2px 5px rgb(0 0 0 / 0.45)`
@@ -267,7 +412,7 @@ const THUMB_EDGE = '0 0 0 1px rgb(var(--color-edge-dark)), 0 1px 2px rgb(0 0 0 /
 const METADATA_READOUT = Object.freeze({
   'background-color': 'rgb(var(--color-recessed))',
   'border-radius': RADIUS.key,
-  'box-shadow': `${RECESSED_WELL}, 0 0 0 1px rgb(var(--color-edge-dark)), 0 0 0 3px rgb(var(--color-bg)), -1px -1px 0 3px rgb(var(--color-edge-light) / 0.35), 1px 1px 0 3px rgb(var(--color-edge-dark)), 0 3px 8px 3px rgb(0 0 0 / 0.4)`
+  'box-shadow': `${RECESSED_WELL}, 0 0 0 1px rgb(var(--color-edge-dark)), 0 0 0 3px rgb(var(--color-secondary)), -1px -1px 0 3px rgb(var(--color-edge-light) / 0.35), 1px 1px 0 3px rgb(var(--color-edge-dark)), 0 3px 8px 3px rgb(0 0 0 / 0.4)`
 })
 // The one authorized geometry in the recipe (Phase 4E, LLAMA full player only): the readout spans the seek wells'
 // column (24px gutters), gets an inner inset, and sits 22px lower in the free band above the deck so that it can grow
@@ -298,7 +443,7 @@ const METADATA_READOUT_ABOVE_TOTAL_TRACK = Object.freeze({ bottom: `max(${READOU
 // font scale 1.0 gets the same band, with more room around the text
 const METADATA_READOUT_COMPACT_QUERY = '(orientation: portrait) and (max-height: 824px)'
 const METADATA_READOUT_COMPACT = Object.freeze({
-  'box-shadow': `${RECESSED_WELL}, 0 0 0 1px rgb(var(--color-edge-dark)), -4px 0 0 0 rgb(var(--color-bg)), 4px 0 0 0 rgb(var(--color-bg)), -5px 0 0 0 rgb(var(--color-edge-light) / 0.35), 5px 0 0 0 rgb(var(--color-edge-dark)), 0 2px 4px rgb(0 0 0 / 0.4)`,
+  'box-shadow': `${RECESSED_WELL}, 0 0 0 1px rgb(var(--color-edge-dark)), -4px 0 0 0 rgb(var(--color-secondary)), 4px 0 0 0 rgb(var(--color-secondary)), -5px 0 0 0 rgb(var(--color-edge-light) / 0.35), 5px 0 0 0 rgb(var(--color-edge-dark)), 0 2px 4px rgb(0 0 0 / 0.4)`,
   display: 'flex',
   'flex-direction': 'column',
   'justify-content': 'center',
@@ -320,26 +465,47 @@ const METADATA_READOUT_LANDSCAPE = Object.freeze({ 'margin-left': '24px', 'max-w
 // the player's own stylesheet; the recipe only paints the hook classes and plates the layout projection adds.
 // A module plate is raised hardware the readouts and keys sit in: the deck color with the chassis sheen, the raised
 // bevel, a dark seam around it and the panel drop
+// Faithful pass: the mockup's module plates are brushed steel (#3C5077, the raised steel) with a bright specular top edge
+// (#AEBDD8), a dark lower edge, a near-black seam around them and a screw head in each corner. All paint: the rivets and the
+// brushing are background layers on the plate's own box
+// Material polish: quieter screw heads, every one lit the same way (a soft highlight in the head, a dark socket ring)
+const rivet = (x, y) => `radial-gradient(circle at ${x} ${y}, rgb(var(--color-edge-light) / 0.75) 0, rgb(var(--color-edge-light) / 0.45) 1px, rgb(var(--color-edge-dark)) 2.4px, rgb(0 0 0 / 0.4) 3.2px, rgb(0 0 0 / 0) 3.8px)`
+const RIVETS = [rivet('7px', '7px'), rivet('calc(100% - 7px)', '7px'), rivet('7px', 'calc(100% - 7px)'), rivet('calc(100% - 7px)', 'calc(100% - 7px)')].join(', ')
+// Material polish: the brushing was one even stripe every 3px. It is now three faint grains at unrelated periods (3, 5 and
+// 11px), so the lines vary in strength instead of repeating, with restrained lighting over them: a soft light falling from
+// the upper left and a slow left-to-right variation, as on the mockup's plates. Every layer is a few percent of white or black
+const BRUSHED = [
+  'radial-gradient(ellipse 120% 100% at 15% 0%, rgb(var(--color-edge-light) / 0.12) 0%, rgb(var(--color-edge-light) / 0) 65%)',
+  'linear-gradient(90deg, rgb(255 255 255 / 0.03) 0%, rgb(255 255 255 / 0) 25%, rgb(0 0 0 / 0.05) 55%, rgb(255 255 255 / 0.02) 80%, rgb(0 0 0 / 0.04) 100%)',
+  'repeating-linear-gradient(180deg, rgb(255 255 255 / 0.018) 0, rgb(255 255 255 / 0.018) 1px, rgb(0 0 0 / 0) 1px, rgb(0 0 0 / 0) 3px)',
+  'repeating-linear-gradient(180deg, rgb(0 0 0 / 0.04) 0, rgb(0 0 0 / 0.04) 1px, rgb(0 0 0 / 0) 1px, rgb(0 0 0 / 0) 5px)',
+  'repeating-linear-gradient(180deg, rgb(255 255 255 / 0.018) 0, rgb(255 255 255 / 0.018) 2px, rgb(0 0 0 / 0) 2px, rgb(0 0 0 / 0) 11px)'
+].join(', ')
+// Plate edges: a bright specular top line with a fainter second line under it, a lit left edge, and a dark right and
+// bottom edge with a shade line inside the bottom one (the seam's shadow side)
+const STEEL_PLATE_EDGE = 'inset 0 1px 0 rgb(var(--color-edge-light)), inset 0 2px 0 rgb(var(--color-edge-light) / 0.14), inset 1px 0 0 rgb(var(--color-edge-light) / 0.45), inset -1px 0 0 rgb(var(--color-edge-dark)), inset 0 -1px 0 rgb(var(--color-edge-dark)), inset 0 -2px 0 rgb(0 0 0 / 0.3)'
+// The seam around a plate: a near-black line with a faint lit return under it
+const PLATE_SEAM = '0 0 0 1px rgb(0 0 0 / 0.85), 0 1px 0 1px rgb(var(--color-edge-light) / 0.12)'
 const FACEPLATE_PLATE = Object.freeze({
-  'background-color': 'rgb(var(--color-bg))',
-  'background-image': CHASSIS_SHEEN,
+  'background-color': 'rgb(var(--color-secondary))',
+  'background-image': `${RIVETS}, ${BRUSHED}, ${CHASSIS_SHEEN}`,
   'border-radius': RADIUS.key,
-  'box-shadow': `${RAISED_BEVEL}, 0 0 0 1px rgb(var(--color-edge-dark)), 0 3px 8px rgb(0 0 0 / 0.45)`
+  'box-shadow': `${STEEL_PLATE_EDGE}, ${PLATE_SEAM}, 0 3px 8px rgb(0 0 0 / 0.5)`
 })
-// The top chrome plate carries navigation, not equipment: a quieter lit edge
+// The top chrome plate carries navigation: the same steel plate (the mockup's top bar is a full module plate)
 const FACEPLATE_TOP_PLATE = Object.freeze({
-  'box-shadow': 'inset 1px 1px 0 rgb(var(--color-edge-light) / 0.4), inset -1px -1px 0 rgb(var(--color-edge-dark)), 0 0 0 1px rgb(var(--color-edge-dark)), 0 3px 8px rgb(0 0 0 / 0.45)'
+  'box-shadow': `${STEEL_PLATE_EDGE}, ${PLATE_SEAM}, 0 3px 8px rgb(0 0 0 / 0.5)`
 })
 // Artwork bay: a bezel drawn outside the artwork with spread shadows only (no layout, no crop): a dark seam at the art,
 // the deck-colored bezel with a lit upper-left lip and a dark lower-right lip, a dark outer ring and a soft drop. Its
 // width is the layout tier's (playerLayout.TIERS), which also reserves the room for it
 const artworkBay = (n) =>
   Object.freeze({
-    'box-shadow': `0 0 0 1px rgb(var(--color-edge-dark)), 0 0 0 ${n}px rgb(var(--color-bg)), -1px -1px 0 ${n}px rgb(var(--color-edge-light) / 0.45), 1px 1px 0 ${n}px rgb(var(--color-edge-dark)), 0 0 0 ${n + playerLayout.FACEPLATE.bezelRing}px rgb(var(--color-edge-dark) / 0.9), 0 4px 10px ${n}px rgb(0 0 0 / 0.45)`
+    'box-shadow': `${artFrame(n, playerLayout.FACEPLATE.bezelRing)}, 0 2px 4px ${n + playerLayout.FACEPLATE.bezelRing}px rgb(0 0 0 / 0.5)`
   })
 const ARTWORK_BAY = Object.freeze({ regular: artworkBay(playerLayout.TIERS.regular.bezel), compact: artworkBay(playerLayout.TIERS.compact.bezel) })
 // The deck becomes chassis behind its console plate: no panel paint of its own
-const FACEPLATE_DECK = Object.freeze({ 'background-color': 'rgb(var(--color-primary))', 'background-image': 'none', 'box-shadow': 'none' })
+const FACEPLATE_DECK = Object.freeze({ 'background-color': 'rgb(var(--color-page))', 'background-image': 'none', 'box-shadow': 'none' })
 // Console banks centered in their framed sections (Phase 6B S26 correction). The console plate's top edge is
 // playerLayout.FACEPLATE.console above the deck bottom and its bottom edge FACEPLATE.consoleInset above it; the engraved
 // divider stays where the deck puts it (the transport section's bottom, DECK.seam). The rows had kept the offsets they
@@ -401,7 +567,7 @@ const MINI_READOUT_STRIP = Object.freeze({
   'box-shadow': '0 6px 0 0 rgb(var(--color-recessed)), 0 7px 0 0 rgb(var(--color-edge-light) / 0.22)'
 })
 // The mini artwork keeps its frame and gains a soft mount shadow: no bezel, ring or size change
-const MINI_ARTWORK_MOUNT = Object.freeze({ 'box-shadow': `${ARTWORK_FRAME}, 0 2px 4px 2px rgb(0 0 0 / 0.45)` })
+const MINI_ARTWORK_MOUNT = Object.freeze({ 'box-shadow': `${ARTWORK_FRAME}, ${ARTWORK_DROP}` })
 
 // Browsing chrome (Phase 8B, Candidate B of the Phase 8A audit): the content environment around the frozen players takes
 // their language in restrained form. Paint and type only; every box keeps its geometry.
@@ -434,6 +600,8 @@ const COUNT_TYPE = Object.freeze({ 'font-family': CONDENSED_FACE, 'letter-spacin
 // List-row play button: the mini-player's key face (dark, sheened, squared, ring and drop) on the button's own box, with
 // the playback amber legend
 const LIST_PLAY_KEY = Object.freeze({ ...TRANSPORT_KEY_MINI, 'border-radius': RADIUS.key })
+// Amber like every ordinary action legend (finishing corrections; the faithful pass had lit it green, which is kept for
+// displays, selection and activity)
 const LIST_PLAY_LEGEND = PLAYBACK_LEGEND
 
 const PRIMITIVES = Object.freeze({
@@ -445,6 +613,7 @@ const PRIMITIVES = Object.freeze({
   STEEL_SHEEN,
   CHASSIS_SHEEN,
   ARTWORK_FRAME,
+  ARTWORK_DROP,
   ENGRAVED_SEPARATOR,
   ENGRAVED_SEPARATOR_TOP,
   RECESSED_FACE,
@@ -513,7 +682,30 @@ const PRIMITIVES = Object.freeze({
   SHELF_HEADING_RULE,
   COUNT_TYPE,
   LIST_PLAY_KEY,
-  LIST_PLAY_LEGEND
+  LIST_PLAY_LEGEND,
+  // Faithful pass (2026-10-10)
+  STEEL_FACE,
+  STEEL_FACE_PRESSED,
+  STEEL_CHANNEL,
+  KEY_DEPTH,
+  RIVETS,
+  BRUSHED,
+  SCANLINES,
+  ARTWORK_FRAME_INSET,
+  STEEL_PLATE_EDGE,
+  STEEL_FRAME_OUTSIDE,
+  SEEK_THUMB,
+  LCD_GLOW,
+  LCD_TEXT,
+  LIT_LABEL,
+  NAV_KEY,
+  NAV_KEY_SELECTED,
+  ACTION_KEY,
+  ACTION_KEY_SMALL,
+  ACTION_KEY_PRESSED,
+  ACTION_KEY_PRESSED_SMALL,
+  ACTION_KEY_UNAVAILABLE,
+  DIALOG_PANEL
 })
 
 const EQUIPMENT_RULES = [
@@ -588,11 +780,11 @@ const EQUIPMENT_RULES = [
   // Card artwork is marked by the `card-artwork` hook: the grid card itself (it is the cover) and, in list
   // rows, only the cover box, never the whole row
   ['.cover-wrapper', { 'box-shadow': ARTWORK_FRAME, 'border-radius': RADIUS.frame }],
-  ['.card-artwork', { 'box-shadow': `${ARTWORK_FRAME}, ${ELEVATION.panel}` }],
+  ['.card-artwork', { 'box-shadow': `${ARTWORK_FRAME}, ${ARTWORK_DROP}` }],
 
   // Player artwork uses the squared frame radius above (mini 3px, fullscreen 16px before); same box, crop and
   // aspect ratio. Fullscreen artwork sits mounted on the chassis like card artwork
-  ['.fullscreen .cover-wrapper', { 'box-shadow': `${ARTWORK_FRAME}, ${ELEVATION.panel}` }],
+  ['.fullscreen .cover-wrapper', { 'box-shadow': `${ARTWORK_FRAME}, ${ARTWORK_DROP}` }],
   // Fullscreen transport deck: the existing bottom player panel becomes a raised chassis panel (sheen, light
   // top edge, dark seam above it against the artwork zone). Same box; the controls inside are untouched
   ['.fullscreen #playerContent', { 'background-color': 'rgb(var(--color-bg))', 'background-image': CHASSIS_SHEEN, 'box-shadow': `${RAISED_BEVEL}, 0 -1px 0 rgb(var(--color-edge-dark))` }],
@@ -749,7 +941,7 @@ const EQUIPMENT_RULES = [
   ['.modal .library-option-panel li[role=option].option-selected', { 'background-color': 'rgb(var(--color-bg))', ...SELECTED_KEY }],
   ['.modal .library-option-panel .option-marker', { 'background-color': 'rgb(var(--color-accent))' }],
   // Detail artwork (item, collection and playlist pages): the same mounted frame as card artwork
-  ['.detail-artwork', { 'border-radius': RADIUS.frame, 'box-shadow': `${ARTWORK_FRAME}, ${ELEVATION.panel}` }],
+  ['.detail-artwork', { 'border-radius': RADIUS.frame, 'box-shadow': `${ARTWORK_FRAME}, ${ARTWORK_DROP}` }],
   // Item progress: a recessed information display (text and values unchanged)
   ['.detail-progress', { 'background-color': 'rgb(var(--color-recessed))', 'border-radius': RADIUS.key, 'box-shadow': RECESSED_WELL }],
   // Tappable section headers (chapters/tracks/ebook files, collection/playlist items): raised chassis strips
@@ -822,6 +1014,103 @@ const EQUIPMENT_RULES = [
   // small uppercase muted section headers and inactive navigation icons use primary text at reduced alpha
   ['#content p.uppercase.text-fg-muted', { color: 'rgb(var(--color-fg) / 0.78)' }],
   ['#bookshelf-navbar a.text-fg-muted', { color: 'rgb(var(--color-fg) / 0.8)' }],
+
+  // --- Faithful pass (2026-10-10): the approved mockup's material language across the app ---
+  // Paint and type only, layered over the rules above (a repeated selector merges into its earlier entry, later values
+  // win). Every box keeps its geometry; the seek thumb's decorative inner element is the one exception (see SEEK_THUMB).
+  // Graphite room: content pages sit on the mockup's near-black graphite with faint horizontal scan lines. Only the page
+  // wrapper (layouts/default.vue); the player container also carries layout-wrapper but never bg-bg
+  ['.layout-wrapper.bg-bg', { 'background-color': 'rgb(var(--color-page))', 'background-image': SCANLINES }],
+  // App bar: a brushed steel module plate with corner screws; its glyphs are lit amber legends, and the library selector
+  // is a glass display with the library name in phosphor green (the mockup's top bar)
+  ['#appbar', { 'background-color': 'rgb(var(--color-secondary))', 'background-image': `${RIVETS}, ${BRUSHED}, ${CHASSIS_SHEEN}`, 'box-shadow': `${STEEL_PLATE_EDGE}, 0 1px 0 rgb(0 0 0 / 0.8)` }],
+  ['#appbar .material-symbols', PLAYBACK_LEGEND],
+  ['#appbar .library-selector', { 'background-color': 'rgb(var(--color-recessed))', 'box-shadow': `${RECESSED_WELL}, 0 0 0 1px rgb(0 0 0 / 0.8), 0 1px 0 1px rgb(var(--color-edge-light) / 0.3)`, ...LCD_TEXT }],
+  ['#appbar .library-selector p', { 'font-family': CONDENSED_FACE, 'letter-spacing': '0.02em' }],
+  // Navigation: each tab is a steel key on the strip; the selected tab is a lit glass key with a green ring and green
+  // legend (the mockup's Home key), so the state reads by shape (glass vs steel) as well as color
+  ['#bookshelf-navbar', { 'background-color': 'rgb(var(--color-page))', 'background-image': 'none', 'box-shadow': 'inset 0 -1px 0 rgb(0 0 0 / 0.8)' }],
+  ['#bookshelf-navbar a', NAV_KEY],
+  ['#bookshelf-navbar a.text-fg-muted', { color: 'rgb(var(--color-fg) / 0.92)' }],
+  ['#bookshelf-navbar a.bg-primary', NAV_KEY_SELECTED],
+  ['#bookshelf-navbar a.bg-primary p', { 'font-family': CONDENSED_FACE, 'letter-spacing': '0.03em' }],
+  // Headings and counts are lit readouts: shelf headings and search groups in phosphor green, the toolbar count too
+  ['.shelf-heading', LCD_TEXT],
+  ['.search-section-label', LCD_TEXT],
+  ['.toolbar-count', LCD_TEXT],
+  // Section headers (settings groups and other small uppercase labels): lit amber caps
+  ['#content p.uppercase.text-fg-muted', LIT_LABEL],
+  // Dialogs: black recessed panels in a steel frame (final consistency pass; they were brushed steel plates); their
+  // titles are green displays and their close key glyph amber
+  ['.modal .rounded-lg.bg-primary', DIALOG_PANEL],
+  ['.modal .z-40 > p.text-white.truncate', { ...LCD_TEXT, 'font-family': CONDENSED_FACE, 'letter-spacing': '0.02em' }],
+  ['.modal .top-11.right-4 .material-symbols', PLAYBACK_LEGEND],
+  // Up Next: a glass list inside a steel frame; the section labels are amber strips and the now-playing title is green
+  ['.modal .queue-panel.rounded-lg.bg-primary', { 'background-color': 'rgb(var(--color-recessed))', 'background-image': 'none', 'box-shadow': `${RECESSED_WELL}, ${STEEL_FRAME_OUTSIDE}, ${ELEVATION.overlay}` }],
+  ['.modal .queue-panel p.uppercase', LIT_LABEL],
+  // The now-playing entry is the lit glass display of the mockup (it keeps the amber current marker), not a raised strip
+  ['.modal .queue-panel .queue-current', { 'background-color': 'rgb(var(--color-recessed))', 'box-shadow': `${CURRENT_MARKER}, inset 0 -1px 0 rgb(var(--color-edge-light) / 0.18), inset 0 -2px 0 rgb(0 0 0 / 0.8)` }],
+  ['.modal .queue-panel .queue-current p.text-sm', LCD_TEXT],
+  // Chapters: the same glass list in a steel frame; chapter times in the condensed readout face with tabular figures
+  ['.modal .chapters-panel.bg-secondary', { 'box-shadow': `${RECESSED_WELL}, ${STEEL_FRAME_OUTSIDE}, ${ELEVATION.overlay}` }],
+  ['.modal .chapters-panel .font-mono', { 'font-family': CONDENSED_FACE, 'font-variant-numeric': 'tabular-nums', 'letter-spacing': '0.02em' }],
+  // Speed and sleep option lists: values in the condensed readout face
+  ['.modal .playback-option-panel li[role=option]', { 'font-family': CONDENSED_FACE, 'letter-spacing': '0.02em' }],
+  // Full player: the metadata readout is a green display (chapter title bright, author a step dimmer, as in the mockup),
+  // and every readout glows
+  ['.fullscreen .title-author-texts .title-text', LCD_TEXT],
+  ['.fullscreen .title-author-texts .author-text', { color: 'rgb(var(--color-accent) / 0.82)', ...LCD_GLOW }],
+  ['#playerTrack p.font-mono', LCD_GLOW],
+  ['.total-track p.font-mono', LCD_GLOW],
+  ['#playerContent .speed-readout', LCD_GLOW],
+  ['#playerContent .sleep-readout', LCD_GLOW],
+  ['#streamContainer p.tracking-widest', LCD_TEXT],
+  // Seek thumb: the mockup's steel slider block instead of the amber dot. The channel stops clipping it, so the block
+  // stands above and below the rail; its touch target is the separate hit element, unchanged
+  ['#playerTrack div.relative.rounded-full', { overflow: 'visible' }],
+  ['#playerTrack .pointer-events-auto > .bg-track-cursor', SEEK_THUMB],
+  // Collapsed player: a steel plate (its overlay token is the steel gradient) with a lit top edge
+  ['#streamContainer:not(.fullscreen) #playerContent', { 'box-shadow': `${STEEL_PLATE_EDGE}, 0 -1px 0 rgb(0 0 0 / 0.8)` }],
+  // Material polish: the steel gradient is an inline background on the plate's overlay layer, which covers the container's
+  // inset edges; the same plate edge is drawn on that layer (box-shadow only: the inline background stays)
+  ['#streamContainer:not(.fullscreen) #playerContent > .absolute.h-full.pointer-events-none', { 'box-shadow': STEEL_PLATE_EDGE }],
+  // Side drawer: a graphite panel with a steel edge; the current page is a glass entry with the amber marker
+  ['.layout-wrapper .w-64.bg-bg', { 'background-color': 'rgb(var(--color-page))', 'background-image': SCANLINES, 'box-shadow': `inset 3px 0 0 rgb(var(--color-secondary)), inset 4px 0 0 rgb(var(--color-edge-light) / 0.5), -2px 0 8px rgb(0 0 0 / 0.6)` }],
+  ['.layout-wrapper .w-64 a.text-fg:not(.text-fg-muted)', { 'background-color': 'rgb(var(--color-recessed))', 'box-shadow': `inset 3px 0 0 rgb(var(--color-legend)), ${PRESSED_BEVEL}`, ...LCD_TEXT }],
+
+  // --- Final consistency pass (2026-10-10): dialogs and primary actions ---
+  // Dialog content on the black panel: the bookmark editor's heading and time are green readouts, its field label a
+  // restrained amber; the custom sleep/rewind time is a green readout
+  ['.modal .rounded-lg.bg-primary > .p-4 > .flex.mb-4 > p', LCD_TEXT],
+  ['.modal .rounded-lg.bg-primary > .p-4 p.font-semibold', { color: 'rgb(var(--color-legend))' }],
+  ['.modal .rounded-lg.bg-primary > .p-4 p.font-mono.text-2xl', LCD_TEXT],
+  // Primary actions are steel keys with amber legends (see ACTION_KEY); the bookmark list's Create Bookmark bar too
+  ['.btn.bg-success-action:not(:disabled)', ACTION_KEY],
+  ['.btn.bg-success-action.text-sm:not(:disabled)', ACTION_KEY_SMALL],
+  ['.btn.bg-success-action:not(:disabled):active', ACTION_KEY_PRESSED],
+  ['.btn.bg-success-action.text-sm:not(:disabled):active', ACTION_KEY_PRESSED_SMALL],
+  ['.btn.bg-success-action:disabled', ACTION_KEY_UNAVAILABLE],
+  ['.modal .rounded-lg.bg-primary > .bg-success-action', { ...ACTION_KEY, ...ACTION_KEY_SMALL }],
+  ['.modal .rounded-lg.bg-primary > .bg-success-action:active', { ...ACTION_KEY_PRESSED, ...ACTION_KEY_PRESSED_SMALL }],
+  // App-owned full-screen sheets with the 96px header (Add to Playlist, RSS feed) sit on the graphite room like the pages,
+  // with a green heading; the e-reader's table of contents (an 80px header, its own reader theme) is not matched
+  ['.modal-bg > .relative.text-fg.bg-bg:has(> .h-24)', { 'background-color': 'rgb(var(--color-page))', 'background-image': SCANLINES }],
+  ['.modal-bg > .bg-bg > .h-24 > h1.text-lg', LCD_TEXT],
+
+  // --- Finishing corrections (2026-10-10) ---
+  // Browsing Play controls are ordinary actions: amber legends like the list-row play key (series toolbar Play, the
+  // collection and playlist row play buttons, podcast episode play pills). Selection, focus, readouts and activity stay
+  // green. Color only: faces, labels, geometry and hit areas unchanged
+  ['.browse-toolbar .series-play-action', PLAYBACK_LEGEND],
+  ['.row-play-btn > .material-symbols', PLAYBACK_LEGEND],
+  ['.episode-play-control > .material-symbols', PLAYBACK_LEGEND],
+  // The downloaded book page's Play (pages/localMedia/item): the same ordinary action
+  ['.local-play-action', PLAYBACK_LEGEND],
+  // Home shelves scroll sideways, so their scroller clips the outer frame's top edge: there the frame is painted inside the
+  // cover's own bounds, on the card's decorative card-frame element (above the art, below badges and progress), and the
+  // cover keeps only its short drop. Paint only: the element, its box and stacking come from the card markup
+  ['.shelf-section .card-artwork', { 'box-shadow': ARTWORK_DROP }],
+  ['.shelf-section .card-frame', { 'box-shadow': ARTWORK_FRAME_INSET }],
 
   // Visible focus for keyboard/switch access
   [':focus-visible', { outline: '2px solid rgb(var(--color-accent))', 'outline-offset': '2px' }]

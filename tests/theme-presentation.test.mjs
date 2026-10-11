@@ -94,7 +94,7 @@ test('the equipment recipe emits only fixed selectors, fixed properties and safe
   const theme = equipmentTheme()
   const root = engine.themeSelector(theme.id)
   const rules = presets.presentationRules([theme])
-  const allowedProps = new Set(['--color-edge-light', '--color-edge-dark', ...presets.EQUIPMENT_RULES.flatMap(([, d]) => Object.keys(d))])
+  const allowedProps = new Set(['--color-edge-light', '--color-edge-dark', '--color-page', '--color-legend', ...presets.EQUIPMENT_RULES.flatMap(([, d]) => Object.keys(d))])
   assert.ok(Object.keys(rules).length >= 1)
   for (const [selector, declarations] of Object.entries(rules)) {
     assert.ok(selector === root || selector.startsWith(`${root} `), selector)
@@ -105,6 +105,8 @@ test('the equipment recipe emits only fixed selectors, fixed properties and safe
   }
   assert.match(rules[root]['--color-edge-light'], /^\d{1,3} \d{1,3} \d{1,3}$/)
   assert.match(rules[root]['--color-edge-dark'], /^\d{1,3} \d{1,3} \d{1,3}$/)
+  assert.match(rules[root]['--color-page'], /^\d{1,3} \d{1,3} \d{1,3}$/)
+  assert.match(rules[root]['--color-legend'], /^\d{1,3} \d{1,3} \d{1,3}$/)
 })
 
 test('no recipe value is quoted or generated content, and hostile theme data cannot add one', () => {
@@ -132,6 +134,10 @@ test('derived edge colors are deterministic blends of validated surfaces, within
   const derived = presets.equipmentDerivedDeclarations(tokens)
   assert.equal(derived['--color-edge-light'], '170 175 181')
   assert.equal(derived['--color-edge-dark'], '8 12 16')
+  // Faithful pass: the graphite page (recessed blended a quarter toward base) and the lit key legend (played progress
+  // lifted toward a warm yellow)
+  assert.equal(derived['--color-page'], '31 34 36')
+  assert.equal(derived['--color-legend'], '239 233 179')
   for (const extreme of [
     [0, 0, 0],
     [255, 255, 255]

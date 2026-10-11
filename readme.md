@@ -123,7 +123,25 @@ be) in the official app.
 - **LLAMA theme** — an optional, original late-1990s audio-equipment theme (Settings → Theme): a
   deep navy chassis, a full player with physical-style transport and utility keys, amber key
   legends and progress, and green readouts for speed, sleep timer and playback time. The home
-  screen widget follows it. Black, Dark and Light are unchanged.
+  screen widget follows it. Black, Dark and Light are unchanged. Since v0.15.1, on `plus` for the
+  next release: a more faithful finish across the app — brushed-steel panels and keys, steel home
+  screen widget keys, black recessed dialogs with steel frames, steel action buttons with amber
+  labels, amber Play controls in lists, series, collections, playlists and downloaded books, cover
+  frames that are complete on the Home shelves, a slimmer collapsed player without the empty strip
+  under its progress bar, and a fainter page texture. Green stays the color of selection, focus
+  and readouts.
+- **Fixes in every theme** — since v0.15.1, on `plus` for the next release:
+  - The full player's bookmark button stays available when the app can't reach the server (it
+    used to disappear); your saved bookmarks can still be viewed offline.
+  - A paused book shows its real position when you return to the app. Before, a downloaded book
+    could show an older saved position (and a new bookmark could use it), and a streamed book that
+    was moved from the notification, widget or a headset while paused could jump back to the
+    server's older position.
+  - With large text (Android font size), book titles in the grids sit below the covers instead of
+    over them, long series names wrap in the series toolbar without covering the navigation, and
+    the downloaded-books screens no longer run under the player.
+  - The PDF reader's page counter is visible again above the page, and swiping up on page content
+    just above the collapsed player no longer opens the player by accident.
 - **Download controls** — the Downloads screen shows each download's real state in words
   (queued, waiting for space, downloading, failed, folder access lost, finishing) and offers
   *Retry*, *Cancel* and *Clear*. Retry keeps the files that already finished and starts only the
@@ -265,7 +283,8 @@ npm run generate
 </details>
 <br>
 
-Copy web app into native android/ios folders:
+Copy the web app into the native Android project (`cap sync` also updates the inherited, unmaintained
+iOS project; that is expected and needs no action):
 
 ```shell
 npx cap sync

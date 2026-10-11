@@ -132,7 +132,7 @@ const makeWorld = ({ wrapped }) => {
 const loadBookshelf = async () => {
   const sfc = parseComponent(await read('../components/bookshelf/LazyBookshelf.vue'))
   const mixin = loadDefault(await read('../mixins/bookshelfCardsHelpers.js'), ['Vue'])(Vue)
-  const component = loadDefault(sfc.script.content, ['bookshelfCardsHelpers', 'createPageRetry'])(mixin, createPageRetry)
+  const component = loadDefault(sfc.script.content, ['bookshelfCardsHelpers', 'createPageRetry', 'textScale'])(mixin, createPageRetry, () => 1)
   return { component, mixin }
 }
 

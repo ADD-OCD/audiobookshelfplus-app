@@ -207,11 +207,21 @@ On a wide portrait screen (about 762×986) at font scale 1.3 with Chapter Track 
 
 ## Mini-player clearance at font scale 1.3
 
-Measured during the LLAMA mini-player work (Phases 7A/7B) and left unchanged; the panel is fixed at 120px. At font scale 1.3 only about 2px separate the mini artwork from the seek row, and the title/author block extends about 1.2px above the panel. The default "Book | Chapter" title already scrolls at 412px. This rules out any inset well or bezel around the mini readout or artwork without a geometry change; a fix belongs to the shared collapsed-player geometry (all themes).
+Measured during the LLAMA mini-player work (Phases 7A/7B) and left unchanged; the panel is fixed at 120px (LLAMA's collapsed player is 92px since the 2026-10-10 finish: the empty band under its seek row was removed and every module moved down by the same amount, so the spacing below is unchanged). At font scale 1.3 only about 2px separate the mini artwork from the seek row, and the title/author block extends about 1.2px above the panel. The default "Book | Chapter" title already scrolls at 412px. This rules out any inset well or bezel around the mini readout or artwork without a geometry change; a fix belongs to the shared collapsed-player geometry (all themes).
 
 ## Browsing chrome at font scale 1.3
 
-Found during the LLAMA browsing work (Phases 8A/8B) and left unchanged, in every theme. At font scale 1.3 the app bar's library selector truncates the library name ("Restore T…" at 412px). In the alternative bookshelf view, card titles sit tight against the bottom of the artwork. Both come from the shared layout (a content-sized selector, fixed title offsets), not from presentation.
+Found during the LLAMA browsing work (Phases 8A/8B), in every theme. At font scale 1.3 the app bar's library selector truncates the library name ("Restore T…" at 412px). It comes from the shared layout (a content-sized selector), not from presentation, and is still open.
+
+**Fixed on `plus` (2026-10-10):** in the alternative bookshelf view, book-card titles sat tight against, then over, the bottom of the artwork at 1.3 (a fixed upward title offset). The title block now hangs from the cover and the shelves size their title space by the measured text scale (`utils/textScale.js`), in every theme.
+
+## Reader and podcast flows without device test content
+
+The 2026-10-10 LLAMA finish changed the comic, EPUB and MOBI readers' offsets above the collapsed player, the comic and PDF page bars' stacking, and the podcast episode Play legends. The test server has no EPUB, MOBI or comic (CBZ/CBR) files and no podcast library, so those were checked by source and unit tests (`tests/closure.test.mjs`) and, for the podcast legend, a synthetic element in the running app. Only the PDF reader was tested on a device. Check them on a device when such content is available.
+
+## Streamed refocus and recent remote progress
+
+Returning to the app with a paused streamed book keeps the native player's position unless the server's progress is another device's newer update (`utils/livePosition.js` `refocusServerAction`). The server copy counts as newer only when it is more than 10 seconds newer than this session's last update, because this device's own sync is stamped by the server a moment later. A remote update made within 10 seconds of this device's last sync is therefore not applied on refocus; it is applied at the next sync or play.
 
 ## Widget ANR on display-size changes
 

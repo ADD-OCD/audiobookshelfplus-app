@@ -23,6 +23,8 @@
 </template>
 
 <script>
+import { textScale } from '@/utils/textScale'
+
 export default {
   props: {
     label: String,
@@ -40,11 +42,16 @@ export default {
       if (!this.altViewEnabled) return 0
       if (this.type === 'authors') return 10
       else if (this.type === 'series') return 40
-      return 60 * this.sizeMultiplier
+      return this.bookTitleSpace
+    },
+    // Book cards hang their title and author below the cover: that space grows with the text scale
+    bookTitleSpace() {
+      return 60 * textScale() * this.sizeMultiplier
     },
     shelfHeight() {
       if (this.altViewEnabled) {
-        var extraTitleSpace = this.type === 'authors' ? 10 : this.type === 'series' ? 50 : 60
+        if (this.type !== 'authors' && this.type !== 'series') return this.entityHeight + this.bookTitleSpace
+        var extraTitleSpace = this.type === 'authors' ? 10 : 50
         return this.entityHeight + extraTitleSpace * this.sizeMultiplier
       }
       return this.entityHeight + 40

@@ -3,6 +3,8 @@
     <div class="absolute top-0 left-0 w-full box-shadow-book shadow-height" />
     <div class="card-artwork w-full h-full bg-primary relative rounded overflow-hidden">
       <covers-group-cover v-if="series" ref="cover" :id="seriesId" :name="title" :book-items="books" :width="width" :height="height" :book-cover-aspect-ratio="bookCoverAspectRatio" />
+      <!-- Decorative frame inside the cover's bounds: painted only by a presentation theme that needs it; never a touch target -->
+      <div class="card-frame absolute inset-0 z-10 rounded pointer-events-none" aria-hidden="true" />
     </div>
 
     <div v-if="seriesPercentInProgress > 0" class="absolute bottom-0 left-0 h-1 max-w-full z-10 rounded-b w-full box-shadow-progressbar" :class="isSeriesFinished ? 'bg-success' : 'bg-yellow-400'" :style="{ width: seriesPercentInProgress * 100 + '%' }" />

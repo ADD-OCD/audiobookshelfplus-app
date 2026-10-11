@@ -54,7 +54,7 @@
       <item android:bottom="3dp" android:left="2dp" android:right="3dp" android:top="2dp">
         <shape android:shape="rectangle">
           <corners android:radius="4dp" />
-          <solid android:color="@color/widget_llama_edge_light_55" />
+          <solid android:color="@color/widget_llama_edge_light" />
         </shape>
       </item>
       <item android:bottom="3dp" android:left="3dp" android:right="3dp" android:top="3dp">

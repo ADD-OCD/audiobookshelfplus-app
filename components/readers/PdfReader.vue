@@ -18,7 +18,8 @@
       </div>
     </div>
 
-    <div class="fixed left-0 h-8 w-full bg-bg px-4 flex items-center text-fg-muted" :style="{ bottom: isPlayerOpen ? '120px' : '0px' }">
+    <!-- Above the collapsed player: its projected plate height (--mini-player-height, set by AudioPlayer.vue; 120px by default); above the page (z-20), which is z-10 -->
+    <div class="fixed left-0 h-8 w-full bg-bg px-4 flex items-center text-fg-muted z-20" :style="{ bottom: isPlayerOpen ? 'var(--mini-player-height, 120px)' : '0px' }">
       <div class="flex-grow" />
       <p class="text-xs">{{ page }} / {{ numPages }}</p>
     </div>

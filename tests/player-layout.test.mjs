@@ -254,7 +254,7 @@ test('Plates are decorative: aria-hidden, rendered only from the layout projecti
   assert.match(template, /id="streamContainer"[^>]*:class="\[\{ fullscreen: showFullscreen[^"]*\}, faceplateHooks\.classes\]" :style="faceplateHooks\.vars"/)
 })
 
-test('faceplateHooks: nothing while collapsed (mini-player) or for legacy themes; the projection while full screen', async () => {
+test('faceplateHooks: the compact collapsed layout (LLAMA) while collapsed, nothing for legacy themes; the projection while full screen', async () => {
   const source = await read('../components/app/AudioPlayer.vue')
   const script = source
     .match(/<script>([\s\S]*?)<\/script>/)[1]
@@ -265,17 +265,21 @@ test('faceplateHooks: nothing while collapsed (mini-player) or for legacy themes
   const c = sandbox.component.computed
   const ctx = { themeId: 'llama', showFullscreen: true, windowWidth: 412, windowHeight: 842, playerSettings: { useChapterTrack: false, useTotalTrack: true }, $store: { getters: { 'libraries/getBookCoverAspectRatio': 1 } } }
   Object.defineProperty(ctx, '$theme', { get: () => ({ theme: engine.getTheme(ctx.themeId) }) })
-  for (const name of ['presentationTheme', 'bookCoverAspectRatio', 'fullscreenLayout', 'fullscreenBookCoverWidth']) Object.defineProperty(ctx, name, { get: () => c[name].call(ctx) })
+  for (const name of ['presentationTheme', 'bookCoverAspectRatio', 'fullscreenLayout', 'fullscreenBookCoverWidth', 'miniLayout']) Object.defineProperty(ctx, name, { get: () => c[name].call(ctx) })
   assert.deepEqual([...c.faceplateHooks.call(ctx).classes], ['faceplate-type', 'faceplate', 'faceplate-top-plate'])
   ctx.playerSettings.useChapterTrack = true
   assert.equal(ctx.fullscreenLayout.path, 'compat')
   ctx.showFullscreen = false
-  assert.deepEqual(JSON.parse(JSON.stringify(c.faceplateHooks.call(ctx))), { classes: [], vars: {}, plates: { top: false, console: false, seek: false } })
+  assert.deepEqual(JSON.parse(JSON.stringify(c.faceplateHooks.call(ctx))), { classes: ['mini-compact'], vars: { '--mini-trim': '28px' }, plates: { top: false, console: false, seek: false } })
   ctx.showFullscreen = true
   for (const id of LEGACY_THEMES) {
     ctx.themeId = id
     assert.deepEqual(JSON.parse(JSON.stringify(c.faceplateHooks.call(ctx))), { classes: [], vars: {}, plates: { top: false, console: false, seek: false } })
     assert.equal(ctx.fullscreenBookCoverWidth, previousCoverWidth(412, 842, 1))
+    ctx.showFullscreen = false
+    assert.deepEqual(JSON.parse(JSON.stringify(c.faceplateHooks.call(ctx))), { classes: [], vars: {}, plates: { top: false, console: false, seek: false } }, `${id} collapsed`)
+    assert.equal(ctx.miniLayout.height, 120, id)
+    ctx.showFullscreen = true
   }
 })
 
@@ -433,10 +437,23 @@ test('Recipe paint for the faceplate: LLAMA only, paint only, bay widths from th
   assert.deepEqual(rules[`${root} #streamContainer.faceplate-compact .cover-wrapper`], { ...P.ARTWORK_BAY.compact })
   assert.deepEqual(rules[`${root} #streamContainer.faceplate #playerContent`], { ...P.FACEPLATE_DECK })
   assert.deepEqual(rules[`${root} #streamContainer.faceplate-flat #playerContent`], { ...P.FACEPLATE_DECK })
-  assert.ok(P.ARTWORK_BAY.regular['box-shadow'].includes(`0 0 0 ${layout.TIERS.regular.bezel}px rgb(var(--color-bg))`))
-  assert.ok(P.ARTWORK_BAY.compact['box-shadow'].includes(`0 0 0 ${layout.TIERS.compact.bezel}px rgb(var(--color-bg))`))
+  // Faithful pass: the bezel is the raised steel of the module plates
+  assert.ok(P.ARTWORK_BAY.regular['box-shadow'].includes(`0 0 0 ${layout.TIERS.regular.bezel}px rgb(var(--color-secondary))`))
+  assert.ok(P.ARTWORK_BAY.compact['box-shadow'].includes(`0 0 0 ${layout.TIERS.compact.bezel}px rgb(var(--color-secondary))`))
   // Legacy themes get no faceplate rules at all (the standard finish produces none)
   for (const id of LEGACY_THEMES) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {})
   // Metadata stays neutral: nothing in the faceplate paint colors the title or author
   for (const [selector, d] of Object.entries(rules)) if (/faceplate|player-plate/.test(selector)) assert.equal(d.color, undefined, selector)
+})
+
+test('Full-player bookmark key: shown for every server book whether or not the socket is connected (never the invisible placeholder offline)', async () => {
+  const src = await read('../components/app/AudioPlayer.vue')
+  const key = src.match(/<span v-if="([^"]*)" class="player-key utility-key bookmark-key[^"]*"[^>]*>bookmark<\/span>/)
+  assert.ok(key, 'the bookmark key exists in the utility row')
+  assert.equal(key[1], '!isPodcast && serverLibraryItemId')
+  assert.match(key[0], /@click="\$emit\('showBookmarks'\)"/)
+  // Order in the row: queue, bookmark, speed, sleep, chapters
+  const row = src.slice(src.indexOf('class="utility-row'), src.indexOf('chapters-key'))
+  const at = (s) => row.indexOf(s)
+  assert.ok(at('queue-key') < at('bookmark-key') && at('bookmark-key') < at('speed-readout') && at('speed-readout') < at('sleep-key'))
 })

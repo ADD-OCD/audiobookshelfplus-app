@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full h-full py-6 px-4">
+  <div class="w-full h-full py-6 px-4 flex flex-col">
     <div class="flex items-center mb-2">
       <p class="text-base font-semibold">{{ $strings.LabelFolder }}: {{ folderName }}</p>
       <div class="flex-grow" />
@@ -257,12 +257,11 @@ export default {
 </script>
 
 <style scoped>
+/* The list takes the height left under the header, down to the page bottom (the page fills #content, which ends at the
+   collapsed player or the screen), at any font scale; -24px reaches through the page's bottom padding as before */
 .media-item-container {
-  height: calc(100vh - 210px);
-  max-height: calc(100vh - 210px);
-}
-.playerOpen .media-item-container {
-  height: calc(100vh - 310px);
-  max-height: calc(100vh - 310px);
+  flex: 1 1 0;
+  min-height: 0;
+  margin-bottom: -24px;
 }
 </style>

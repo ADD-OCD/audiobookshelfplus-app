@@ -122,8 +122,8 @@ export default {
   overflow-y: auto;
 }
 .reader-player-open .mobi-ebook-viewer {
-  height: calc(100% - 132px);
-  max-height: calc(100% - 132px);
+  height: calc(100% - 12px - var(--mini-player-height, 120px));
+  max-height: calc(100% - 12px - var(--mini-player-height, 120px));
   overflow-x: hidden;
   overflow-y: auto;
 }

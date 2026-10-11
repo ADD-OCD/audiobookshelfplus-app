@@ -6,7 +6,9 @@
     </div>
 
     <!-- Alternative bookshelf title/author/sort -->
-    <div v-if="isAltViewEnabled" class="absolute left-0 z-50 w-full" :style="{ bottom: `-${titleDisplayBottomOffset}rem` }">
+    <!-- Title, author and sort line hang from the cover's bottom edge, so enlarged text grows downward into the row's title
+         space (sized by the shelf) instead of up over the artwork -->
+    <div v-if="isAltViewEnabled" class="absolute left-0 z-50 w-full" :style="{ top: '100%', paddingTop: 0.45 * sizeMultiplier + 'rem' }">
       <div :style="{ fontSize: 0.9 * sizeMultiplier + 'rem' }" class="flex items-center">
         <p class="truncate" :style="{ fontSize: 0.9 * sizeMultiplier + 'rem' }">
           {{ displayTitle }}
@@ -47,6 +49,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Decorative frame inside the cover's bounds: painted only by a presentation theme that needs it; never a touch target -->
+    <div class="card-frame absolute inset-0 z-10 rounded-sm pointer-events-none" aria-hidden="true" />
 
     <!-- Play/pause button for podcast episode -->
     <div v-if="recentEpisode" class="absolute z-10 top-0 left-0 bottom-0 right-0 m-auto flex items-center justify-center w-12 h-12 rounded-full" :class="{ 'bg-white/70': !playerIsStartingForThisMedia }" @click.stop="playEpisode">
@@ -390,11 +395,6 @@ export default {
         return this.author.slice(0, 27) + '...'
       }
       return this.author
-    },
-    titleDisplayBottomOffset() {
-      if (!this.isAltViewEnabled) return 0
-      else if (!this.displaySortLine) return 3 * this.sizeMultiplier
-      return 4.25 * this.sizeMultiplier
     },
     showHasLocalDownload() {
       if (this.localLibraryItem || this.isLocal) {

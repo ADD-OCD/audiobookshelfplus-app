@@ -27,8 +27,12 @@ test('native widget colors equal the LLAMA tokens and derived bevel edges', asyn
   const derived = presets.equipmentDerivedDeclarations(t)
   assert.deepEqual(colors.widget_llama_edge_light, derived['--color-edge-light'].split(' ').map(Number))
   assert.deepEqual(colors.widget_llama_edge_dark, derived['--color-edge-dark'].split(' ').map(Number))
-  // Token colors, the two bevel edges, and the derived secondary-key colors (Phase 4D)
-  assert.equal(Object.keys(colors).length, generator.TOKEN_COLORS.length + 2 + generator.keyColors(t).length)
+  // The app's lit key legend, the transport glyph tint since the final consistency pass
+  assert.deepEqual(colors.widget_llama_legend, derived['--color-legend'].split(' ').map(Number))
+  assert.deepEqual(colors.widget_llama_raised, t['surface.raised'])
+  assert.deepEqual(colors.widget_llama_content, t['surface.content'])
+  // Token colors, the two bevel edges, the legend, and the derived key colors (Phase 4D, steel since the final pass)
+  assert.equal(Object.keys(colors).length, generator.TOKEN_COLORS.length + 3 + generator.keyColors(t).length)
 })
 
 test('every generated widget color is used by a widget resource (the palette carries no dead colors)', async () => {
@@ -436,9 +440,9 @@ test('Gate F LLAMA readout and controls: accent time readouts, amber transport g
   const llamaLayouts = VARIANTS.map(([, llama]) => llama)
   for (const file of llamaLayouts) {
     const xml = await read(LAYOUTS + file)
-    // The accent is reserved for readouts; the jump glyphs are the playback amber since Phase 4D and the Play/Pause
-    // glyph since Phase 4H
-    for (const id of KEY_IDS) assert.match(attrs(xml, id), /android:tint="@color\/widget_llama_played"/, `${file} ${id}`)
+    // The accent is reserved for readouts; the transport glyphs are the app's lit key legend (the playback amber until
+    // the final consistency pass)
+    for (const id of KEY_IDS) assert.match(attrs(xml, id), /android:tint="@color\/widget_llama_legend"/, `${file} ${id}`)
     if (xml.includes('android:id="@+id/widgetElapsedText"')) {
       for (const id of ['widgetElapsedText', 'widgetRemainingText']) assert.match(attrs(xml, id), /android:textColor="@color\/widget_llama_accent"/, `${file} ${id}`)
     }
@@ -487,24 +491,27 @@ test('Phase 4D secondary-key colors are generated from the LLAMA tokens with fix
   assert.doesNotMatch(standardRes, /key_face|key_lit|key_shade/)
 })
 
-test('Phase 4D the key face is deeper than the chassis and the legends clear contrast with margin', async () => {
+test('Phase 4D the key face is a steel face set in the steel housing and the legends clear contrast with margin', async () => {
   const c = await generatedColors()
   const { face, lit, shade, key_pressed_shade: pressed } = { face: c.key_face, lit: c.key_lit, shade: c.key_shade, key_pressed_shade: c.key_pressed_shade }
-  // Polarity: every point of the resting face is no lighter than the chassis it sits on; the face is clearly darker
-  assert.ok(luminance(face) < luminance(c.base), 'face darker than the chassis')
-  assert.ok(luminance(lit) <= luminance(c.base), 'even the lit top is no lighter than the chassis')
-  const step = contrast(face, c.base)
-  assert.ok(step >= 1.1 && step <= 2, `key face vs chassis ${step.toFixed(2)}:1 stays a visible, restrained step`)
+  // Final consistency pass: steel-blue faces (the panel steel) in a steel housing that runs from the raised steel to the
+  // navy base. The lit top stays below the housing's raised top and above its base, so the key reads as steel set into
+  // the plate, separated by its dark socket ring and lit bevel rather than by a darker face
+  assert.deepEqual(face, c.content, 'the face is the panel steel')
+  assert.ok(luminance(lit) < luminance(c.raised) && luminance(lit) > luminance(c.base), 'the lit top sits between the housing top and base')
+  const step = contrast(lit, c.raised)
+  assert.ok(step >= 1.1 && step <= 2, `lit top vs housing top ${step.toFixed(2)}:1 stays a visible, restrained step`)
+  assert.ok(contrast(c.edge_dark, face) >= 1.5, 'the dark socket ring is distinct from the face')
   // Sheen order: lit top > face > shaded bottom; pressed is the deepest
   assert.ok(luminance(lit) > luminance(face) && luminance(face) > luminance(shade) && luminance(shade) > luminance(pressed))
-  // The playback amber on every resting and pressed face (worst case = the lightest face behind the glyph)
+  // The legend tint on every resting and pressed face (worst case = the lightest face behind the glyph)
   for (const [label, face_] of [
     ['lit', lit],
     ['face', face],
     ['shade', shade],
     ['pressed shade', pressed]
   ])
-    assert.ok(contrast(c.played, face_) >= 4.5, `amber on ${label}`)
+    assert.ok(contrast(c.legend, face_) >= 4.5, `legend on ${label}`)
   // Primary Play/Pause shares this face since Phase 4H (see the Phase 4H tests for its stricter 7:1 target)
 })
 
@@ -514,14 +521,15 @@ test('Phase 4D rewind and fast-forward are dark keys with amber legends; Play/Pa
     for (const id of ['widgetRewindButton', 'widgetFastForwardButton']) {
       const a = attrs(xml, id)
       assert.match(a, /android:background="@drawable\/widget_llama_button"/, `${file} ${id}`)
-      assert.match(a, /android:tint="@color\/widget_llama_played"/, `${file} ${id}`)
+      assert.match(a, /android:tint="@color\/widget_llama_legend"/, `${file} ${id}`)
     }
     const play = attrs(xml, 'widgetPlayPauseButton')
     assert.match(play, /android:background="@drawable\/widget_llama_button_primary"/, file)
-    assert.match(play, /android:tint="@color\/widget_llama_played"/, file)
-    // Amber stays a playback color: it is on exactly the three transport keys in each layout (Phase 4H adds Play/Pause),
-    // never on text, artwork or the brand icon
-    assert.equal((xml.match(/widget_llama_played/g) || []).length, 3, `${file} amber is on exactly the three transport keys`)
+    assert.match(play, /android:tint="@color\/widget_llama_legend"/, file)
+    // Amber stays a control color: the legend is on exactly the three transport keys in each layout, never on text,
+    // artwork or the brand icon (the played amber stays in the progress drawable)
+    assert.equal((xml.match(/widget_llama_legend/g) || []).length, 3, `${file} amber is on exactly the three transport keys`)
+    assert.doesNotMatch(xml, /widget_llama_played/, file)
   }
 })
 
@@ -585,11 +593,12 @@ const layers = (xml, state) => {
 
 test('Phase 4H widget primary key: dark face with the primary bezel (return ring, channel, inner edge), inside its own bounds', async () => {
   const primary = norm(await read(RES + 'drawable/widget_llama_button_primary.xml'))
-  // Resting, outside in: lit return ring, dark channel, lit top/left and dark bottom/right inner edge, dark sheen face
+  // Resting, outside in: lit return ring, dark channel, lit top/left (full-strength edge since the final consistency pass)
+  // and dark bottom/right inner edge, sheen face
   assert.deepEqual(layers(primary, 'rest'), [
     { inset: '0,0,0,0', fill: 'widget_llama_edge_light_35' },
     { inset: '1,1,1,1', fill: 'widget_llama_edge_dark' },
-    { inset: '2,2,3,3', fill: 'widget_llama_edge_light_55' },
+    { inset: '2,2,3,3', fill: 'widget_llama_edge_light' },
     { inset: '3,3,3,3', fill: 'widget_llama_key_face>widget_llama_key_shade>widget_llama_key_lit' }
   ])
   // Pressed: ring and channel stay, the inner edge inverts (dark top/left, lit bottom/right), the face is cut in
@@ -615,14 +624,49 @@ test('Phase 4H widget primary glyph: amber, at least 7:1 on every face point, ex
     ['shade', c.key_shade],
     ['pressed shade', c.key_pressed_shade]
   ])
-    assert.ok(contrast(c.played, face) >= 7, `amber on ${label}: ${contrast(c.played, face).toFixed(2)}`)
+    assert.ok(contrast(c.legend, face) >= 7, `legend on ${label}: ${contrast(c.legend, face).toFixed(2)}`)
   for (const file of LLAMA_FILES) {
     const play = attrs(await read(LAYOUTS + file), 'widgetPlayPauseButton')
-    assert.match(play, /android:tint="@color\/widget_llama_played"/, file)
+    assert.match(play, /android:tint="@color\/widget_llama_legend"/, file)
     assert.match(play, /android:src="@drawable\/ic_media_play_dark"/, file)
   }
   // The renderer still swaps the same play/pause bitmaps and sets no tint or color from Kotlin
   const renderer = await read('../android/app/src/main/java/app/absplus/android/widget/WidgetRenderer.kt')
   assert.match(renderer, /val playPauseResource = if \(state\.isPlaying\) androidx\.mediarouter\.R\.drawable\.ic_media_pause_dark else androidx\.mediarouter\.R\.drawable\.ic_media_play_dark/)
   assert.doesNotMatch(renderer, /setColorFilter|setInt\([^)]*[Tt]int/)
+})
+
+// --- Final consistency pass (2026-10-10): the app's steel material on the LLAMA widget (resource-level paint only) ---
+
+test('Final pass widget: steel housing, socketed steel keys and a recessed artwork lip, all inside their own bounds', async () => {
+  const chassis = norm(await read(RES + 'drawable/widget_llama_chassis.xml'))
+  // Housing: dark outer edge, lit top/left bevel, then the steel face lit from the top (raised > panel > base)
+  assert.match(chassis, /android:startColor="@color\/widget_llama_raised"/)
+  assert.match(chassis, /android:centerColor="@color\/widget_llama_content"/)
+  assert.match(chassis, /android:endColor="@color\/widget_llama_base"/)
+  // A narrow (1dp) full-strength lit top/left edge on the housing, like the app's plate edge
+  assert.match(chassis, /<item android:bottom="1dp" android:right="1dp">\s*<shape[^>]*>\s*<corners[^>]*\/>\s*<solid android:color="@color\/widget_llama_edge_light" \/>/)
+  assert.match(chassis, /\?attr\/appWidgetRadius/)
+  // Secondary key, resting: dark socket ring, narrow lit top/left bevel (the socket is the dark bottom/right edge), steel face
+  const secondary = norm(await read(RES + 'drawable/widget_llama_button.xml'))
+  assert.deepEqual(layers(secondary, 'rest'), [
+    { inset: '0,0,0,0', fill: 'widget_llama_edge_dark' },
+    { inset: '1,1,2,2', fill: 'widget_llama_edge_light' },
+    { inset: '2,2,2,2', fill: 'widget_llama_key_face>widget_llama_key_shade>widget_llama_key_lit' }
+  ])
+  // Pressed: the bevel inverts (lit bottom/right), the face is cut in; the socket stays
+  assert.deepEqual(layers(secondary, 'pressed'), [
+    { inset: '0,0,0,0', fill: 'widget_llama_edge_dark' },
+    { inset: '2,2,1,1', fill: 'widget_llama_edge_light_35' },
+    { inset: '2,2,2,2', fill: 'widget_llama_key_face>widget_llama_key_pressed_shade' }
+  ])
+  // Artwork: a steel lip and a near-black channel inside the view's 2dp padding (the cover is never covered), square
+  const frame = norm(await read(RES + 'drawable/widget_llama_artwork_frame.xml'))
+  for (const color of ['widget_llama_edge_dark', 'widget_llama_edge_light_55', 'widget_llama_recessed']) assert.match(frame, new RegExp(`@color/${color}`))
+  assert.doesNotMatch(frame, /corners/)
+  // Paint only: no bitmap grain, no hard-coded colors, generated or LLAMA colors only
+  for (const xml of [chassis, secondary, frame]) {
+    assert.doesNotMatch(xml, /<bitmap|android:src=|#[0-9A-Fa-f]{6,8}/)
+    for (const [, ref] of xml.matchAll(/"@color\/([a-z_0-9]+)"/g)) assert.match(ref, /^widget_llama_/, ref)
+  }
 })

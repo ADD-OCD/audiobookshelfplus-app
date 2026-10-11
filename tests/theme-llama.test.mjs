@@ -13,6 +13,7 @@ const { BUILTIN_THEMES } = require('../theme/builtins.js')
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8').then((s) => s.replace(/\r\n/g, '\n'))
 
 const llama = () => engine.getTheme('llama')
+const playerLayoutTiers = require('../theme/playerLayout.js').TIERS
 
 // WCAG relative luminance / contrast ratio
 const luminance = ([r, g, b]) => {
@@ -84,12 +85,20 @@ test('LLAMA chassis is a restrained deep navy with an indigo lean (finishing pas
   assert.deepEqual(t['progress.track'], [40, 46, 56])
   assert.deepEqual(t['progress.buffered'], [86, 98, 116])
   assert.deepEqual(t['progress.played'], [245, 190, 40])
-  assert.deepEqual(t['accent.primary'], [96, 232, 104])
-  // The overlays fade into the chassis colors themselves, so the player and item header blend with the new navy
-  const stops = (n) => t[n].stops.map((s) => s.color.slice(0, 3))
-  for (const c of stops('overlay.player')) assert.deepEqual(c, t['surface.base'])
-  for (const c of stops('overlay.mini-player')) assert.deepEqual(c, t['surface.base'])
-  assert.deepEqual(stops('overlay.item-header'), [t['surface.recessed'], t['surface.content']])
+  // Faithful pass: the readout green is the approved mockup's pale phosphor
+  assert.deepEqual(t['accent.primary'], [170, 240, 100])
+  // Faithful pass: the full player's chassis and the item header end in the graphite page (the derived --color-page), and
+  // the collapsed player is a steel plate lit from the top (raised steel to panel steel)
+  const page = presets.equipmentDerivedDeclarations(t)['--color-page'].split(' ').map(Number)
+  assert.deepEqual(t['overlay.player'], { kind: 'solid', color: page })
+  assert.deepEqual(
+    t['overlay.mini-player'].stops.map((s) => s.color.slice(0, 3)),
+    [t['surface.raised'], t['surface.content']]
+  )
+  assert.deepEqual(
+    t['overlay.item-header'].stops.map((s) => s.color.slice(0, 3)),
+    [t['surface.recessed'], page]
+  )
 })
 
 test('LLAMA text, readout and progress colors meet contrast targets on the surfaces they sit on', () => {
@@ -114,7 +123,10 @@ test('LLAMA keeps semantic states, and amber progress stays distinguishable from
   const [wr, wg, wb] = t['state.warning']
   assert.ok(Math.abs(pg - wg) >= 40, 'amber progress vs orange warning: green channel apart')
   assert.notDeepEqual([pr, pg, pb], [wr, wg, wb])
-  assert.ok(t['accent.primary'][1] > 200 && t['accent.primary'][0] < 128 && t['accent.primary'][2] < 128, 'phosphor green accent')
+  // Phosphor green: green-dominant and bright, but yellow-leaning like the mockup's display glow (not the success green)
+  const [ar, ag, ab] = t['accent.primary']
+  assert.ok(ag > 200 && ag - ar >= 50 && ag - ab >= 100, 'phosphor green accent')
+  assert.notDeepEqual(t['accent.primary'], t['state.success'])
 })
 
 test('the real Tailwind build emits LLAMA variables and its equipment root while Dark stays :root', async () => {
@@ -206,7 +218,8 @@ test('LLAMA progress repaint targets only unfinished playback bars and the curre
   // The one Gate H exception names bg-error only to whiten the glyph on it; the error fill itself is untouched
   const errorGlyph = "html[data-theme='llama'] .icon-btn.border.bg-error:not(:disabled) > .material-symbols"
   for (const s of selectors) {
-    if (s !== errorGlyph) assert.doesNotMatch(s, /warning|bg-success|text-success|bg-error/, s)
+    // The success-action fill is the primary action button (final consistency pass: a steel key), not a success state
+    if (s !== errorGlyph) assert.doesNotMatch(s.replace(/bg-success-action/g, ''), /warning|bg-success|text-success|bg-error/, s)
     if (s.includes('bg-yellow-400')) assert.ok(s.includes('.absolute.bottom-0.left-0.z-10') || s.includes('.chapters-panel li > '), s) // never bare yellow
   }
   const rules = presets.presentationRules([llama()])
@@ -219,7 +232,9 @@ test('Chapters: LLAMA-only paint (recessed list, chassis header, lit current row
   assert.ok(chapters.length >= 4)
   for (const [selector, declarations] of chapters) {
     assert.ok(selector.startsWith("html[data-theme='llama'] .modal .chapters-panel"), selector)
-    for (const property of Object.keys(declarations)) assert.match(property, /^(background-color|background-image|box-shadow|color)$/, `${selector}: ${property} (paint only)`)
+    // Faithful pass: the chapter times take the condensed readout face with tabular figures (type, no box change)
+    const allowed = selector.endsWith('.font-mono') ? /^(font-family|font-variant-numeric|letter-spacing)$/ : /^(background-color|background-image|box-shadow|color)$/
+    for (const property of Object.keys(declarations)) assert.match(property, allowed, `${selector}: ${property} (paint only)`)
   }
   const t = llama().tokens
   assert.equal(rules["html[data-theme='llama'] .modal .chapters-panel.bg-secondary"]['background-color'], 'rgb(var(--color-recessed))')
@@ -253,6 +268,11 @@ test('LLAMA toggle styling keeps the on-state color and only recolors the off sl
 // --- Phase 2C Gate A: shared equipment primitives and presentation defect fixes ---
 
 const SAFE_VALUE = /^[a-z0-9 .,%()/#-]+$/i
+// Faithful pass: display typography (headings, labels, readouts, option values) may switch to the condensed system face,
+// with letter spacing and tabular figures, but never size, weight or line height. A rule passes when it is paint plus,
+// at most, these, and its face is the fixed CONDENSED_FACE
+const DISPLAY_TYPE = /^(font-family|letter-spacing|font-variant-numeric)$/
+const isDisplayType = (property, value) => DISPLAY_TYPE.test(property) && (property !== 'font-family' || value === presets.PRIMITIVES.CONDENSED_FACE)
 
 test('shared equipment primitives exist as fixed, frozen, paint-only recipe values', () => {
   const P = presets.PRIMITIVES
@@ -277,7 +297,7 @@ test('shared equipment primitives exist as fixed, frozen, paint-only recipe valu
   for (const set of [P.KEY_CAP, P.KEY_CAP_PRESSED, P.SELECTED_KEY]) {
     assert.ok(Object.isFrozen(set))
     for (const [property, value] of Object.entries(set)) {
-      assert.match(property, /^(background-color|background-image|box-shadow|border-radius|color)$/, property)
+      assert.match(property, /^(background-color|background-image|box-shadow|border-radius|color|text-shadow)$/, property)
       assert.match(value, SAFE_VALUE, value)
     }
   }
@@ -288,10 +308,11 @@ test('shared equipment primitives exist as fixed, frozen, paint-only recipe valu
   // Key cap: raised bevel on the control's own box (squared), pressed inverts it; no fill or size change
   assert.deepEqual({ ...P.KEY_CAP }, { 'border-radius': P.RADIUS.key, 'background-image': P.STEEL_SHEEN, 'box-shadow': P.RAISED_BEVEL })
   assert.deepEqual({ ...P.KEY_CAP_PRESSED }, { 'background-image': 'none', 'box-shadow': P.PRESSED_BEVEL })
-  // Every string primitive is a safe paint value that references only derived edge colors or the accent token
+  // Every string primitive is a safe paint value that references only derived edge colors, the accent token or (faithful
+  // pass: the artwork frame's steel band) the raised steel surface
   for (const value of [P.RAISED_BEVEL, P.PRESSED_BEVEL, P.RECESSED_WELL, P.STEEL_SHEEN, P.CHASSIS_SHEEN, P.ARTWORK_FRAME, P.ENGRAVED_SEPARATOR, P.ENGRAVED_SEPARATOR_TOP, P.RECESSED_FACE, P.SELECTED_KEY['box-shadow'], ...Object.values(P.RADIUS), ...Object.values(P.ELEVATION)]) {
     assert.match(value, SAFE_VALUE, value)
-    for (const v of value.match(/--[a-z-]+/g) || []) assert.ok(['--color-edge-light', '--color-edge-dark', '--color-accent'].includes(v), v)
+    for (const v of value.match(/--[a-z-]+/g) || []) assert.ok(['--color-edge-light', '--color-edge-dark', '--color-accent', '--color-secondary'].includes(v), v)
   }
 })
 
@@ -302,7 +323,7 @@ test('existing rules reuse the primitives (radius scale, elevation levels, press
   assert.equal(rules[`${root} .fullscreen #playerTrack`]['border-radius'], P.RADIUS.key)
   assert.equal(rules[`${root} .fullscreen .total-track`]['border-radius'], P.RADIUS.key)
   assert.ok(rules[`${root} .btn:not(:disabled)`]['box-shadow'].endsWith(P.ELEVATION.raised))
-  assert.ok(rules[`${root} .card-artwork`]['box-shadow'].endsWith(P.ELEVATION.panel))
+  assert.ok(rules[`${root} .card-artwork`]['box-shadow'].endsWith(P.ARTWORK_DROP))
   for (const s of ['.modal .rounded-lg.bg-primary', '.modal .queue-panel.rounded-lg.bg-primary', '.modal .chapters-panel.bg-secondary']) assert.ok(rules[`${root} ${s}`]['box-shadow'].endsWith(P.ELEVATION.overlay), s)
   assert.deepEqual(rules[`${root} .btn:not(:disabled):active`], { ...P.KEY_CAP_PRESSED })
   assert.deepEqual(rules[`${root} .icon-btn.border:not(:disabled):active`], { ...P.KEY_CAP_PRESSED })
@@ -358,7 +379,8 @@ test('Gate A rules compile through Tailwind with their exact values; standard th
     return css.slice(i, css.indexOf('}', i))
   }
   assert.match(block("html[data-theme='llama'] .modal .chapters-panel li > .bg-yellow-400"), /background-color: rgb\(var\(--color-track-cursor\)\)/)
-  assert.match(block("html[data-theme='llama'] .card-artwork"), /box-shadow: 0 0 0 1px rgb\(var\(--color-edge-dark\)\)/)
+  // Material polish: the card frame starts with its dark channel at the artwork, then the window's shaded inner wall
+  assert.match(block("html[data-theme='llama'] .card-artwork"), /box-shadow: 0 0 0 1px rgb\(0 0 0 \/ 0\.9\), 0 -2px 0 0 rgb\(0 0 0 \/ 0\.3\)/)
   assert.match(block("html[data-theme='llama'] .icon-btn.border:not(:disabled)"), /background-image: linear-gradient/)
   assert.ok(!/(^|\n)\s*\.card-artwork\s*\{/.test(css), 'no unscoped card-artwork rule')
   assert.ok(!css.includes('[id^=book-card]'), 'the old row-matching selector is gone')
@@ -378,13 +400,13 @@ test('Gate B player rules are paint only, built from the shared primitives', () 
   for (const s of GATE_B) {
     assert.ok(rule(s), s)
     for (const [property, value] of Object.entries(rule(s))) {
-      assert.match(property, /^(background-color|background-image|box-shadow|border-radius|color)$/, `${s}: ${property}`)
+      assert.match(property, /^(background-color|background-image|box-shadow|border-radius|color|text-shadow)$/, `${s}: ${property}`)
       assert.match(value, SAFE_VALUE, `${s}: ${value}`)
     }
   }
   // Artwork: squared frame radius (replaces the player's 16px fullscreen card radius), mounted with the panel elevation
   assert.equal(rule('.cover-wrapper')['border-radius'], P.RADIUS.frame)
-  assert.equal(rule('.fullscreen .cover-wrapper')['box-shadow'], `${P.ARTWORK_FRAME}, ${P.ELEVATION.panel}`)
+  assert.equal(rule('.fullscreen .cover-wrapper')['box-shadow'], `${P.ARTWORK_FRAME}, ${P.ARTWORK_DROP}`)
   // Transport deck: raised chassis panel with a dark seam above it
   assert.deepEqual(rule('.fullscreen #playerContent'), { 'background-color': 'rgb(var(--color-bg))', 'background-image': P.CHASSIS_SHEEN, 'box-shadow': `${P.RAISED_BEVEL}, 0 -1px 0 rgb(var(--color-edge-dark))` })
   // Seam between the transport and secondary rows (fullscreen); the mini's seek region is a recessed readout strip
@@ -407,10 +429,12 @@ test('Gate B player rules are paint only, built from the shared primitives', () 
 test('Gate B readouts: sleep countdown is a phosphor readout in LLAMA only; success keeps its meaning', () => {
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
-  assert.deepEqual(rules[`${root} #playerContent .sleep-readout`], { color: 'rgb(var(--color-accent))' })
-  // No LLAMA rule repaints success semantics anywhere
+  // Faithful pass: the readout glows on its glass like the mockup's phosphor displays
+  assert.deepEqual(rules[`${root} #playerContent .sleep-readout`], { color: 'rgb(var(--color-accent))', ...presets.PRIMITIVES.LCD_GLOW })
+  // No LLAMA rule repaints success semantics anywhere (the success-action fill is the primary action button, a steel key
+  // since the final consistency pass; no rule uses the success color)
   for (const [selector, declarations] of Object.entries(rules)) {
-    assert.doesNotMatch(selector, /success/, selector)
+    assert.doesNotMatch(selector.replace(/bg-success-action/g, ''), /success/, selector)
     for (const value of Object.values(declarations)) assert.doesNotMatch(value, /--color-success/, selector)
   }
 })
@@ -548,7 +572,7 @@ test('Gate C rules: paint only, built from the shared primitives, under the LLAM
   for (const [selector, declarations] of gateC) {
     assert.ok(selector.startsWith(`${root} .modal `), selector)
     for (const [property, value] of Object.entries(declarations)) {
-      assert.match(property, /^(background-color|background-image|box-shadow|border-radius|border-color|color)$/, `${selector}: ${property}`)
+      if (!isDisplayType(property, value)) assert.match(property, /^(background-color|background-image|box-shadow|border-radius|border-color|color|text-shadow)$/, `${selector}: ${property}`)
       assert.match(value, SAFE_VALUE, `${selector}: ${value}`)
     }
   }
@@ -570,11 +594,15 @@ test('Gate C current entries: lit, pressed in and marked with the played-progres
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
   const marker = 'inset 2px 0 0 rgb(var(--color-track-cursor))'
-  for (const s of ['.modal .queue-panel .queue-current', '.modal .bookmark-row.bookmark-current']) {
-    const r = rules[`${root} ${s}`]
-    assert.equal(r['background-color'], 'rgb(var(--color-bg))', s) // the same lit surface as Chapters' current row
-    assert.ok(r['box-shadow'].startsWith(`${marker}, ${P.PRESSED_BEVEL}`), s) // amber marker + pressed: not color alone
-  }
+  // Bookmarks: the lit, pressed entry. Up Next (faithful pass): the mockup's now-playing glass display, still amber-marked,
+  // with a lit lower seam that sets it off from the list, and its title in phosphor green
+  const bookmark = rules[`${root} .modal .bookmark-row.bookmark-current`]
+  assert.equal(bookmark['background-color'], 'rgb(var(--color-bg))') // the same lit surface as Chapters' current row
+  assert.ok(bookmark['box-shadow'].startsWith(`${marker}, ${P.PRESSED_BEVEL}`)) // amber marker + pressed: not color alone
+  const current = rules[`${root} .modal .queue-panel .queue-current`]
+  assert.equal(current['background-color'], 'rgb(var(--color-recessed))')
+  assert.ok(current['box-shadow'].startsWith(`${marker}, `))
+  assert.deepEqual(rules[`${root} .modal .queue-panel .queue-current p.text-sm`], { ...P.LCD_TEXT })
   // Chapters' marker is the same amber, 2px wide (w-0.5)
   assert.deepEqual(rules[`${root} .modal .chapters-panel li > .bg-yellow-400`], { 'background-color': 'rgb(var(--color-track-cursor))' })
   // The bookmark at the current position is amber (position), not success green; live readouts are accent green
@@ -669,7 +697,7 @@ test('Gate D artwork hooks mark the artwork box of every card type, never a card
 test('Gate D semantic hooks are present on browsing and detail surfaces', async () => {
   const hooks = {
     '../components/bookshelf/Shelf.vue': [/<div class="shelf-section w-full relative">/],
-    '../components/home/BookshelfToolbar.vue': [/<div class="browse-toolbar w-full h-9 bg-bg relative z-20">/, /class="filter-indicator absolute top-0 right-2 w-2 h-2 rounded-full bg-success/],
+    '../components/home/BookshelfToolbar.vue': [/<div class="browse-toolbar w-full min-h-9 bg-bg relative z-20">/, /class="filter-indicator absolute top-0 right-2 w-2 h-2 rounded-full bg-success/],
     '../components/app/Appbar.vue': [/aria-label="Show library modal" class="library-selector /],
     '../components/modals/LibrariesModal.vue': [/class="library-option-panel /, /'bg-primary bg-opacity-80 option-selected'/, /class="option-marker absolute top-0 left-0 w-0\.5 bg-warning h-full"/],
     '../pages/item/_id/index.vue': [/class="detail-progress px-4 py-2 bg-primary text-sm font-semibold rounded-md/],
@@ -700,14 +728,14 @@ test('Gate D rules: paint only, built from the shared primitives, with LLAMA col
   assert.ok(gateD.length >= 20, `${gateD.length} rules`)
   for (const [selector, declarations] of gateD) {
     for (const [property, value] of Object.entries(declarations)) {
-      assert.match(property, /^(background-color|background-image|box-shadow|border-radius|border-color|color)$/, `${selector}: ${property}`)
+      if (!isDisplayType(property, value)) assert.match(property, /^(background-color|background-image|box-shadow|border-radius|border-color|color|text-shadow)$/, `${selector}: ${property}`)
       assert.match(value, SAFE_VALUE, `${selector}: ${value}`)
       assert.doesNotMatch(value, /--color-success|--color-warning/, `${selector}: success/warning never mean selected or active`)
     }
   }
   // Artwork: detail artwork is mounted exactly like card artwork, on the squared frame radius
-  assert.deepEqual(rule('.detail-artwork'), { 'border-radius': P.RADIUS.frame, 'box-shadow': `${P.ARTWORK_FRAME}, ${P.ELEVATION.panel}` })
-  assert.equal(rule('.card-artwork')['box-shadow'], `${P.ARTWORK_FRAME}, ${P.ELEVATION.panel}`)
+  assert.deepEqual(rule('.detail-artwork'), { 'border-radius': P.RADIUS.frame, 'box-shadow': `${P.ARTWORK_FRAME}, ${P.ARTWORK_DROP}` })
+  assert.equal(rule('.card-artwork')['box-shadow'], `${P.ARTWORK_FRAME}, ${P.ARTWORK_DROP}`)
   // Information displays are recessed; tappable section headers are raised strips; their readouts are accent
   assert.deepEqual(rule('.detail-progress'), { 'background-color': 'rgb(var(--color-recessed))', 'border-radius': P.RADIUS.key, 'box-shadow': P.RECESSED_WELL })
   assert.deepEqual(rule('.section-bar'), { 'background-image': P.CHASSIS_SHEEN, 'box-shadow': P.RAISED_BEVEL })
@@ -729,7 +757,7 @@ test('Gate D rules: paint only, built from the shared primitives, with LLAMA col
   assert.equal(rule('.browse-toolbar .filter-indicator')['background-color'], 'rgb(var(--color-accent))')
   // Progress semantics are untouched: unfinished bars stay amber via the existing rule, finished bars keep success
   assert.deepEqual(rules[`${root} .absolute.bottom-0.left-0.z-10.bg-yellow-400`], { 'background-color': 'rgb(var(--color-track-cursor))' })
-  assert.ok(!Object.keys(rules).some((s) => /bg-success/.test(s)))
+  assert.ok(!Object.keys(rules).some((s) => /bg-success(?!-action)/.test(s)))
 })
 
 test('Gate D cascade: state, zebra and artwork rules win over the rules they share an element with', async () => {
@@ -809,7 +837,7 @@ test('Gate E rules: paint only, primitives, and control-state semantics', () => 
   assert.ok(gateE.length >= 21, `${gateE.length} rules`)
   for (const [selector, declarations] of gateE) {
     for (const [property, value] of Object.entries(declarations)) {
-      assert.match(property, /^(background-color|background-image|box-shadow|border-radius|border-color|color|outline|outline-color|outline-offset)$/, `${selector}: ${property}`)
+      assert.match(property, /^(background-color|background-image|box-shadow|border-radius|border-color|color|text-shadow|outline|outline-color|outline-offset)$/, `${selector}: ${property}`)
       assert.match(value, SAFE_VALUE, `${selector}: ${value}`)
       assert.doesNotMatch(value, /--color-success|--color-warning|--color-error/, `${selector}: state colors keep their meaning`)
     }
@@ -905,8 +933,8 @@ test('Gate H: the LLAMA destructive key glyph is pure white (non-text contrast),
 
 // --- Phase 4B: LLAMA secondary control finish (player and mini-player keys) ---
 
-const PAINT_ONLY = /^(background-color|background-image|box-shadow|border-radius|color|-webkit-text-stroke)$/
-const GEOMETRY_PROPERTY = /^(width|height|min-|max-|padding|margin|border(-width|-style)?$|top|right|bottom|left|inset|position|display|flex|gap|transform|translate|scale|line-height|font|letter-spacing|text-|overflow|z-index)/
+const PAINT_ONLY = /^(background-color|background-image|box-shadow|border-radius|color|text-shadow|-webkit-text-stroke)$/
+const GEOMETRY_PROPERTY = /^(width|height|min-|max-|padding|margin|border(-width|-style)?$|top|right|bottom|left|inset|position|display|flex|gap|transform|translate|scale|line-height|font|letter-spacing|text-(?!shadow)|overflow|z-index)/
 // The full-player transport keys (the key's own fixed box is its face since the finishing pass): resting and pressed
 const KEY_SELECTORS = ['.fullscreen #playerControls .player-key', '.fullscreen #playerControls .player-key:not(.key-disabled):active']
 const LEGEND_SELECTORS = ['#playerContent .jump-icon:not(.key-disabled)', '#playerContent .next-icon:not(.key-disabled)']
@@ -959,8 +987,9 @@ test('Phase 4B player keys are a dedicated, frozen, paint-only primitive; the sh
   assert.match(P.PLAYER_KEY_PRESSED['box-shadow'], /inset 0 3px 6px rgb\(0 0 0/)
   assert.doesNotMatch(P.PLAYER_KEY_PRESSED['box-shadow'], /(^|, )0 2px 3px/)
   assert.notEqual(P.PLAYER_KEY['box-shadow'], P.PLAYER_KEY_PRESSED['box-shadow'])
-  // Playback legend: exactly the played-progress amber, nothing else
-  assert.deepEqual({ ...P.PLAYBACK_LEGEND }, { color: 'rgb(var(--color-track-cursor))' })
+  // Playback legend (faithful pass): the lit key legend, the played-progress amber lifted toward a warm yellow
+  // (--color-legend, derived; the mockup's legends are brighter and yellower than its progress fill)
+  assert.deepEqual({ ...P.PLAYBACK_LEGEND }, { color: 'rgb(var(--color-legend))' })
   // Heavier playback glyphs: a hairline stroke in the glyph's own color (restrained: at most 0.6px), ink only
   assert.deepEqual({ ...P.PLAYBACK_GLYPH_WEIGHT }, { '-webkit-text-stroke': '0.5px currentColor' })
   assert.ok(parseFloat(P.PLAYBACK_GLYPH_WEIGHT['-webkit-text-stroke']) <= 0.6)
@@ -1000,7 +1029,7 @@ test('Phase 4B amber legends: both jumps and chapter start/end, and (finishing p
   for (const s of KEY_SELECTORS) assert.ok(!('color' in rules[`${root} ${s}`]), s)
   // Among the player's key and transport rules the amber token appears on exactly the two legend selectors, the
   // primary Play/Pause legend and its loading spinner (Phase 4H) and the utility keys' legends (finishing pass)
-  const amber = Object.entries(rules).filter(([selector, d]) => /#playerContent|#playerControls/.test(selector) && Object.values(d).some((v) => String(v).includes('--color-track-cursor')))
+  const amber = Object.entries(rules).filter(([selector, d]) => /#playerContent|#playerControls/.test(selector) && Object.values(d).some((v) => String(v).includes('--color-legend')))
   assert.deepEqual(amber.map(([selector]) => selector.slice(root.length + 1)).sort(), [...LEGEND_SELECTORS, ...PRIMARY_LEGEND_SELECTORS, ...UTILITY_LEGEND_SELECTORS].sort())
   // The hooks sit on the four transport keys only: queue, bookmark, sleep and chapters carry neither hook
   const player = await read('../components/app/AudioPlayer.vue')
@@ -1032,9 +1061,15 @@ test('Phase 4B states stay distinct: unavailable keys get no legend amber; press
   const pressed = rules[`${root} ${KEY_SELECTORS[1]}`]
   assert.notEqual(resting['box-shadow'], pressed['box-shadow'])
   assert.notEqual(resting['background-image'], pressed['background-image'])
-  // Pressed deepens the same recessed face (higher alpha), never changes its color family
-  const alpha = (v) => Number(v.match(/^rgb\(var\(--color-recessed\) \/ (0\.\d+)\)$/)[1])
-  assert.ok(alpha(pressed['background-color']) > alpha(resting['background-color']))
+  // Faithful pass: pressed keeps the steel family but inverts its light (the face starts dark instead of lit) and gains
+  // an inner shade; the frame and channel stay
+  assert.equal(resting['background-image'], P.STEEL_FACE)
+  assert.equal(pressed['background-image'], P.STEEL_FACE_PRESSED)
+  // Material polish: the base gradient runs from the raised steel to the panel steel; every layer above it only darkens
+  assert.match(P.STEEL_FACE, /, linear-gradient\(180deg, rgb\(var\(--color-secondary\)\) 0%, rgb\(var\(--color-bg\)\) 65%, rgb\(var\(--color-bg\)\) 100%\)$/)
+  assert.match(P.STEEL_FACE_PRESSED, /, linear-gradient\(180deg, rgb\(var\(--color-bg\)\) 0%, rgb\(var\(--color-bg\)\) 100%\)$/)
+  for (const face of [P.STEEL_FACE, P.STEEL_FACE_PRESSED]) assert.doesNotMatch(face, /255 255 255|--color-edge-light|--color-fg/)
+  assert.match(pressed['box-shadow'], /inset 0 \d+px 6px rgb\(0 0 0 \/ 0\.\d+\)/)
 })
 
 test('Phase 4B contrast: the key face is darker than its deck, the legend and glyphs clear AA on it', () => {
@@ -1076,9 +1111,9 @@ test('Phase 4B rules compile through Tailwind under the LLAMA root only', async 
     return css.slice(i, css.indexOf('}', i))
   }
   const root = "html[data-theme='llama']"
-  assert.match(block(`${root} ${KEY_SELECTORS[0]}`), /background-color: rgb\(var\(--color-recessed\) \/ 0\.\d+\)/)
-  assert.match(block(`${root} ${KEY_SELECTORS[1]}`), /background-image: none/)
-  for (const s of LEGEND_SELECTORS) assert.match(block(`${root} ${s}`), /color: rgb\(var\(--color-track-cursor\)\)/, s)
+  assert.match(block(`${root} ${KEY_SELECTORS[0]}`), /background-image: linear-gradient\(135deg, .*linear-gradient\(180deg, rgb\(var\(--color-secondary\)\) 0%, rgb\(var\(--color-bg\)\) 65%, rgb\(var\(--color-bg\)\) 100%\);/)
+  assert.match(block(`${root} ${KEY_SELECTORS[1]}`), /background-image: linear-gradient\(180deg, rgb\(0 0 0 \/ 0\.3\) 0%.*linear-gradient\(180deg, rgb\(var\(--color-bg\)\) 0%, rgb\(var\(--color-bg\)\) 100%\);/)
+  for (const s of LEGEND_SELECTORS) assert.match(block(`${root} ${s}`), /color: rgb\(var\(--color-legend\)\)/, s)
   assert.match(block(`${root} #playerContent .jump-icon:not(.key-disabled) > .material-symbols`), /-webkit-text-stroke: 0\.5px currentColor/)
   assert.match(block(`${root} #playerContent .next-icon:not(.key-disabled)`), /-webkit-text-stroke: 0\.5px currentColor/)
   // Every compiled rule that mentions a player hook is under the LLAMA root
@@ -1136,7 +1171,19 @@ const READOUT_LAYOUT_PROPERTIES = {
   // Phase 8B: browsing section labels and the toolbar count (face and spacing only; same size, weight and line box)
   '.shelf-heading': ['font-family', 'letter-spacing'],
   '.search-section-label': ['font-family', 'letter-spacing'],
-  '.toolbar-count': ['font-family', 'letter-spacing', 'font-variant-numeric']
+  '.toolbar-count': ['font-family', 'letter-spacing', 'font-variant-numeric'],
+  // Faithful pass: display type on labels, titles and option values (face and spacing only), and the seek thumb's steel
+  // slider block: its decorative inner element's size, standing out of a channel that no longer clips it (the touch
+  // target is the separate hit element, unchanged)
+  '#appbar .library-selector p': ['font-family', 'letter-spacing'],
+  '#bookshelf-navbar a.bg-primary p': ['font-family', 'letter-spacing'],
+  '#content p.uppercase.text-fg-muted': ['font-family', 'letter-spacing'],
+  '.modal .z-40 > p.text-white.truncate': ['font-family', 'letter-spacing'],
+  '.modal .queue-panel p.uppercase': ['font-family', 'letter-spacing'],
+  '.modal .chapters-panel .font-mono': ['font-family', 'font-variant-numeric', 'letter-spacing'],
+  '.modal .playback-option-panel li[role=option]': ['font-family', 'letter-spacing'],
+  '#playerTrack div.relative.rounded-full': ['overflow'],
+  '#playerTrack .pointer-events-auto > .bg-track-cursor': ['width', 'height']
 }
 
 test('Phase 4E readout is a recessed well in a bezel plate: frozen, paint-only, from the shared primitives', () => {
@@ -1151,10 +1198,10 @@ test('Phase 4E readout is a recessed well in a bezel plate: frozen, paint-only, 
   assert.equal(P.METADATA_READOUT['background-color'], 'rgb(var(--color-recessed))')
   assert.equal(P.METADATA_READOUT['border-radius'], P.RADIUS.key)
   assert.ok(P.METADATA_READOUT['box-shadow'].startsWith(`${P.RECESSED_WELL}, `))
-  // The plate around it is drawn with outer shadows only (no border, so no layout): a dark seam, a deck-colored
+  // The plate around it is drawn with outer shadows only (no border, so no layout): a dark seam, a steel (raised surface)
   // plate, a lit upper-left lip, a dark lower-right lip and a soft drop
   const outer = P.METADATA_READOUT['box-shadow'].slice(P.RECESSED_WELL.length + 2).split(/, (?=-?\d)/)
-  assert.deepEqual(outer, ['0 0 0 1px rgb(var(--color-edge-dark))', '0 0 0 3px rgb(var(--color-bg))', '-1px -1px 0 3px rgb(var(--color-edge-light) / 0.35)', '1px 1px 0 3px rgb(var(--color-edge-dark))', '0 3px 8px 3px rgb(0 0 0 / 0.4)'])
+  assert.deepEqual(outer, ['0 0 0 1px rgb(var(--color-edge-dark))', '0 0 0 3px rgb(var(--color-secondary))', '-1px -1px 0 3px rgb(var(--color-edge-light) / 0.35)', '1px 1px 0 3px rgb(var(--color-edge-dark))', '0 3px 8px 3px rgb(0 0 0 / 0.4)'])
   // Related to the seek well but distinct from it: the seek display has no plate and no outer shadow
   const rules = presets.presentationRules([llama()])
   const root = engine.themeSelector('llama')
@@ -1206,19 +1253,31 @@ test('Phase 4E layout rests on the existing player geometry, which is unchanged'
   assert.match(style, /\.fullscreen #playerControls \.play-btn \{\s*height: 65px;\s*width: 65px;/)
 })
 
-test('Phase 4E metadata stays neutral: no LLAMA rule colors the title or author, no amber or phosphor on the readout', () => {
+test('Faithful pass: the full-player metadata readout is a phosphor display; the mini keeps neutral metadata', () => {
+  const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
+  const fullTitle = `${root} .fullscreen .title-author-texts .title-text`
+  const fullAuthor = `${root} .fullscreen .title-author-texts .author-text`
+  const mini = [`${root} #streamContainer:not(.fullscreen) .title-author-texts .title-text`, `${root} #streamContainer:not(.fullscreen) .title-author-texts .author-text`]
   for (const [selector, declarations] of Object.entries(rules)) {
     if (!/title-author|title-text|author-text|titlewrapper/.test(selector)) continue
-    // The full-player readout rules, and (Phase 7B) the collapsed player's title and author type: face and spacing only,
-    // never its block, box or color
-    const mini = [`${root} #streamContainer:not(.fullscreen) .title-author-texts .title-text`, `${root} #streamContainer:not(.fullscreen) .title-author-texts .author-text`]
-    assert.ok([`${root} ${READOUT}`, `${root} ${READOUT_ABOVE_TOTAL_TRACK}`, ...mini].includes(selector), selector)
-    if (mini.includes(selector)) assert.deepEqual(Object.keys(declarations).sort(), ['font-family', 'letter-spacing'], selector)
-    assert.equal(declarations.color, undefined, selector)
-    for (const value of Object.values(declarations)) assert.doesNotMatch(value, /--color-(track-cursor|accent|success|warning)/, selector)
+    // Only these rules touch the metadata: the readout's well and layout (Phase 4E), its text colors (the mockup's green
+    // chapter title and dimmer green author), and the collapsed player's type (Phase 7B: face and spacing only)
+    assert.ok([`${root} ${READOUT}`, `${root} ${READOUT_ABOVE_TOTAL_TRACK}`, fullTitle, fullAuthor, ...mini].includes(selector), selector)
+    if (mini.includes(selector)) {
+      assert.deepEqual(Object.keys(declarations).sort(), ['font-family', 'letter-spacing'], selector)
+      assert.equal(declarations.color, undefined, selector)
+    }
+    for (const value of Object.values(declarations)) assert.doesNotMatch(value, /--color-(track-cursor|legend|success|warning)/, selector)
   }
+  // The display text is phosphor green with its glow: the title at full strength, the author a step dimmer
+  assert.deepEqual(rules[fullTitle], { ...P.LCD_TEXT })
+  assert.deepEqual(rules[fullAuthor], { color: 'rgb(var(--color-accent) / 0.82)', ...P.LCD_GLOW })
+  const t = llama().tokens
+  const author = t['accent.primary'].map((c, i) => c * 0.82 + t['surface.recessed'][i] * 0.18)
+  assert.ok(contrast(t['accent.primary'], t['surface.recessed']) >= 7, 'green title on the readout glass')
+  assert.ok(contrast(author, t['surface.recessed']) >= 7, 'dimmer green author on the readout glass')
   for (const id of ['dark', 'black', 'light']) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {}, id)
 })
 
@@ -1291,7 +1350,7 @@ test('Phase 4E-R1 compact readout keeps the well, column and neutral text; only 
   // Same recessed well; a 1px seam all round and the plate and its lips as side rails only (no vertical offset or spread)
   assert.ok(C['box-shadow'].startsWith(`${P.RECESSED_WELL}, `))
   const outer = C['box-shadow'].slice(P.RECESSED_WELL.length + 2).split(/, (?=-?\d)/)
-  assert.deepEqual(outer, ['0 0 0 1px rgb(var(--color-edge-dark))', '-4px 0 0 0 rgb(var(--color-bg))', '4px 0 0 0 rgb(var(--color-bg))', '-5px 0 0 0 rgb(var(--color-edge-light) / 0.35)', '5px 0 0 0 rgb(var(--color-edge-dark))', '0 2px 4px rgb(0 0 0 / 0.4)'])
+  assert.deepEqual(outer, ['0 0 0 1px rgb(var(--color-edge-dark))', '-4px 0 0 0 rgb(var(--color-secondary))', '4px 0 0 0 rgb(var(--color-secondary))', '-5px 0 0 0 rgb(var(--color-edge-light) / 0.35)', '5px 0 0 0 rgb(var(--color-edge-dark))', '0 2px 4px rgb(0 0 0 / 0.4)'])
   for (const value of Object.values(C)) assert.doesNotMatch(value, /--color-(track-cursor|accent|success|warning)/)
   assert.equal(C.color, undefined)
   // Horizontal inset, face, radius and column are inherited from the Phase 4E rule (not overridden here)
@@ -1392,9 +1451,9 @@ const PRIMARY_RULES = {
   pressedMini: '#streamContainer:not(.fullscreen) #playerControls .play-btn:active'
 }
 
-test('Phase 4H primary key: squared on RADIUS.key, dark face, primary bezel; frozen paint only', () => {
+test('Faithful pass keys: every deck key is a steel key with a framed inner face; frozen paint only', () => {
   const P = presets.PRIMITIVES
-  for (const set of [P.PRIMARY_KEY, P.PRIMARY_KEY_MINI, P.PRIMARY_KEY_PRESSED, P.PRIMARY_KEY_PRESSED_MINI]) {
+  for (const set of [P.PRIMARY_KEY, P.PRIMARY_KEY_MINI, P.PRIMARY_KEY_PRESSED, P.PRIMARY_KEY_PRESSED_MINI, P.TRANSPORT_KEY, P.TRANSPORT_KEY_PRESSED, P.TRANSPORT_KEY_MINI, P.UTILITY_KEY, P.UTILITY_KEY_PRESSED]) {
     assert.ok(Object.isFrozen(set))
     for (const [property, value] of Object.entries(set)) {
       assert.match(property, PAINT_ONLY, property)
@@ -1405,31 +1464,61 @@ test('Phase 4H primary key: squared on RADIUS.key, dark face, primary bezel; fro
   // Squared on the existing key radius (no new radius); no round radius is left in the recipe
   assert.equal(P.PRIMARY_KEY['border-radius'], P.RADIUS.key)
   assert.ok(!Object.values(P.RADIUS).includes('9999px'))
-  // Dark face: the recessed token at 0.72 (0.85 collapsed) over the player's own fill, under the player-key sheen
-  // (background-image only, because the player sets the fill inline)
-  const sheen = P.PLAYER_KEY['background-image']
-  assert.equal(P.PRIMARY_KEY['background-image'], `${sheen}, linear-gradient(rgb(var(--color-recessed) / 0.72), rgb(var(--color-recessed) / 0.72))`)
-  assert.deepEqual({ ...P.PRIMARY_KEY_MINI }, { 'background-image': `${sheen}, linear-gradient(rgb(var(--color-recessed) / 0.85), rgb(var(--color-recessed) / 0.85))` })
-  assert.ok(!('background-color' in P.PRIMARY_KEY), 'the inline fill stays the base')
-  // Primary bezel, in order: lit inner edge, faint second highlight, dark inner edge, 1px dark channel, lit return ring, deeper drop
-  assert.deepEqual(P.PRIMARY_KEY['box-shadow'].split(/, (?=inset|0)/), ['inset 1px 1px 0 rgb(var(--color-edge-light) / 0.6)', 'inset 2px 2px 0 rgb(var(--color-edge-light) / 0.12)', 'inset -1px -1px 0 rgb(var(--color-edge-dark))', '0 0 0 1px rgb(var(--color-edge-dark))', '0 0 0 2px rgb(var(--color-edge-light) / 0.3)', '0 3px 5px rgb(0 0 0 / 0.55)'])
-  // Stronger than a secondary player key: the same inner bevel and channel, plus a return ring and a deeper drop
-  assert.ok(P.PRIMARY_KEY['box-shadow'].startsWith(P.PLAYER_KEY['box-shadow'].replace(/, 0 2px 3px rgb\(0 0 0 \/ 0\.5\)$/, '')))
-  assert.match(P.PLAYER_KEY['box-shadow'], /0 2px 3px rgb\(0 0 0 \/ 0\.5\)$/)
-  // No decoration: no texture, gloss, glass or radial highlight
-  assert.doesNotMatch(P.PRIMARY_KEY['background-image'], /radial|url|repeating/)
+  // The approved mockup's keys are raised steel, lighter than the deck: a top-lit gradient from the raised steel to the
+  // panel steel. The primary paints it as background-image (the player sets its fill inline)
+  for (const set of [P.PRIMARY_KEY, P.PRIMARY_KEY_MINI, P.TRANSPORT_KEY, P.TRANSPORT_KEY_MINI, P.UTILITY_KEY]) assert.equal(set['background-image'], P.STEEL_FACE)
+  // Frame depth follows the key size, so every key keeps its proportions: mini 3, utility 4, transport 5, primary 6
+  assert.deepEqual({ ...P.KEY_DEPTH }, { mini: 3, utility: 4, transport: 5, primary: 6 })
+  const layers = (set) => set['box-shadow'].split(/, (?=inset|0)/)
+  for (const [set, k] of [
+    [P.PRIMARY_KEY, 6],
+    [P.TRANSPORT_KEY, 5],
+    [P.UTILITY_KEY, 4],
+    [P.TRANSPORT_KEY_MINI, 3],
+    [P.PRIMARY_KEY_MINI, 3]
+  ]) {
+    const l = layers(set)
+    // Material polish: the edges (bright specular top, lit left, dark right and bottom), the k px band lit by direction (top
+    // lit, left faintly lit, right and bottom shaded), the band's raised steel, the groove, the inner face's lit and shaded
+    // lips, the channel and its soft socket, a drop
+    assert.deepEqual(l.slice(0, 4), ['inset 0 1px 0 rgb(var(--color-edge-light))', 'inset 1px 0 0 rgb(var(--color-edge-light) / 0.5)', 'inset -1px 0 0 rgb(var(--color-edge-dark) / 0.9)', 'inset 0 -1px 0 rgb(var(--color-edge-dark))'])
+    assert.deepEqual(l.slice(4, 8), [`inset 0 ${k}px 0 rgb(var(--color-edge-light) / 0.28)`, `inset ${k}px 0 0 rgb(var(--color-edge-light) / 0.12)`, `inset -${k}px 0 0 rgb(0 0 0 / 0.22)`, `inset 0 -${k}px 0 rgb(0 0 0 / 0.42)`])
+    assert.equal(l[8], `inset 0 0 0 ${k}px rgb(var(--color-secondary))`)
+    assert.equal(l[9], `inset 0 0 0 ${k + 1}px rgb(0 0 0 / 0.8)`)
+    assert.equal(l[10], `inset 1px 1px 0 ${k + 1}px rgb(var(--color-edge-light) / 0.75)`)
+    assert.equal(l[11], `inset -1px -1px 0 ${k + 1}px rgb(0 0 0 / 0.5)`)
+    assert.equal(`${l[12]}, ${l[13]}`, P.STEEL_CHANNEL)
+    assert.match(l[14], /^0 \dpx \dpx rgb\(0 0 0 \/ 0\.\d+\)$/)
+    assert.equal(l.length, 15)
+  }
+  // The primary is the deepest: its drop is the largest of the deck
+  assert.equal(layers(P.PRIMARY_KEY)[14], '0 3px 5px rgb(0 0 0 / 0.7)')
+  // No texture, gloss, glass or radial highlight on a key (rivets and brushing belong to the plates)
+  for (const set of [P.PRIMARY_KEY, P.TRANSPORT_KEY, P.UTILITY_KEY]) assert.doesNotMatch(set['background-image'], /radial|url|repeating/)
 })
 
-test('Phase 4H pressed: mechanically depressed in place (no movement), bezel ring retained', () => {
+test('Faithful pass pressed keys: depressed in place (no movement), frame and channel retained', () => {
   const P = presets.PRIMITIVES
-  const pressed = P.PRIMARY_KEY_PRESSED
-  assert.deepEqual(Object.keys(pressed).sort(), ['background-image', 'box-shadow'])
-  // Sheen removed, face deepened (0.86; 0.94 collapsed)
-  assert.equal(pressed['background-image'], 'linear-gradient(rgb(var(--color-recessed) / 0.86), rgb(var(--color-recessed) / 0.86))')
-  assert.deepEqual({ ...P.PRIMARY_KEY_PRESSED_MINI }, { 'background-image': 'linear-gradient(rgb(var(--color-recessed) / 0.94), rgb(var(--color-recessed) / 0.94))' })
-  // Inverted bevel, inner shade, channel and return ring kept, no drop shadow
-  assert.deepEqual(pressed['box-shadow'].split(/, (?=inset|0)/), ['inset 1px 1px 0 rgb(var(--color-edge-dark))', 'inset -1px -1px 0 rgb(var(--color-edge-light) / 0.3)', 'inset 0 3px 6px rgb(0 0 0 / 0.6)', '0 0 0 1px rgb(var(--color-edge-dark))', '0 0 0 2px rgb(var(--color-edge-light) / 0.3)'])
-  assert.doesNotMatch(pressed['box-shadow'], /(^|, )0 3px 5px/)
+  for (const [pressed, k] of [
+    [P.PRIMARY_KEY_PRESSED, 6],
+    [P.TRANSPORT_KEY_PRESSED, 5],
+    [P.UTILITY_KEY_PRESSED, 4],
+    [P.PRIMARY_KEY_PRESSED_MINI, 3],
+    [P.TRANSPORT_KEY_PRESSED_MINI, 3]
+  ]) {
+    assert.deepEqual(Object.keys(pressed).sort(), ['background-color', 'background-image', 'box-shadow'])
+    // Light inverted: the face starts dark; the outer bevel inverts; the frame stays; an inner shade falls from the top
+    assert.equal(pressed['background-image'], P.STEEL_FACE_PRESSED)
+    const l = pressed['box-shadow'].split(/, (?=inset|0)/)
+    // Material polish: the edges and the band's light invert (dark top, faint lit bottom), the band and groove stay
+    assert.equal(l[0], 'inset 0 1px 0 rgb(var(--color-edge-dark))')
+    assert.equal(l[3], `inset 0 ${k}px 0 rgb(0 0 0 / 0.3)`)
+    assert.equal(l[5], `inset 0 0 0 ${k}px rgb(var(--color-secondary) / 0.85)`)
+    assert.equal(l[6], `inset 0 0 0 ${k + 1}px rgb(0 0 0 / 0.85)`)
+    assert.equal(l[7], `inset 0 ${k + 3}px 6px rgb(0 0 0 / 0.4)`)
+    assert.equal(`${l[8]}, ${l[9]}`, P.STEEL_CHANNEL)
+    assert.equal(l.length, 10, 'no drop shadow while pressed')
+  }
   // Nothing in any primary state moves or resizes the key
   const rules = presets.presentationRules([llama()])
   const root = engine.themeSelector('llama')
@@ -1446,7 +1535,7 @@ test('Phase 4H rules: LLAMA-only primary key, amber Play/Pause, seek-pending and
   assert.deepEqual(rule(PRIMARY_RULES.restMini), { ...P.PRIMARY_KEY_MINI })
   assert.deepEqual(rule(PRIMARY_RULES.pressedMini), { ...P.PRIMARY_KEY_PRESSED_MINI })
   // One playback legend color for every glyph the key shows (play_arrow, pause, autorenew) and for its loading spinner
-  for (const s of PRIMARY_LEGEND_SELECTORS) assert.deepEqual(rule(s), { color: 'rgb(var(--color-track-cursor))' }, s)
+  for (const s of PRIMARY_LEGEND_SELECTORS) assert.deepEqual(rule(s), { color: 'rgb(var(--color-legend))' }, s)
   assert.ok(!Object.entries(rules).some(([s, d]) => /play-btn/.test(s) && Object.values(d).some((v) => /--color-accent|--color-success/.test(v))), 'never green')
   // Option E: large solid glyph, 2.8rem full (44.8px) and 1.875rem collapsed (30px); the boxes stay 65px / 40px
   assert.deepEqual(rule(PRIMARY_GLYPH_FULL), { 'font-size': '2.8rem' })
@@ -1461,25 +1550,14 @@ test('Phase 4H rules: LLAMA-only primary key, amber Play/Pause, seek-pending and
   for (const id of ['dark', 'black', 'light']) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {}, id)
 })
 
-test('Phase 4H contrast: the amber legend keeps at least 7:1 wherever the glyph can sit, in every face state', () => {
+test('Faithful pass contrast: the lit legend clears 4.5:1 on every part of the steel key face, in every state', () => {
   const t = llama().tokens
-  const edge = presets.equipmentDerivedDeclarations(t)['--color-edge-light'].split(' ').map(Number)
-  const over = (base, top, a) => base.map((c, i) => c + (top[i] - c) * a)
-  const amber = t['progress.played']
-  const base = t['surface.raised'] // the player's inline fill under the face
-  // The player-key sheen falls from edge-light 0.2 at the top to 0 at 45%. The brightest face point any glyph ink can
-  // reach is the top of the glyph's own (centered, square) box: 10.1px down a 65px key, 5px down a 40px key
-  assert.match(presets.PRIMITIVES.PLAYER_KEY['background-image'], /^linear-gradient\(180deg, rgb\(var\(--color-edge-light\) \/ 0\.2\) 0%, rgb\(var\(--color-edge-light\) \/ 0\) 45%/)
-  const sheenAt = (box, glyph) => 0.2 * (1 - (box - glyph) / 2 / box / 0.45)
-  for (const [label, face, sheen] of [
-    ['full rest', 0.72, sheenAt(65, 44.8)],
-    ['mini rest', 0.85, sheenAt(40, 30)],
-    ['full pressed', 0.86, 0],
-    ['mini pressed', 0.94, 0]
-  ]) {
-    const brightest = over(over(base, t['surface.recessed'], face), edge, sheen)
-    const ratio = contrast(amber, brightest)
-    assert.ok(ratio >= 7, `${label}: ${ratio.toFixed(2)}`)
+  const legend = presets.equipmentDerivedDeclarations(t)['--color-legend'].split(' ').map(Number)
+  // The face runs from the raised steel (top) to the panel steel (bottom); pressed, from the panel steel down. The legend
+  // includes the bold "10s" labels, so it must clear the text threshold on the lightest point of either gradient
+  for (const surface of ['surface.raised', 'surface.content']) {
+    const ratio = contrast(legend, t[surface])
+    assert.ok(ratio >= 4.5, `legend on ${surface}: ${ratio.toFixed(2)}`)
   }
 })
 
@@ -1499,7 +1577,7 @@ test('Phase 4H CSS: the LLAMA glyph size and amber outrank the player rules; sta
   assert.match(block(`${root} #playerControls .play-btn`), /border-radius: 4px;[\s\S]*background-image: linear-gradient/)
   assert.match(block(`${root} ${PRIMARY_GLYPH_FULL}`), /font-size: 2\.8rem/)
   assert.match(block(`${root} ${PRIMARY_GLYPH_MINI}`), /font-size: 1\.875rem/)
-  assert.match(block(`${root} #playerControls .play-btn .la-ball-spin-clockwise`), /color: rgb\(var\(--color-track-cursor\)\)/)
+  assert.match(block(`${root} #playerControls .play-btn .la-ball-spin-clockwise`), /color: rgb\(var\(--color-legend\)\)/)
   assert.ok(!/(^|\n|\})\s*#playerControls \.play-btn \.la-ball-spin-clockwise/.test(css), 'no unscoped spinner rule')
   // The player's own (standard) rules: glyph 2.1rem full / 1.5rem collapsed, boxes 65px / 40px, round face. The LLAMA
   // selectors carry the theme root and one more class or id than these, so they win without !important
@@ -1569,11 +1647,17 @@ test('Control deck: the seam drops inside an unchanged deck, clear of the bank, 
   // The row grows down by exactly what its offset loses: the bank stays put and the deck keeps its height
   assert.deepEqual(rules[`${root} #streamContainer.fullscreen #playerControls`], { bottom: `${base - drop}px`, 'padding-bottom': `${drop}px` })
   assert.ok(drop >= 3 && drop <= 7, 'a small drop')
-  // The clearance under the keys covers their drop shadows: transport 0 2px 4px centered in the 65px row, primary 0 3px 5px, lifted
+  // The clearance under the keys covers their drop shadows (offset + blur, read from the values) and the channel's 3px
+  // socket: transport centered in the 65px row, primary lifted
   const transportClear = (65 - P.DECK.transport.height) / 2 + drop
   const primaryClear = P.DECK.primaryLift + drop
-  assert.ok(P.TRANSPORT_KEY['box-shadow'].endsWith('0 2px 4px rgb(0 0 0 / 0.5)') && transportClear >= 2 + 4, `transport ${transportClear}`)
-  assert.ok(primaryClear >= 3 + 5, `primary ${primaryClear}`)
+  const reach = (set) => {
+    const [, y, blur] = set['box-shadow'].match(/, 0 (\d+)px (\d+)px rgb\(0 0 0 \/ 0\.\d+\)$/).map(Number)
+    return y + blur
+  }
+  assert.ok(P.STEEL_CHANNEL.endsWith('0 0 0 3px rgb(0 0 0 / 0.22)'))
+  assert.ok(reach(P.TRANSPORT_KEY) <= transportClear && transportClear >= 3, `transport ${reach(P.TRANSPORT_KEY)} in ${transportClear}`)
+  assert.ok(reach(P.PRIMARY_KEY) <= primaryClear && primaryClear >= 3, `primary ${reach(P.PRIMARY_KEY)} in ${primaryClear}`)
   // The utility row: no padding, its keys centered in the section under the seam (an odd px above), comfortable both ways
   const depth = base - drop
   const below = Math.floor((depth - P.DECK.utility.height) / 2)
@@ -1625,22 +1709,23 @@ test('Control deck states: pressed cuts the key in, an unavailable key is a dimm
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
   const layers = (v) => v.split(/, (?=inset|0)/)
-  // Transport: the primary's inner bevel and channel, a weaker lit return (0.18 vs 0.3) and a shorter drop
+  // Faithful pass tiers: one steel key family; the tiers differ by size and frame depth (primary 6 > transport 5 >
+  // utility 4), sharing the same outer bevel and channel
   const transport = layers(P.TRANSPORT_KEY['box-shadow'])
   const primary = layers(P.PRIMARY_KEY['box-shadow'])
+  const utility = layers(P.UTILITY_KEY['box-shadow'])
   assert.deepEqual(transport.slice(0, 4), primary.slice(0, 4))
-  assert.equal(transport[4], '0 0 0 2px rgb(var(--color-edge-light) / 0.18)')
-  assert.equal(primary[4], '0 0 0 2px rgb(var(--color-edge-light) / 0.3)')
-  // Utility: restrained bezel, no lit return
-  assert.doesNotMatch(P.UTILITY_KEY['box-shadow'], /0 0 0 2px/)
+  assert.deepEqual(utility.slice(0, 4), primary.slice(0, 4))
+  const depth = (l) => Number(l.find((x) => /^inset 0 0 0 \d+px rgb\(var\(--color-secondary\)\)$/.test(x)).match(/inset 0 0 0 (\d+)px/)[1])
+  assert.ok(depth(primary) > depth(transport) && depth(transport) > depth(utility))
   for (const [host, pressed] of [
     [TIERS.transport.host, P.TRANSPORT_KEY_PRESSED],
     [TIERS.mini.host, P.TRANSPORT_KEY_PRESSED_MINI],
     [TIERS.utility.host, P.UTILITY_KEY_PRESSED]
   ]) {
     assert.deepEqual(rules[`${root} ${host}:not(.key-disabled):active`], { ...pressed }, host)
-    assert.equal(pressed['background-image'], 'none')
-    assert.match(pressed['box-shadow'], /^inset 1px 1px 0 rgb\(var\(--color-edge-dark\)\)/)
+    assert.equal(pressed['background-image'], P.STEEL_FACE_PRESSED)
+    assert.match(pressed['box-shadow'], /^inset 0 1px 0 rgb\(var\(--color-edge-dark\)\)/)
     for (const p of Object.keys(pressed)) assert.doesNotMatch(p, /transform|top|left|width|height|margin/, p)
     // Unavailable: socket face and dimmed legend in one rule; never pressed
     assert.deepEqual(rules[`${root} ${host}.key-disabled`], { ...P.KEY_SOCKET, ...P.KEY_SOCKET_LEGEND }, host)
@@ -1670,8 +1755,8 @@ test('Control deck legends: amber transport and utility keys, dynamic durations,
   assert.deepEqual(rules[`${root} #playerContent .utility-key.key-disabled`], { ...P.KEY_SOCKET, ...P.KEY_SOCKET_LEGEND })
   // The queue badge keeps its own neutral marking (its markup color), painted by no legend rule
   assert.equal(rules[`${root} #playerContent .queue-key > span.absolute`].color, undefined)
-  // The top chrome (navigation and menus) keeps the neutral legend
-  assert.deepEqual({ ...P.CHROME_LEGEND }, { color: 'rgb(var(--color-fg) / 0.8)' })
+  // Faithful pass: the top chrome keys are lit with the same amber legend as the deck (the mockup's collapse and menu keys)
+  assert.deepEqual({ ...P.CHROME_LEGEND }, { ...P.PLAYBACK_LEGEND })
   assert.equal(rules[`${root} #streamContainer.fullscreen .chrome-key`].color, P.CHROME_LEGEND.color)
   // Neither keys nor chrome ever take the readouts' green or the accent
   for (const [s, d] of Object.entries(rules)) if (/utility-key|queue-key|sleep-key|chapters-key|chrome-key/.test(s)) assert.doesNotMatch(JSON.stringify(d), /--color-accent|--color-success/, s)
@@ -1693,46 +1778,42 @@ test('Control deck readouts: speed, the running sleep timer and the playback met
   for (const s of ['.fullscreen #playerContent .speed-readout', '.fullscreen #playerContent .sleep-display']) assert.deepEqual(rules[`${root} ${s}`], { ...P.READOUT_BOX }, s)
   for (const d of [P.READOUT_BOX, P.PLAYBACK_METHOD_READOUT]) {
     assert.equal(d['background-color'], 'rgb(var(--color-recessed))')
-    assert.ok(d['box-shadow'].startsWith(P.RECESSED_WELL))
     assert.equal(d['background-image'], undefined, 'no raised sheen')
-    assert.doesNotMatch(d['box-shadow'], /edge-light\) \/ 0\.6|0 0 0 2px|track-cursor/)
+    assert.doesNotMatch(d['box-shadow'], /track-cursor|--color-legend/)
   }
+  assert.ok(P.PLAYBACK_METHOD_READOUT['box-shadow'].startsWith(P.RECESSED_WELL))
+  // Faithful pass: the speed and sleep readouts are the mockup's steel key holding a glass display: the utility key's outer
+  // bevel and steel band, a black groove, then the glass with a top shade; outside, the channel and drop
+  const layers = (v) => v.split(/, (?=inset|0)/)
+  const readout = layers(P.READOUT_BOX['box-shadow'])
+  assert.equal(readout[0], 'inset 0 1px 0 rgb(var(--color-edge-light))')
+  assert.equal(readout[8], `inset 0 0 0 ${P.KEY_DEPTH.utility}px rgb(var(--color-secondary))`)
+  assert.equal(readout[9], `inset 0 0 0 ${P.KEY_DEPTH.utility + 1}px rgb(0 0 0 / 0.9)`)
   // Readouts are the utility keys' height and at least their width; their width follows the value
   assert.equal(P.READOUT_BOX.height, `${P.DECK.utility.height}px`)
   assert.equal(P.READOUT_BOX['min-width'], `${P.DECK.utility.width}px`)
   assert.equal(P.READOUT_BOX.width, 'auto')
-  assert.deepEqual(rules[`${root} #playerContent .speed-readout`], { color: 'rgb(var(--color-accent))' })
-  assert.deepEqual(rules[`${root} #playerContent .sleep-readout`], { color: 'rgb(var(--color-accent))' })
+  assert.deepEqual(rules[`${root} #playerContent .speed-readout`], { color: 'rgb(var(--color-accent))', ...P.LCD_GLOW })
+  assert.deepEqual(rules[`${root} #playerContent .sleep-readout`], { color: 'rgb(var(--color-accent))', ...P.LCD_GLOW })
   assert.equal(P.PLAYBACK_METHOD_READOUT.color, 'rgb(var(--color-accent))')
   assert.ok(!Object.keys(rules).some((s) => /speed-readout|sleep-display|playback-method/.test(s) && /player-key|utility-key|chrome-key/.test(s)))
 })
 
-test('Control deck contrast: amber transport and utility legends and readouts >= 7:1, chrome legends >= 4.5:1, socket legend dimmed', () => {
+test('Control deck contrast: lit legends clear 4.5:1 on every steel face, readouts 7:1 on glass, socket legend dimmed', () => {
   const P = presets.PRIMITIVES
   const t = llama().tokens
-  const edge = presets.equipmentDerivedDeclarations(t)['--color-edge-light'].split(' ').map(Number)
   const over = (base, top, a) => base.map((c, i) => c + (top[i] - c) * a)
   const alphaOf = (v) => Number(v.match(/\/ (0\.\d+)\)/)[1])
-  const faceOn = (deck, fill, sheen = 0.2) => over(over(deck, t['surface.recessed'], alphaOf(fill)), edge, sheen)
-  for (const [label, face] of [
-    ['transport', faceOn(t['surface.content'], P.TRANSPORT_KEY['background-color'])],
-    ['transport pressed', faceOn(t['surface.content'], P.TRANSPORT_KEY_PRESSED['background-color'], 0)],
-    ['mini', faceOn(t['surface.base'], P.TRANSPORT_KEY_MINI['background-color'])],
-    ['mini pressed', faceOn(t['surface.base'], P.TRANSPORT_KEY_PRESSED_MINI['background-color'], 0)]
-  ]) {
-    assert.ok(contrast(t['progress.played'], face) >= 7, `${label}: ${contrast(t['progress.played'], face).toFixed(2)}`)
-  }
-  for (const deck of [t['surface.content'], t['surface.base']]) {
-    const face = faceOn(deck, P.UTILITY_KEY['background-color'])
-    // The amber legend sits mid-key, where the face's sheen has faded (0.2 at the top edge, 0 at 45%): >= 7:1 there, and
-    // >= 4.5:1 even against the full sheen at the top edge (the utility face is a touch lighter than the transport face)
-    assert.ok(contrast(t['progress.played'], faceOn(deck, P.UTILITY_KEY['background-color'], 0.1)) >= 7, 'utility amber at the legend')
-    assert.ok(contrast(t['progress.played'], face) >= 4.5, `utility amber at the top edge ${contrast(t['progress.played'], face).toFixed(2)}`)
-    assert.ok(contrast(t['progress.played'], faceOn(deck, P.UTILITY_KEY_PRESSED['background-color'], 0)) >= 7, 'utility amber pressed')
-    assert.ok(contrast(over(face, t['text.primary'], 0.8), face) >= 4.5, 'chrome legend')
-  }
+  const legend = presets.equipmentDerivedDeclarations(t)['--color-legend'].split(' ').map(Number)
+  // Every key face (transport, utility, chrome, mini, primary, at rest or pressed) is a gradient between the raised and the
+  // panel steel; the legend (including the bold duration labels) clears the text threshold on both ends
+  for (const surface of ['surface.raised', 'surface.content']) assert.ok(contrast(legend, t[surface]) >= 4.5, surface)
+  // The legend sits mid-key, on the gradient's midpoint, with room to spare
+  const mid = over(t['surface.raised'], t['surface.content'], 0.5)
+  assert.ok(contrast(legend, mid) >= 6, 'legend mid-key')
   assert.ok(contrast(t['accent.primary'], t['surface.recessed']) >= 7, 'readout green')
-  const socket = faceOn(t['surface.content'], P.KEY_SOCKET['background-color'], 0)
+  // An unavailable key: a sunken socket on the console plate with a strongly dimmed legend
+  const socket = over(t['surface.raised'], t['surface.recessed'], alphaOf(P.KEY_SOCKET['background-color']))
   assert.ok(contrast(over(socket, t['text.primary'], alphaOf(P.KEY_SOCKET_LEGEND.color)), socket) < 3, 'unavailable legend clearly dimmer')
 })
 
@@ -1814,9 +1895,9 @@ test('Phase 7B mini type: condensed neutral metadata, condensed tabular times on
   const line = Number(P.MINI_TIME_TYPE['line-height'])
   assert.equal(size, 14)
   for (const scale of [1, 1.3]) assert.ok(Math.abs(size * scale * line - 0.8 * 16 * scale * 1.5) < 0.001, `line box at ${scale}`)
-  // The times keep the phosphor readout color
+  // The times keep the phosphor readout color, with the faithful pass's readout glow
   const root = engine.themeSelector('llama')
-  assert.deepEqual(presets.presentationRules([llama()])[`${root} #playerTrack p.font-mono`], { color: 'rgb(var(--color-accent))' })
+  assert.deepEqual(presets.presentationRules([llama()])[`${root} #playerTrack p.font-mono`], { color: 'rgb(var(--color-accent))', ...P.LCD_GLOW })
 })
 
 test('Phase 7B: the seek-row times are sized by the stylesheet (same 0.8rem everywhere), so the theme can set their type', async () => {
@@ -1841,8 +1922,8 @@ test('Phase 7B readout strip and artwork mount are paint only and add no hit are
   // Two offset copies of the row's own box, below it: the face carried 6px under the rail, then a 1px lit line. No inset,
   // blur or spread, so the strip is the row's own width and never changes its box
   assert.deepEqual(P.MINI_READOUT_STRIP['box-shadow'].split(/, (?=\d)/), ['0 6px 0 0 rgb(var(--color-recessed))', '0 7px 0 0 rgb(var(--color-edge-light) / 0.22)'])
-  // Artwork: the shared frame plus one soft drop; no bezel or ring
-  assert.equal(P.MINI_ARTWORK_MOUNT['box-shadow'], `${P.ARTWORK_FRAME}, 0 2px 4px 2px rgb(0 0 0 / 0.45)`)
+  // Artwork: the shared frame plus the short artwork drop; no bezel
+  assert.equal(P.MINI_ARTWORK_MOUNT['box-shadow'], `${P.ARTWORK_FRAME}, ${P.ARTWORK_DROP}`)
   assert.deepEqual(Object.keys(P.MINI_ARTWORK_MOUNT), ['box-shadow'])
   for (const set of [P.MINI_READOUT_STRIP, P.MINI_ARTWORK_MOUNT]) for (const property of Object.keys(set)) assert.match(property, PAINT_ONLY, property)
 })
@@ -1915,7 +1996,7 @@ test('Phase 8B hooks mark exactly the intended browsing elements, and never the 
   const toolbar = await read('../components/home/BookshelfToolbar.vue')
   assert.match(toolbar, /<p v-show="!selectedSeriesName" class="toolbar-count pt-1">\{\{ \$formatNumber\(totalEntities\) \}\} \{\{ entityTitle \}\}<\/p>/)
   // The series-name line carries a name, not just a count: it keeps its face
-  assert.match(toolbar, /<p v-show="selectedSeriesName" class="ml-2 pt-1">/)
+  assert.match(toolbar, /<p v-show="selectedSeriesName" class="ml-2 pt-1 min-w-0 break-words line-clamp-2">/)
   assert.equal((toolbar.match(/toolbar-count/g) || []).length, 1)
   const search = await read('../pages/search.vue')
   assert.equal((search.match(/class="search-section-label font-semibold text-sm mb-1/g) || []).length, 7)
@@ -1925,15 +2006,33 @@ test('Phase 8B hooks mark exactly the intended browsing elements, and never the 
   for (const file of ['../components/app/AudioPlayer.vue', '../components/app/AudioPlayerContainer.vue', '../components/app/Appbar.vue', '../components/home/BookshelfNavBar.vue']) assert.doesNotMatch(await read(file), HOOKS_8B, file)
 })
 
-test('Phase 8B rules are the frozen Candidate B primitives, LLAMA only', () => {
+test('Phase 8B rules: Candidate B primitives, with the faithful pass layered over navigation, headings and counts', () => {
   const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
+  // Faithful pass (approved mockup): the strip is the graphite page with steel tab keys; the selected tab is a lit glass
+  // key with a green ring and legend; headings and counts are green readouts; list play legends are green
+  const FAITHFUL = {
+    '#bookshelf-navbar': { 'background-color': 'rgb(var(--color-page))', 'background-image': 'none', 'box-shadow': 'inset 0 -1px 0 rgb(0 0 0 / 0.8)' },
+    '#bookshelf-navbar a.bg-primary': { ...P.NAV_KEY_SELECTED },
+    '.shelf-heading': { ...P.SECTION_LABEL_TYPE, ...P.LCD_TEXT },
+    '.search-section-label': { ...P.SECTION_LABEL_TYPE, ...P.LCD_TEXT },
+    '.toolbar-count': { ...P.COUNT_TYPE, ...P.LCD_TEXT }
+  }
   for (const [suffix, name] of Object.entries(BROWSE_8B)) {
     assert.ok(Object.isFrozen(P[name]), name)
-    assert.deepEqual(rules[`${root} ${suffix}`], { ...P[name] }, suffix)
+    assert.deepEqual(rules[`${root} ${suffix}`], FAITHFUL[suffix] || { ...P[name] }, suffix)
     for (const value of Object.values(P[name])) assert.match(value, SAFE_VALUE, `${name}: ${value}`)
   }
+  // Finishing corrections: the list play key's legend is the ordinary action amber, not the display green
+  assert.deepEqual({ ...P.LIST_PLAY_LEGEND }, { ...P.PLAYBACK_LEGEND })
+  // Tabs are separate steel keys (a page-colored ring makes the gap between touching tabs); the selected tab is glass with
+  // a green ring, legend and glow: it reads by material (glass vs steel) and ring, not color alone
+  assert.deepEqual(rules[`${root} #bookshelf-navbar a`], { ...P.NAV_KEY })
+  assert.match(P.NAV_KEY['box-shadow'], /^inset 0 0 0 2px rgb\(var\(--color-page\)\)/)
+  assert.match(P.NAV_KEY_SELECTED['box-shadow'], /^inset 0 0 0 2px rgb\(var\(--color-page\)\), inset 0 0 0 4px rgb\(var\(--color-accent\)/)
+  assert.equal(P.NAV_KEY_SELECTED['background-color'], 'rgb(var(--color-recessed))')
+  for (const set of [P.NAV_KEY, P.NAV_KEY_SELECTED]) for (const property of Object.keys(set)) assert.match(property, PAINT_ONLY, property)
   // None reaches the players
   for (const suffix of Object.keys(BROWSE_8B)) assert.doesNotMatch(suffix, /streamContainer|playerContent|playerControls|playerTrack/, suffix)
   for (const id of ['dark', 'black', 'light']) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {}, id)
@@ -1953,20 +2052,23 @@ test('Phase 8B navigation: chassis strip and a recessed selected key that keeps 
   assert.match(navbar, /<p v-if="routeName === item\.routeName" class="text-sm font-semibold">\{\{ item\.text \}\}<\/p>/)
 })
 
-test('Phase 8B typography freeze: navigation labels, the library selector, cards and titles keep their type', () => {
+test('Faithful pass typography: condensed display roles only (face, spacing, figures); cards and titles keep their type', () => {
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
-  const TYPE = /^(font|letter-spacing|line-height|text-)/
+  const TYPE = /^(font|letter-spacing|line-height|text-(?!shadow))/
+  // Cards, the card artwork and the app bar itself never take type
   for (const [selector, declarations] of Object.entries(rules)) {
-    if (!/bookshelf-navbar|library-selector|card-artwork|book-card|appbar|bookshelf-toolbar/.test(selector)) continue
+    if (!/card-artwork|book-card|bookshelf-toolbar/.test(selector) && !/#appbar$/.test(selector)) continue
     for (const property of Object.keys(declarations)) assert.doesNotMatch(property, TYPE, `${selector}: ${property}`)
   }
-  // Only the hooked labels and the count take type, and only face, spacing and figures (same size, weight, line box)
+  // Outside the players, exactly these display roles take the condensed face: shelf and search headings, the toolbar count,
+  // section labels, the library name, the selected tab's label, dialog titles, Up Next's labels, chapter times and speed
+  // and sleep option values
   const typed = Object.entries(rules).filter(([s, d]) => !s.includes('#streamContainer') && Object.keys(d).some((p) => p === 'font-family'))
-  assert.deepEqual(typed.map(([s]) => s.slice(root.length + 1)).sort(), ['.search-section-label', '.shelf-heading', '.toolbar-count'])
+  assert.deepEqual(typed.map(([s]) => s.slice(root.length + 1)).sort(), ['#appbar .library-selector p', '#bookshelf-navbar a.bg-primary p', '#content p.uppercase.text-fg-muted', '.modal .chapters-panel .font-mono', '.modal .playback-option-panel li[role=option]', '.modal .queue-panel p.uppercase', '.modal .z-40 > p.text-white.truncate', '.search-section-label', '.shelf-heading', '.toolbar-count'])
   for (const [, declarations] of typed) {
     assert.equal(declarations['font-family'], 'sans-serif-condensed, sans-serif')
-    for (const property of ['font-size', 'font-weight', 'line-height', 'color']) assert.equal(declarations[property], undefined, property)
+    for (const property of ['font-size', 'font-weight', 'line-height']) assert.equal(declarations[property], undefined, property)
   }
   assert.equal(rules[`${root} .toolbar-count`]['font-variant-numeric'], 'tabular-nums')
 })
@@ -1987,29 +2089,35 @@ test('Phase 8B shelf heading rule is the band painting itself: an engraved line 
   assert.deepEqual(rules[`${root} .shelf-section`], { 'box-shadow': P.ENGRAVED_SEPARATOR })
 })
 
-test('Phase 8B list play key: the mini key face and amber legend on the unchanged button box', () => {
+test('Phase 8B list play key: the mini key face and (finishing corrections) the amber action legend on the unchanged button box', () => {
   const P = presets.PRIMITIVES
   assert.deepEqual({ ...P.LIST_PLAY_KEY }, { ...P.TRANSPORT_KEY_MINI, 'border-radius': P.RADIUS.key })
   assert.deepEqual({ ...P.LIST_PLAY_LEGEND }, { ...P.PLAYBACK_LEGEND })
   for (const property of Object.keys(P.LIST_PLAY_KEY)) assert.match(property, PAINT_ONLY, property)
-  // Contrast: the amber legend on the key face over the browsing surface
+  // Contrast: the amber legend (its base, progress.played; the lit legend is brighter still) on the steel key face, at its
+  // lightest (top) and darkest (bottom)
   const t = llama().tokens
-  const face = t['surface.recessed'].map((c, i) => c * 0.85 + t['surface.base'][i] * 0.15)
-  assert.ok(contrast(t['progress.played'], face) >= 7, 'amber legend >= 7:1')
+  for (const surface of ['surface.raised', 'surface.content']) assert.ok(contrast(t['progress.played'], t[surface]) >= 4.5, surface)
 })
 
-test('Phase 8B leaves cards, the app bar and the shared states alone (no Candidate C)', () => {
+test('Faithful pass browsing chrome: steel app bar plate, glass library display, lit labels; progress semantics unchanged', () => {
   const P = presets.PRIMITIVES
   const root = engine.themeSelector('llama')
   const rules = presets.presentationRules([llama()])
-  assert.equal(rules[`${root} .card-artwork`]['box-shadow'], `${P.ARTWORK_FRAME}, ${P.ELEVATION.panel}`)
+  assert.equal(rules[`${root} .card-artwork`]['box-shadow'], `${P.ARTWORK_FRAME}, ${P.ARTWORK_DROP}`)
+  // The shared key cap on the selector stays; the app bar's own selector display (more specific) is the glass readout
   assert.deepEqual(rules[`${root} .library-selector`], { ...P.KEY_CAP })
-  assert.deepEqual(rules[`${root} #appbar`], { 'background-image': P.CHASSIS_SHEEN, 'box-shadow': `${P.RAISED_BEVEL}, 0 1px 0 rgb(var(--color-edge-dark))` })
-  // No accent or amber text on labels, counts or the selector name
-  for (const s of ['.shelf-heading', '.search-section-label', '.toolbar-count', '.library-selector p', '#bookshelf-navbar a.bg-primary p']) assert.equal((rules[`${root} ${s}`] || {}).color, undefined, s)
+  assert.equal(rules[`${root} #appbar .library-selector`]['background-color'], 'rgb(var(--color-recessed))')
+  assert.equal(rules[`${root} #appbar .library-selector`].color, 'rgb(var(--color-accent))')
+  // The app bar is a brushed steel module plate with corner screws, its glyphs lit amber
+  assert.deepEqual(rules[`${root} #appbar`], { 'background-color': 'rgb(var(--color-secondary))', 'background-image': `${P.RIVETS}, ${P.BRUSHED}, ${P.CHASSIS_SHEEN}`, 'box-shadow': `${P.STEEL_PLATE_EDGE}, 0 1px 0 rgb(0 0 0 / 0.8)` })
+  assert.deepEqual(rules[`${root} #appbar .material-symbols`], { ...P.PLAYBACK_LEGEND })
+  // Headings and counts are green readouts, section labels amber
+  for (const s of ['.shelf-heading', '.search-section-label', '.toolbar-count']) assert.equal(rules[`${root} ${s}`].color, 'rgb(var(--color-accent))', s)
+  assert.equal(rules[`${root} #content p.uppercase.text-fg-muted`].color, 'rgb(var(--color-legend))')
   // Progress semantics unchanged
   assert.deepEqual(rules[`${root} .absolute.bottom-0.left-0.z-10.bg-yellow-400`], { 'background-color': 'rgb(var(--color-track-cursor))' })
-  assert.ok(!Object.keys(rules).some((s) => /bg-success/.test(s)))
+  assert.ok(!Object.keys(rules).some((s) => /bg-success(?!-action)/.test(s)))
 })
 
 test('Phase 8B rules compile through Tailwind under the LLAMA root only', async () => {
@@ -2031,4 +2139,106 @@ test('Phase 8B rules compile through Tailwind under the LLAMA root only', async 
   assert.match(block(`${root} .shelf-heading-band`), /background-position: 20px calc\(100% - 6px\), 20px calc\(100% - 5px\);/)
   assert.match(block(`${root} .toolbar-count`), /font-family: sans-serif-condensed, sans-serif;[\s\S]*font-variant-numeric: tabular-nums;/)
   assert.match(block(`${root} #bookshelf-navbar a.bg-primary`), /background-color: rgb\(var\(--color-recessed\)\);/)
+})
+
+test('Material polish: the shaded key face never lightens, so the legend keeps or gains contrast at every point', () => {
+  const P = presets.PRIMITIVES
+  const t = llama().tokens
+  const legend = presets.equipmentDerivedDeclarations(t)['--color-legend'].split(' ').map(Number)
+  const mix = (a, b, x) => a.map((c, i) => c + (b[i] - c) * x)
+  // Every layer over the base gradient is black at some alpha (checked above); the vertical shade starts at the top
+  const topShade = Number(P.STEEL_FACE.match(/linear-gradient\(180deg, rgb\(0 0 0 \/ ([\d.]+)\) 0%/)[1])
+  assert.ok(topShade > 0)
+  // Brightest point of the face: the top edge, the raised steel under the top shade. The draft's brightest point was the
+  // raised steel itself; the polish must not drop below it, and it clears the text threshold
+  const top = mix(t['surface.raised'], [0, 0, 0], topShade)
+  assert.ok(contrast(legend, top) >= contrast(legend, t['surface.raised']), 'brightest face point no lighter than the draft')
+  assert.ok(contrast(legend, top) >= 4.5, `legend on the brightest face point: ${contrast(legend, top).toFixed(2)}`)
+  // Mid-key, where the glyphs sit: the base gradient alone (the shades only add contrast) reaches the panel steel by 65%
+  const mid = mix(t['surface.raised'], t['surface.content'], 50 / 65)
+  assert.ok(contrast(legend, mid) >= 7, `legend mid-key: ${contrast(legend, mid).toFixed(2)}`)
+  // Pressed: the panel steel under a shade, never lighter
+  assert.ok(contrast(legend, t['surface.content']) >= 7.5, 'legend on the pressed face')
+})
+
+test('Material polish: directional bevels, quiet brushing and artwork frames within their old footprint', () => {
+  const P = presets.PRIMITIVES
+  const rules = presets.presentationRules([llama()])
+  const root = engine.themeSelector('llama')
+  // Navigation keys carry the steel keys' directional bevel inside their 2px gap and channel; no inner frame
+  assert.ok(P.NAV_KEY['box-shadow'].includes('inset 0 1px 0 3px rgb(var(--color-edge-light)), inset 1px 0 0 3px rgb(var(--color-edge-light) / 0.5)'))
+  assert.doesNotMatch(P.NAV_KEY['box-shadow'], /rgb\(var\(--color-secondary\)\)/)
+  // Brushing: three faint grains at unrelated periods (no single repeating stripe), each a few percent at most
+  const grains = P.BRUSHED.match(/repeating-linear-gradient\([^)]*\)[^)]*\)[^)]*\)[^)]*\)[^)]*\)/g)
+  assert.equal(grains.length, 3)
+  const periods = grains.map((g) => Number(g.match(/ (\d+)px\)$/)[1]))
+  assert.deepEqual(periods, [3, 5, 11])
+  for (const g of grains) for (const a of g.match(/\/ (0\.\d+)\)/g)) assert.ok(Number(a.slice(2, -1)) <= 0.04, g)
+  // Artwork frames are outer shadows only and reach no further than the draft's 4px frame; the drop is short
+  const reach = (value) =>
+    Math.max(
+      ...value.split(/, (?=-?\d)/).map((layer) => {
+        const [x, y, blur, spread] = layer
+          .match(/^(-?\d+)(?:px)? (-?\d+)(?:px)? (\d+)(?:px)? (\d+)(?:px)?/)
+          .slice(1)
+          .map(Number)
+        return Math.max(Math.abs(x), Math.abs(y)) + spread + blur
+      })
+    )
+  assert.ok(!/inset/.test(P.ARTWORK_FRAME))
+  assert.equal(reach(P.ARTWORK_FRAME), 4)
+  assert.ok(reach(P.ARTWORK_DROP.replace(/^0 (\d+px) (\d+px)/, '0 $1 $2 0')) <= 5, 'artwork drop stays short')
+  for (const s of ['.card-artwork', '.fullscreen .cover-wrapper', '.detail-artwork', '#streamContainer:not(.fullscreen) .cover-wrapper']) assert.ok(rules[`${root} ${s}`]['box-shadow'].startsWith(P.ARTWORK_FRAME), s)
+  // The full player's bay keeps its tier width (bezel + ring), as reserved by the layout
+  for (const tier of ['regular', 'compact']) {
+    const bay = P.ARTWORK_BAY[tier]['box-shadow']
+    const n = playerLayoutTiers[tier].bezel
+    assert.ok(bay.includes(`0 0 0 ${n}px rgb(var(--color-secondary)), -1px -1px 0 ${n}px rgb(var(--color-edge-light) / 0.85)`), tier)
+    assert.ok(bay.includes(`0 0 0 ${n + 2}px rgb(0 0 0 / 0.7)`), tier)
+  }
+  // The collapsed player's steel overlay gets the plate edge as box-shadow only (its inline background stays)
+  assert.deepEqual(rules[`${root} #streamContainer:not(.fullscreen) #playerContent > .absolute.h-full.pointer-events-none`], { 'box-shadow': P.STEEL_PLATE_EDGE })
+})
+
+test('Final pass dialogs and actions: black recessed panels in a steel frame, steel action keys, LLAMA only', async () => {
+  const P = presets.PRIMITIVES
+  const root = engine.themeSelector('llama')
+  const rules = presets.presentationRules([llama()])
+  const t = llama().tokens
+  // Every app-owned dialog panel is recessed glass in a steel frame (Up Next's finish), never a brushed face
+  assert.deepEqual(rules[`${root} .modal .rounded-lg.bg-primary`], { ...P.DIALOG_PANEL })
+  assert.equal(P.DIALOG_PANEL['background-color'], 'rgb(var(--color-recessed))')
+  assert.equal(P.DIALOG_PANEL['background-image'], 'none')
+  assert.ok(P.DIALOG_PANEL['box-shadow'].includes(P.STEEL_FRAME_OUTSIDE))
+  // The Settings sleep-timer and Auto Rewind lists share the player's option panel (recessed list, separators, selection)
+  for (const file of ['SleepTimerLengthModal.vue', 'AutoSleepTimerRewindLengthModal.vue', 'SleepTimerModal.vue']) {
+    const source = await read(`../components/modals/${file}`)
+    assert.match(source, /<div class="playback-option-panel [^"]*rounded-lg[^"]*"[^>]*@click\.stop>/, file)
+  }
+  // Primary actions: the steel key with the lit legend; pressed is the player keys' pressed state; unavailable is the socket
+  assert.deepEqual(rules[`${root} .btn.bg-success-action:not(:disabled)`], { ...P.ACTION_KEY })
+  assert.equal(P.ACTION_KEY['background-image'], P.STEEL_FACE)
+  assert.equal(P.ACTION_KEY.color, 'rgb(var(--color-legend))')
+  assert.deepEqual(rules[`${root} .btn.bg-success-action:not(:disabled):active`], { ...P.ACTION_KEY_PRESSED })
+  assert.deepEqual(rules[`${root} .btn.bg-success-action:disabled`], { ...P.ACTION_KEY_UNAVAILABLE })
+  assert.equal(P.ACTION_KEY_UNAVAILABLE['background-image'], 'none')
+  // Paint only: no geometry property on any action-key or dialog rule (the button's size, padding and hit area stay)
+  for (const [s, d] of Object.entries(rules).filter(([s]) => /bg-success-action|\.rounded-lg\.bg-primary/.test(s))) {
+    // border-color is paint too (the 1px border keeps its width)
+    for (const property of Object.keys(d)) assert.ok(PAINT_ONLY.test(property) || property === 'border-color', `${s}: ${property}`)
+    for (const value of Object.values(d)) assert.doesNotMatch(value, /--color-success/, s)
+  }
+  // The legend clears the text threshold on the action key's brightest face point (the raised steel under the top shade)
+  const legend = presets.equipmentDerivedDeclarations(t)['--color-legend'].split(' ').map(Number)
+  const topShade = Number(P.STEEL_FACE.match(/linear-gradient\(180deg, rgb\(0 0 0 \/ ([\d.]+)\) 0%/)[1])
+  assert.ok(
+    contrast(
+      legend,
+      t['surface.raised'].map((c) => c * (1 - topShade))
+    ) >= 4.5
+  )
+  // Destructive buttons keep their own finish
+  assert.ok(!Object.keys(rules).some((s) => /\.btn\.bg-error(?!.*material-symbols)/.test(s)))
+  // Nothing leaks: the standard themes still get no presentation rules
+  for (const id of ['dark', 'black', 'light']) assert.deepEqual(presets.presentationRules([engine.getTheme(id)]), {}, id)
 })

@@ -778,7 +778,7 @@ LLAMA only. Home, Library and navigation are the content environment around the 
 
 **Rejected (Candidate C and variants).** Raised heading strips, green or amber headings, green counts, a green selected-tab label or accent ring, a recessed green library-selector name, and any card chassis. In the audit these read as decoration rather than meaning, and the app became noisy.
 
-**Retained (not changed).** At font scale 1.3 the library selector already truncates its name, and alternative-view card titles sit tight against the artwork. See `docs/future-work.md`.
+**Retained (not changed).** At font scale 1.3 the library selector already truncates its name. Alternative-view card titles sat tight against the artwork; that was fixed for every theme on 2026-10-10 (see below). See `docs/future-work.md`.
 
 Dark, Black and Light get no rules. The players carry none of the hooks, and none of these rules reaches them. `tests/theme-llama.test.mjs` (Phase 8B tests) pins:
 
@@ -789,6 +789,45 @@ Dark, Black and Light get no rules. The players carry none of the hooks, and non
 - the paint-only heading rule and play key;
 - the absence of Candidate C;
 - LLAMA-only compiled CSS.
+
+## LLAMA faithful finish (2026-10-10)
+
+The accepted LLAMA design. The faithful pass, material polish, final consistency pass and finishing corrections layer paint over the rules above in `theme/presets.js` (a repeated selector merges into its earlier entry). Dark, Black and Light get no rules. `tests/theme-llama.test.mjs`, `tests/llama-finishing.test.mjs` and `tests/closure.test.mjs` pin it.
+
+- **Materials:**
+  - brushed steel (`BRUSHED`, `STEEL_FACE`, `STEEL_PLATE_EDGE`, `steelKey`);
+  - steel frames (`STEEL_FRAME_OUTSIDE`);
+  - recessed glass (`RECESSED_WELL`);
+  - green phosphor readouts (`LCD_TEXT`);
+  - amber legends (`--color-legend`);
+  - the graphite page with faint scan lines (`SCANLINES`, white 0.007 every 3px).
+- **Colour roles:**
+  - green: selection, focus, readouts and active states;
+  - amber: ordinary action legends;
+  - steel blue: keys and structural frames;
+  - near-black: recessed displays and pages.
+- **Dialogs and actions:**
+  - every app dialog panel (`.modal .rounded-lg.bg-primary`) is `DIALOG_PANEL`, recessed black glass in a steel frame;
+  - success-coloured primary buttons (`.btn.bg-success-action`) are `ACTION_KEY` steel keys, with pressed and unavailable states;
+  - Android-controlled dialogs are not restyled.
+- **Play legends:** browsing Play controls are amber through purpose-named hooks (`series-play-action`, `row-play-btn` glyphs, `episode-play-control`, `local-play-action`; `LIST_PLAY_LEGEND` = `PLAYBACK_LEGEND`), so no rule names a success class.
+- **Home shelf covers:** the shelves scroll sideways and clip vertically, so there the frame is painted inside the cover (`ARTWORK_FRAME_INSET`) on each card's inert `card-frame` element. Elsewhere the outer frame stays.
+- **Collapsed player:**
+  - `theme/playerLayout.js` `miniLayout` gives the equipment finish `mini-compact` and `--mini-trim: 28px`: a 92px plate without the empty band under the seek strip; every module moves down by the trim;
+  - `AudioPlayer.vue` publishes `--mini-player-height` (120px otherwise);
+  - consumers: `#content.playerOpen` (`assets/app.css`), the reader toolbars and frames (comic, EPUB through `utils/miniPlayerHeight.js`, MOBI, PDF), the downloaded-book reorder bar and the player's swipe zone;
+  - the downloaded-media lists fill their page instead.
+- **Widget:** steel housing and socketed steel keys with amber legends (see `docs/widget-architecture.md`).
+
+Shared fixes made alongside, in every theme:
+- the offline bookmark key;
+- refocus positions (`utils/livePosition.js`);
+- series-toolbar wrapping;
+- reader toolbar stacking;
+- downloaded-media lists;
+- grid titles under the cover (`utils/textScale.js`; the WebView scales font sizes but not px, em or rem lengths).
+
+They are listed in `CHANGELOG.md`.
 
 ## Content-derived color (intentionally not tokens)
 

@@ -74,7 +74,9 @@
             <span class="material-symbols text-3xl text-fg-muted">format_list_bulleted</span>
             <span class="absolute -bottom-1 -right-1 flex items-center justify-center rounded-full border border-fg-muted bg-bg text-fg-muted" style="width: 14px; height: 14px; font-size: 9px; line-height: 1">Q</span>
           </div>
-          <span v-if="!isPodcast && serverLibraryItemId && socketConnected" class="player-key utility-key bookmark-key material-symbols text-3xl text-fg-muted cursor-pointer" :class="{ fill: bookmarks.length }" @click="$emit('showBookmarks')">bookmark</span>
+          <!-- Bookmark key: shown for every server book, online or not (the list is the cached user data; a write that
+               cannot reach the server reports its own error), so it never drops out of the utility row -->
+          <span v-if="!isPodcast && serverLibraryItemId" class="player-key utility-key bookmark-key material-symbols text-3xl text-fg-muted cursor-pointer" :class="{ fill: bookmarks.length }" @click="$emit('showBookmarks')">bookmark</span>
           <!-- hidden for podcasts but still using this as a placeholder -->
           <span v-else class="material-symbols text-3xl text-white text-opacity-0">bookmark</span>
 
@@ -232,6 +234,13 @@ export default {
     },
     title(val) {
       if (this.titleMarquee) this.titleMarquee.init(val)
+    },
+    // The page content above the collapsed player is sized from its plate height (assets/app.css #content.playerOpen)
+    'miniLayout.height': {
+      handler(height) {
+        document.documentElement.style.setProperty('--mini-player-height', height + 'px')
+      },
+      immediate: true
     }
   },
   computed: {
@@ -332,10 +341,15 @@ export default {
     fullscreenBookCoverWidth() {
       return this.fullscreenLayout.coverWidth
     },
-    // Hook classes, CSS variables and decorative plates, only while the full player is shown (the mini-player and
-    // non-equipment themes get none)
+    // The collapsed player's layout for the theme's presentation (theme/playerLayout.js): the previous 120px plate, or the
+    // equipment finish's compact plate without the empty band under the seek strip
+    miniLayout() {
+      return playerLayout.miniLayout(this.presentationTheme)
+    },
+    // Hook classes, CSS variables and decorative plates: the full player's while it is shown; while collapsed only the
+    // collapsed layout's (non-equipment themes get none either way)
     faceplateHooks() {
-      if (!this.showFullscreen) return { classes: [], vars: {}, plates: { top: false, console: false, seek: false } }
+      if (!this.showFullscreen) return { classes: this.miniLayout.classes, vars: this.miniLayout.vars, plates: { top: false, console: false, seek: false } }
       const { classes, vars, plates } = this.fullscreenLayout
       return { classes, vars, plates }
     },
@@ -752,8 +766,8 @@ export default {
     touchstart(e) {
       if (!e.changedTouches || this.$store.state.globals.isModalOpen) return
       const touchPosY = e.changedTouches[0].pageY
-      // when minimized only listen to touchstart on the player
-      if (!this.showFullscreen && touchPosY < window.innerHeight - 120) return
+      // when minimized only listen to touchstart on the player (its projected plate height)
+      if (!this.showFullscreen && touchPosY < window.innerHeight - this.miniLayout.height) return
 
       // for ios
       if (!this.showFullscreen && e.pageX < 20) {
@@ -1161,6 +1175,23 @@ export default {
   max-width: 100%;
 }
 /* Seek-row times: the stylesheet (not an inline style) sizes them, so a presentation theme can set their type */
+/* Compact collapsed player (theme/playerLayout.js miniLayout; the equipment finish only): the plate loses the empty band
+   under the seek strip and every module moves down by the same trim, so their sizes and spacing are unchanged */
+#streamContainer.mini-compact .playerContainer {
+  height: calc(120px - var(--mini-trim));
+}
+#streamContainer.mini-compact #playerTrack {
+  bottom: calc(35px - var(--mini-trim));
+}
+#streamContainer.mini-compact .cover-wrapper {
+  bottom: calc(68px - var(--mini-trim));
+}
+#streamContainer.mini-compact .title-author-texts {
+  bottom: calc(76px - var(--mini-trim));
+}
+#streamContainer.mini-compact #playerControls {
+  bottom: calc(70px - var(--mini-trim));
+}
 #playerTrack .track-time {
   font-size: 0.8rem;
 }

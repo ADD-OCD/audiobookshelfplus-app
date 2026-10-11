@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- LLAMA widget secondary key (rewind, fast-forward): a face deeper than the chassis, lit from the upper left, the
-     widget counterpart of the app's dark player keys. The structure is the earlier key's exactly (same 4dp radius and 1dp
-     bevel items), so view bounds cannot change; only the fills differ. Resting: lit top/left edge, dark bottom/right edge,
-     and a soft sheen (lit top, shaded bottom) over the face. Pressed: the bevel inverts and the face is cut in, with its
-     shade falling from the top. The primary Play/Pause key keeps widget_llama_button_primary. All colors are generated. -->
+<!-- LLAMA widget secondary key (rewind, fast-forward): the app's steel key at widget scale, drawn inside the view's own
+     bounds (all key geometry comes from the layout's size, margin and padding), with 4dp corners. Resting, from the
+     outside in: a 1dp dark socket, a narrow lit top/left bevel (the socket shows through as the dark bottom/right edge)
+     and the steel face lit from the top (generated key colors). Pressed: the bevel inverts (lit bottom/right) and the
+     face is cut in, its shade falling from the top. The primary Play/Pause key keeps widget_llama_button_primary. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
   <item android:state_pressed="true">
     <layer-list>
       <item>
         <shape android:shape="rectangle">
           <corners android:radius="4dp" />
-          <solid android:color="@color/widget_llama_edge_light_35" />
-        </shape>
-      </item>
-      <item android:bottom="1dp" android:right="1dp">
-        <shape android:shape="rectangle">
-          <corners android:radius="4dp" />
           <solid android:color="@color/widget_llama_edge_dark" />
         </shape>
       </item>
-      <item android:bottom="1dp" android:left="1dp" android:right="1dp" android:top="1dp">
+      <item android:bottom="1dp" android:left="2dp" android:right="1dp" android:top="2dp">
+        <shape android:shape="rectangle">
+          <corners android:radius="4dp" />
+          <solid android:color="@color/widget_llama_edge_light_35" />
+        </shape>
+      </item>
+      <item android:bottom="2dp" android:left="2dp" android:right="2dp" android:top="2dp">
         <shape android:shape="rectangle">
           <corners android:radius="4dp" />
           <gradient
@@ -38,13 +38,13 @@
           <solid android:color="@color/widget_llama_edge_dark" />
         </shape>
       </item>
-      <item android:bottom="1dp" android:right="1dp">
+      <item android:bottom="2dp" android:left="1dp" android:right="2dp" android:top="1dp">
         <shape android:shape="rectangle">
           <corners android:radius="4dp" />
-          <solid android:color="@color/widget_llama_edge_light_55" />
+          <solid android:color="@color/widget_llama_edge_light" />
         </shape>
       </item>
-      <item android:bottom="1dp" android:left="1dp" android:right="1dp" android:top="1dp">
+      <item android:bottom="2dp" android:left="2dp" android:right="2dp" android:top="2dp">
         <shape android:shape="rectangle">
           <corners android:radius="4dp" />
           <gradient

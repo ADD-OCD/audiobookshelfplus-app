@@ -15,10 +15,12 @@ const presets = require('../theme/presets')
 
 const OUTPUT = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'res', 'values', 'widget_theme_colors.xml')
 
-// Native name suffix -> source token (fixed, repository-owned subset: only colors the widget resources use; the steel
-// surface.content / surface.raised entries went when Phase 4H moved the primary key to the dark key face)
+// Native name suffix -> source token (fixed, repository-owned subset: only colors the widget resources use). The steel
+// surface.raised / surface.content entries are back since the final consistency pass: the housing is the app's steel plate
 const TOKEN_COLORS = [
   ['base', 'surface.base'],
+  ['raised', 'surface.raised'],
+  ['content', 'surface.content'],
   ['recessed', 'surface.recessed'],
   ['text', 'text.primary'],
   ['text_muted', 'text.muted'],
@@ -27,14 +29,15 @@ const TOKEN_COLORS = [
   ['track', 'progress.track']
 ]
 
-// Secondary-key finish (Phase 4D). Fixed, repository-owned blend factors (theme data cannot influence them) that
-// translate the app's PLAYER_KEY recipe (theme/presets.js) to native drawables. The widget chassis is surface.base,
-// the same deck as the collapsed player, so the face uses the collapsed player's depth (recessed at 85%). The sheen
-// is a soft lit top and a shaded bottom around that face; the pressed key is cut in, with its shade falling from the top
-const KEY_FACE_TOWARD_RECESSED = 0.85
-const KEY_LIT_TOWARD_EDGE_LIGHT = 0.1
-const KEY_SHADE_TOWARD_BLACK = 0.3
-const KEY_PRESSED_SHADE_TOWARD_BLACK = 0.55
+// Key finish. Fixed, repository-owned blend factors (theme data cannot influence them) that translate the app's steel
+// key (theme/presets.js steelKey) to native drawables. Final consistency pass (2026-10-10): the faces are steel-blue
+// like the app's keys, falling from a lit top (the raised steel 30% of the way to the panel steel) through the panel
+// steel to a shade toward the chassis base. The lit top is held back from the raised steel itself so the amber legend
+// keeps 7:1 on every face point (the app's keys reach the raised steel only on their 1px top edge). Pressed: the face is
+// cut in, its shade (the panel steel 45% toward black) falling from the top
+const KEY_LIT_TOWARD_CONTENT = 0.7
+const KEY_SHADE_TOWARD_BASE = 0.6
+const KEY_PRESSED_SHADE_TOWARD_BLACK = 0.45
 
 const BLACK = [0, 0, 0]
 const mix = (from, to, t) => from.map((channel, i) => Math.round(channel + (to[i] - channel) * t))
@@ -44,12 +47,11 @@ const channelsToRgb = (value) => value.split(' ').map(Number)
 
 /** Derived native key colors for a theme's tokens: [name suffix, rgb]. All come from validated tokens and the fixed factors above. */
 function keyColors(tokens) {
-  const edgeLight = presets.equipmentDerivedDeclarations(tokens)['--color-edge-light'].split(' ').map(Number)
-  const face = mix(tokens['surface.base'], tokens['surface.recessed'], KEY_FACE_TOWARD_RECESSED)
+  const face = tokens['surface.content']
   return [
     ['key_face', face],
-    ['key_lit', mix(face, edgeLight, KEY_LIT_TOWARD_EDGE_LIGHT)],
-    ['key_shade', mix(face, BLACK, KEY_SHADE_TOWARD_BLACK)],
+    ['key_lit', mix(tokens['surface.raised'], face, KEY_LIT_TOWARD_CONTENT)],
+    ['key_shade', mix(face, tokens['surface.base'], KEY_SHADE_TOWARD_BASE)],
     ['key_pressed_shade', mix(face, BLACK, KEY_PRESSED_SHADE_TOWARD_BLACK)]
   ]
 }
@@ -66,6 +68,8 @@ function render() {
     const derived = presets.equipmentDerivedDeclarations(theme.tokens)
     lines.push(`  <color name="${prefix}_edge_light">${hex(channelsToRgb(derived['--color-edge-light']))}</color>`)
     lines.push(`  <color name="${prefix}_edge_dark">${hex(channelsToRgb(derived['--color-edge-dark']))}</color>`)
+    // The app's lit key legend (amber lifted toward a warm yellow), the transport glyphs' tint since the final consistency pass
+    lines.push(`  <color name="${prefix}_legend">${hex(channelsToRgb(derived['--color-legend']))}</color>`)
     for (const [name, rgb] of keyColors(theme.tokens)) lines.push(`  <color name="${prefix}_${name}">${hex(rgb)}</color>`)
   }
   lines.push('</resources>', '')

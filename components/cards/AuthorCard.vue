@@ -3,6 +3,8 @@
     <div :style="{ width: width + 'px', height: height + 'px' }" class="card-artwork bg-primary box-shadow-book rounded-md relative overflow-hidden">
       <!-- Image or placeholder -->
       <covers-author-image :author="author" />
+      <!-- Decorative frame inside the cover's bounds: painted only by a presentation theme that needs it; never a touch target -->
+      <div class="card-frame absolute inset-0 z-10 rounded-md pointer-events-none" aria-hidden="true" />
 
       <!-- Author name & num books overlay -->
       <div v-show="!searching && !nameBelow" class="absolute bottom-0 left-0 w-full py-1 bg-black bg-opacity-60 px-2">

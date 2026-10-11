@@ -1,15 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- LLAMA widget artwork frame: 1dp dark edge inside a 1dp soft highlight (the app's artwork frame). The
-     artwork view carries 2dp padding so the cover itself is never covered. -->
+<!-- LLAMA widget artwork frame, inside the artwork view's 2dp padding so the cover itself is never covered: a steel lip
+     (lit top/left, dark bottom/right) around a near-black channel at the cover, the app's recessed artwork window at
+     widget scale. Square, like the app's artwork frame. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
   <item>
     <shape android:shape="rectangle">
-      <solid android:color="@color/widget_llama_edge_light_45" />
+      <solid android:color="@color/widget_llama_edge_dark" />
+    </shape>
+  </item>
+  <item android:bottom="1dp" android:right="1dp">
+    <shape android:shape="rectangle">
+      <solid android:color="@color/widget_llama_edge_light_55" />
     </shape>
   </item>
   <item android:bottom="1dp" android:left="1dp" android:right="1dp" android:top="1dp">
     <shape android:shape="rectangle">
-      <solid android:color="@color/widget_llama_edge_dark" />
+      <solid android:color="@color/widget_llama_recessed" />
     </shape>
   </item>
 </layer-list>
