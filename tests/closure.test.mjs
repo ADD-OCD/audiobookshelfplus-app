@@ -142,6 +142,16 @@ test('refocusServerAction: another device’s newer progress is applied; a pause
   assert.deepEqual(refocusServerAction(session, { playbackSession: { id: 'other' }, currentTime: 5 }, { currentTime: 100, lastUpdate: 1 }, 50), { action: 'seek', time: 100 })
   assert.deepEqual(refocusServerAction(session, null, { currentTime: 100.5, lastUpdate: 1 }, 100), { action: 'none' })
   assert.deepEqual(refocusServerAction(session, native(1, T), null, 1), { action: 'none' })
+  // The S22 release check: the service's session keeps its creation time as updatedAt, while lastSyncedAt follows the
+  // syncer. This phone's own sync 13s after creation, then a paused move: kept (previously sought back to the server)
+  const created = T - 60_000
+  const synced = (currentTime, lastSyncedAt) => ({ playbackSession: { id: 's1', updatedAt: created }, lastSyncedAt, currentTime, isPlaying: false })
+  assert.deepEqual(refocusServerAction(session, synced(1398.246, created + 13_213), { currentTime: 1278.232, lastUpdate: created + 13_250 }, 1398.25), { action: 'display', time: 1398.246 })
+  // Another device 12s after this phone's sync: applied; within the margin: not applied on refocus
+  assert.deepEqual(refocusServerAction(session, synced(2214.321, created + 63_500), { currentTime: 2814, lastUpdate: created + 63_500 + 12_000 }, 2214.27), { action: 'seek', time: 2814 })
+  assert.deepEqual(refocusServerAction(session, synced(1284.157, created + 31_700), { currentTime: 2184, lastUpdate: created + 31_700 + 3_000 }, 1284.11), { action: 'display', time: 1284.157 })
+  // Without lastSyncedAt (an older native side) the session's updatedAt is used, as before
+  assert.deepEqual(refocusServerAction(session, { playbackSession: { id: 's1', updatedAt: T }, currentTime: 1569.279 }, { currentTime: 1269.279, lastUpdate: T + 300 }, 1269.28), { action: 'display', time: 1569.279 })
   // The downloaded-book rule is unchanged
   assert.deepEqual(refocusDisplayTime(session, native(7107.976, T), 6107.556), { time: 7107.976, source: 'live' })
 })
@@ -177,4 +187,11 @@ test('deviceFocused for a paused streamed book: no seek back to an older server 
   }
   assert.deepEqual(await run({ currentTime: 1269.279, lastUpdate: T - 2_000_000 }), { seeks: [], shown: 1569.279 })
   assert.deepEqual(await run({ currentTime: 3000, lastUpdate: T + 60_000 }), { seeks: [3000], shown: 1569.28 })
+})
+
+test('Native playback state reports the last sync time from the progress syncer (SessionSyncTime)', async () => {
+  const plugin = await read('../android/app/src/main/java/app/absplus/android/plugins/AbsAudioPlayer.kt')
+  assert.match(plugin, /val synced = runCatching \{ pns\.mediaProgressSyncer\.currentPlaybackSession \}\.getOrNull\(\)\n\s+ret\.put\("lastSyncedAt", SessionSyncTime\.lastSyncedAt\(session\.id, session\.updatedAt, synced\?\.id, synced\?\.updatedAt\)\)/)
+  const live = await read('../utils/livePosition.js')
+  assert.match(live, /Number\(live\.lastSyncedAt \?\? live\.playbackSession\.updatedAt\)/)
 })

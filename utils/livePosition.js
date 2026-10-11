@@ -25,14 +25,15 @@ export function refocusDisplayTime(uiSession, nativeState, savedTime) {
 export const REMOTE_UPDATE_MARGIN_MS = 10000
 
 // Streamed (server) book. As before, the server's progress is applied (seek) when it is another device's update, i.e. newer
-// than the native session's last update (the rule PlayerNotificationService.checkCurrentSessionProgress uses, plus the
-// margin), or when the native player does not hold this session (then compared with the displayed time, as before).
+// than the session's last sync (the rule PlayerNotificationService.checkCurrentSessionProgress uses, plus the margin), or
+// when the native player does not hold this session (then compared with the displayed time, as before). The last sync is
+// the native state's lastSyncedAt: the service's session copy keeps its creation time as updatedAt (SessionSyncTime.kt).
 // Otherwise the native position stands and is displayed: no seek back to a stale server position.
 export function refocusServerAction(uiSession, nativeState, serverProgress, displayedTime) {
   if (!serverProgress || typeof serverProgress.currentTime !== 'number') return { action: 'none' }
   const live = liveState(uiSession, nativeState)
   if (!live) return Math.abs(serverProgress.currentTime - displayedTime) > 1 ? { action: 'seek', time: serverProgress.currentTime } : { action: 'none' }
-  const sessionUpdatedAt = Number(live.playbackSession.updatedAt) || 0
+  const sessionUpdatedAt = Number(live.lastSyncedAt ?? live.playbackSession.updatedAt) || 0
   const remoteUpdate = Number(serverProgress.lastUpdate) > sessionUpdatedAt + REMOTE_UPDATE_MARGIN_MS
   if (remoteUpdate && Math.abs(serverProgress.currentTime - live.currentTime) > 1) return { action: 'seek', time: serverProgress.currentTime }
   return { action: 'display', time: live.currentTime }
