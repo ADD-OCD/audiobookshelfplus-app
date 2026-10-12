@@ -161,7 +161,9 @@ finalize docs), not before.
 
 1. Check the `versionCode` table above; use `last + 1`. Set `PLUS_VERSION` in `android/app/build.gradle` to the
    release's public version (`X.Y.Z`, the tag's `-plus-vX.Y.Z`) in the same commit (in-app updater, once merged).
-2. Build the **release** variant (`app.absplus.android`), not debug.
+2. Build the **release** variant (`app.absplus.android`), not debug, **from a clean build** (`./gradlew clean` first).
+   Kotlin incremental compilation can keep the previous `PLUS_VERSION` inlined in the updater after the bump (seen while
+   preparing v0.18.0), so also confirm the APK's updater code carries the new version and not the old one.
 3. Confirm it's signed with the fingerprint above (`apksigner verify --verbose --print-certs`).
 4. For a normal release (not a test/RC build): write/post the Announcements entry for it first,
    and make sure every completed feature/fix it includes is documented in the README.

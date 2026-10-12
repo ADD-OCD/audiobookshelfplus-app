@@ -18,8 +18,13 @@ be) in the official app.
 
 ### Latest release
 
-**[Audiobookshelf+ v0.17.0](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/tag/v0.14.2-beta-plus-v0.17.0)** — In-app GitHub updates
-([download the APK](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/download/v0.14.2-beta-plus-v0.17.0/audiobookshelf-plus-v0.17.0-release.apk)). [CHANGELOG.md](CHANGELOG.md) lists the changes.
+**[Audiobookshelf+ v0.18.0](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/tag/v0.14.2-beta-plus-v0.18.0)** — RICE customization and sign-in reliability
+([download the APK](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/download/v0.14.2-beta-plus-v0.18.0/audiobookshelf-plus-v0.18.0-release.apk)). [CHANGELOG.md](CHANGELOG.md) lists the changes.
+
+New in v0.18.0:
+- Optional RICE customization (Settings → Appearance): ten starter palettes, your own color presets, the phone's
+  system colors (including Samsung One UI), and palette colors from GitHub Linux theme projects.
+- More reliable sign-in renewal, with fewer unexpected sign-outs.
 
 New in v0.17.0:
 - In-app GitHub update checks, verified APK downloads, and Android-confirmed installation (Settings → Updates).
@@ -58,11 +63,14 @@ New in v0.16.0 ([announcement](https://github.com/ADD-OCD/audiobookshelfplus-app
 
 **Appearance**
 - Optional LLAMA theme, a late-1990s audio-equipment look (Settings → Theme), including the home screen widget.
+- Optional RICE customization (Settings → Appearance): starter palettes, personal presets, system colors and GitHub
+  palette imports, including the home screen widget.
 - Bigger, clearer home screen widget buttons.
 - Keyboard-friendly connection and login screens.
 - Its own name and icon, so it installs alongside the official app.
 
 **Reliability and privacy**
+- Sign-in renews once when it expires, without unexpected sign-outs when offline or switching accounts.
 - Library lists reload rows that failed to load, and series show all of their books.
 - Series progress includes books downloaded to the phone.
 - In-app diagnostics log (Settings → Diagnostics) to view, save or share, with passwords, tokens and server addresses

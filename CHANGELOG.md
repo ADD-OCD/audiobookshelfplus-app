@@ -3,10 +3,22 @@
 Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and dates are recorded in
 `docs/release-process.md`, and the feature list in `readme.md` describes what the app contains.
 
-## Unreleased
+## v0.18.0 — RICE customization and sign-in reliability
 
-On `plus`, not in any release yet (merged from `fix/auth-refresh-single-flight`).
+**Released 2026-10-12:** versionCode 134, versionName `0.14.2-beta` (upstream base unchanged), `PLUS_VERSION`
+`0.18.0`, tag `v0.14.2-beta-plus-v0.18.0`. Changes since v0.17.0 (`a9084e19`).
 
+- **RICE customization** (Settings → Appearance), off by default. Dark, Black, Light and LLAMA are unchanged.
+  - Ten starter palettes adapted from Catppuccin (Mocha, Latte), Dracula, Nord, Gruvbox, Tokyo Night, Rosé Pine,
+    Solarized (Dark, Light) and Everforest, with their licences and sources listed in the app.
+  - Personal presets (up to 32): bounded color and style options, a live preview, Apply, Cancel and Reset, and a
+    readability check before saving. Damaged saved appearance data falls back to the last good copy or a built-in.
+  - Device colors: on Android 12 and newer, follows the system color palette (including Samsung One UI's Color palette)
+    and system light/dark.
+  - The home-screen widget takes RICE colors on Android 12 and newer.
+  - Import palette colors from public GitHub Linux theme projects: pywal, Kitty, Base16/Base24 and plain hex lists.
+    Nothing is applied before you save it.
+  - Details: `docs/rice-customization.md`.
 - **Sign-in renewal:** when several requests find the sign-in expired at once, the app renews it once and retries
   each of them. Overlapping renewals could use the same single-use refresh token and sign you out.
 - **Fewer unexpected sign-outs:**
@@ -14,17 +26,20 @@ On `plus`, not in any release yet (merged from `fix/auth-refresh-single-flight`)
   - neither does a request that fails for another reason after renewing.
   You're signed out only when the server refuses the sign-in.
 - **No crossed sessions:** a renewal still running when you sign out or switch server or account can't change the new
-  session or the saved sign-in. Details: `docs/authentication.md`.
+  session or the saved sign-in. A sign-in renewed at startup is saved. Details: `docs/authentication.md`.
 
-Also on `plus`, not in any release yet (merged from `feature/rice-customization`):
+### Known limitations
 
-- **RICE customization** (Settings → Appearance), off by default; the built-in themes are unchanged.
-  - Ten starter palette adaptations: Catppuccin Mocha and Latte, Dracula, Nord, Gruvbox, Tokyo Night, Rosé Pine,
-    Solarized Dark and Light, Everforest.
-  - Device colors (Android 12+, including Samsung One UI's Color palette) with light/dark.
-  - Up to 32 personal presets with bounded color and style options, readability checks, and a live preview.
-  - Import of palette colors from public GitHub Linux theme projects: pywal, Kitty, Base16/Base24 and hex lists.
-  - Details: `docs/rice-customization.md`.
+- **Linux theme import:** only the four formats above, from public GitHub repositories. It doesn't read GTK, Rofi,
+  Polybar or other config files, other hosts, or images.
+- **Image palettes:** making a palette from an image or wallpaper isn't included.
+- **Samsung themes:** RICE follows the system color palette that One UI sets. It can't import Samsung Galaxy Themes or
+  Theme Park themes.
+- **Not themed:** the media notification, launcher icon and Android's own dialogs keep their standard look, and a few
+  older colors (such as the yellow progress bar on book covers) stay the same in every appearance.
+- **Progress from another device:** while an audiobook is playing, progress updates from another device are not
+  applied, and the next progress save from this device may overwrite those updates. When you return to a paused
+  audiobook, progress changes from another device are recognized and applied.
 
 ## v0.17.0 — In-app GitHub updates
 
