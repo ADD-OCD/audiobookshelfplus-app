@@ -3,6 +3,14 @@
 Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and dates are recorded in
 `docs/release-process.md`, and the feature list in `readme.md` describes what the app contains.
 
+## Unreleased
+
+On branch `hotfix/queue-restoration-v0.18.1`, not released yet.
+
+- **Up Next after resuming:** after the app had been closed by Android (for example after a long break or an app
+  update), pressing Play on the widget, notification or headset resumed the book but Up Next stayed empty. The queue
+  now appears again, in its original order and position. Details: `docs/continuous-playback.md`.
+
 ## v0.18.0 — RICE customization and sign-in reliability
 
 **Released 2026-10-12:** versionCode 134, versionName `0.14.2-beta` (upstream base unchanged), `PLUS_VERSION`

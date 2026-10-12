@@ -951,6 +951,12 @@ export default {
 
       this.timeupdate()
     },
+    // A session the native player prepared (a Play from this UI, a queue auto-advance, or a widget/headset/notification
+    // Play that restored the last session). The container reconciles Up Next for sessions native prepared on its own.
+    onNativePlaybackSession(playbackSession) {
+      this.onPlaybackSession(playbackSession)
+      this.$eventBus.$emit('native-playback-session', playbackSession)
+    },
     // When a playback session is started the native android/ios will send the session
     onPlaybackSession(playbackSession) {
       console.log('onPlaybackSession received', JSON.stringify(playbackSession))
@@ -992,7 +998,7 @@ export default {
     async init() {
       await this.loadPlayerSettings()
 
-      AbsAudioPlayer.addListener('onPlaybackSession', this.onPlaybackSession)
+      AbsAudioPlayer.addListener('onPlaybackSession', this.onNativePlaybackSession)
       AbsAudioPlayer.addListener('onPlaybackClosed', this.onPlaybackClosed)
       AbsAudioPlayer.addListener('onPlaybackFailed', this.onPlaybackFailed)
       AbsAudioPlayer.addListener('onPlayingUpdate', this.onPlayingUpdate)
