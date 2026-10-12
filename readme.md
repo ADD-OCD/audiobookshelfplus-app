@@ -18,13 +18,13 @@ be) in the official app.
 
 ### Latest release
 
-**[Audiobookshelf+ v0.16.0](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/tag/v0.14.2-beta-plus-v0.16.0)**
-— LLAMA visual refresh and stability fixes
-([download the APK](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/download/v0.14.2-beta-plus-v0.16.0/audiobookshelf-plus-v0.16.0-release.apk)).
-The [announcement](https://github.com/ADD-OCD/audiobookshelfplus-app/discussions/21) explains the changes in detail;
-[CHANGELOG.md](CHANGELOG.md) lists them.
+**[Audiobookshelf+ v0.17.0](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/tag/v0.14.2-beta-plus-v0.17.0)** — In-app GitHub updates
+([download the APK](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/download/v0.14.2-beta-plus-v0.17.0/audiobookshelf-plus-v0.17.0-release.apk)). [CHANGELOG.md](CHANGELOG.md) lists the changes.
 
-New in v0.16.0:
+New in v0.17.0:
+- In-app GitHub update checks, verified APK downloads, and Android-confirmed installation (Settings → Updates).
+
+New in v0.16.0 ([announcement](https://github.com/ADD-OCD/audiobookshelfplus-app/discussions/21)):
 - Refreshed LLAMA theme and widgets.
 - Fixed playback position when returning to the app, including progress from another device.
 - Improved headset and Bluetooth playback controls.
@@ -32,9 +32,6 @@ New in v0.16.0:
 - Improved layouts with larger text.
 - Fixed crashes caused by damaged downloaded cover images.
 - Prevented sign-in details from appearing in system logs.
-
-**Coming in a future release (not in v0.16.0):** in-app updates. Settings → Updates checks the official GitHub
-releases, downloads and verifies an update, and hands it to Android's installer for you to confirm.
 
 ### What's different from official
 

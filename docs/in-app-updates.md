@@ -1,6 +1,7 @@
 # In-app updates (Settings → Updates)
 
-**Status:** committed on `feature/in-app-github-updater` for a future release. It is not part of v0.16.0.
+**Status:** released in Audiobookshelf+ v0.17.0 (versionCode 133). Updating a production installation through the
+updater is first possible from v0.17.0 to a later release and has not been verified yet.
 
 The GitHub-distributed Audiobookshelf+ app can check the official GitHub releases, download the latest stable release
 APK, verify it and hand it to Android's own installer. Every step starts from a button in Settings. Nothing downloads or

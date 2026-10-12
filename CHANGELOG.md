@@ -5,8 +5,8 @@ Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and d
 
 ## v0.17.0 — In-app GitHub updates
 
-**Prepared, not yet published:** versionCode 133, versionName `0.14.2-beta` (upstream base unchanged). Changes since
-v0.16.0 (`10db9077`).
+**Released 2026-10-11:** versionCode 133, versionName `0.14.2-beta` (upstream base unchanged), tag
+`v0.14.2-beta-plus-v0.17.0` at `a9084e19`. [Release](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/tag/v0.14.2-beta-plus-v0.17.0). Changes since v0.16.0 (`10db9077`).
 
 - **In-app updates** (Settings → Updates): check the official GitHub releases, download the latest stable release with
   progress, Cancel and Retry, and install it through Android's installer after verification.
