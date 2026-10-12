@@ -100,5 +100,7 @@ class DownloadItemCompactionTest {
 
     assertTrue((restored.media as Podcast).episodes!!.isEmpty())
     assertEquals(42L, restored.terminalFailureAt)
+    val onDisk = Paper.book("downloadItems").read<DownloadItem>(restored.id)!!
+    assertTrue("old entry is rewritten compact", (onDisk.media as Podcast).episodes!!.isEmpty())
   }
 }
