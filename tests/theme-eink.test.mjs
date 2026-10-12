@@ -150,6 +150,9 @@ test('E-ink: foregrounds hardcoded light for the dark themes are ink or the seco
   // Light borders and borderless fields get ink lines
   for (const s of ['.border-white', '.row-play-btn', '.checkbox-box']) assert.equal(rules[`${ROOT} ${s}`]['border-color'], INK_VAR, s)
   assert.equal(rules[`${ROOT} input.outline-none:not(.border)`]['box-shadow'], 'inset 0 0 0 1px rgb(var(--color-fg))')
+  // Unavailable player keys stay visible (light gray), distinct from the available ink keys
+  assert.match(await read('../components/app/AudioPlayer.vue'), /'text-opacity-10 key-disabled'/)
+  assert.equal(rules[`${ROOT} #playerContent .key-disabled`].color, 'rgb(var(--color-bg-hover))')
 })
 
 test('E-ink: ink fills never carry an ink label', async () => {
@@ -159,6 +162,7 @@ test('E-ink: ink fills never carry an ink label', async () => {
   for (const fill of ['error', 'info', 'warning']) assert.equal(rules[`${ROOT} .btn.bg-${fill}`].color, PAPER_VAR, fill)
   assert.equal(rules[`${ROOT} .icon-btn.bg-error > .material-symbols`].color, PAPER_VAR)
   assert.equal(rules[`${ROOT} .bg-black\\/80.text-fg`].color, PAPER_VAR)
+  assert.equal(rules[`${ROOT} .bg-black\\/75 svg.animate-spin`].color, PAPER_VAR, 'server connect spinner on its dark overlay')
   for (const id of ['state.error', 'state.info', 'state.warning']) assert.deepEqual(eink().tokens[id], INK, id)
 })
 

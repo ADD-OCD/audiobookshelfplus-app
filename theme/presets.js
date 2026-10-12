@@ -1233,7 +1233,10 @@ const EINK_RULES = [
   ['.btn.bg-info', { color: PAPER }],
   ['.btn.bg-warning', { color: PAPER }],
   ['.icon-btn.bg-error > .material-symbols', { color: PAPER }],
-  ['.bg-black\\/80.text-fg', { color: PAPER }]
+  ['.bg-black\\/80.text-fg', { color: PAPER }],
+  ['.bg-black\\/75 svg.animate-spin', { color: PAPER }],
+  // Unavailable player keys: 10% ink is nearly blank on e-paper; the light gray still shows the key, clearly dimmed
+  ['#playerContent .key-disabled', { color: 'rgb(var(--color-bg-hover))' }]
 ]
 
 const rootedRules = (theme, entries, base = {}) => {
