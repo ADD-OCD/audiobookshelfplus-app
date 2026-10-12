@@ -171,7 +171,7 @@ See `docs/downloads.md`. Retained: a user Retry and an app restart start unfinis
 
 It measures its viewport from `#bookshelf-wrapper`, the element that scrolls. It used to measure `#bookshelf`, which is `h-full`, and so is only as tall as its rows when a page wraps it in an unsized element. The series page has wrapped it in a `<div>` since `15ec49ec` (v0.14.0), so there the height was 0 before the first page loaded. Only the one or two rows at the top edge ever got cards, at any scroll position. A bookshelf left while a page was loading no longer mounts cards afterwards. That is what logged `mount entity card invalid shelf 0/1`, and all bookshelves share the `#shelf-N` ids, so it could have reached the next bookshelf's rows. `tests/bookshelfViewport.test.mjs` runs the real component on Vue with a modelled page to cover both.
 
-Still upstream-shaped and left as is: concurrent page fetches after a reset can write a stale response into the new list (a library or filter change while a page is in flight). The separate token refresh per 401 in `nativeHttp` (several at once raced on a rotating refresh token) is fixed on branch `fix/auth-refresh-single-flight`, not yet merged or released: one shared renewal per saved server (`docs/authentication.md`).
+Still upstream-shaped and left as is: concurrent page fetches after a reset can write a stale response into the new list (a library or filter change while a page is in flight). The separate token refresh per 401 in `nativeHttp` (several at once raced on a rotating refresh token) is fixed on `plus` (from `fix/auth-refresh-single-flight`), not released yet: one shared renewal per saved server (`docs/authentication.md`).
 
 ## Missing local cover crashes playback
 

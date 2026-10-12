@@ -5,7 +5,7 @@ Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and d
 
 ## Unreleased
 
-Not in any release yet (branch `fix/auth-refresh-single-flight`).
+On `plus`, not in any release yet (merged from `fix/auth-refresh-single-flight`).
 
 - **Sign-in renewal:** when several requests find the sign-in expired at once, the app renews it once and retries
   each of them. Overlapping renewals could use the same single-use refresh token and sign you out.

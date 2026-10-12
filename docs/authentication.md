@@ -1,6 +1,6 @@
 # Authentication and token renewal
 
-How the app signs in to an Audiobookshelf server and renews an expired access token. Status: single-flight renewal is on branch `fix/auth-refresh-single-flight`, not released.
+How the app signs in to an Audiobookshelf server and renews an expired access token. Status: single-flight renewal is on `plus` (merged from `fix/auth-refresh-single-flight`), not released yet.
 
 ## Credentials
 
