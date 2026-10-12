@@ -3,18 +3,30 @@
 Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and dates are recorded in
 `docs/release-process.md`, and the feature list in `readme.md` describes what the app contains.
 
-## Unreleased
+## v0.17.0 — In-app GitHub updates
 
-Committed on `feature/in-app-github-updater` for a future release; not part of v0.16.0.
+**Prepared, not yet published:** versionCode 133, versionName `0.14.2-beta` (upstream base unchanged). Changes since
+v0.16.0 (`10db9077`).
 
 - **In-app updates** (Settings → Updates): check the official GitHub releases, download the latest stable release with
   progress, Cancel and Retry, and install it through Android's installer after verification.
   - The download must match its published size and digests.
   - It must be the Audiobookshelf+ package, newer than the installed version code, not debuggable, and signed with the
     Audiobookshelf+ release key.
-  - Nothing downloads or installs on its own.
+  - Nothing downloads or installs on its own. Android asks you to confirm every installation.
   - Installing needs Android's "Install unknown apps" permission. The app asks for it only when you tap Install.
+  - **Open installer** shows Android's confirmation again if you left it.
+  - For the GitHub-distributed app; a copy installed from Google Play leaves updates to the store.
   - Details: `docs/in-app-updates.md`.
+- **Release consistency:** an automated check keeps the app's public version (`PLUS_VERSION`) in step with its
+  `versionCode` and the release ledger.
+
+### Known limitations
+
+- **Production self-update not yet proven:** the in-app installer was tested on a phone with a disposable test app.
+  Updating a production-signed Audiobookshelf+ through the updater is first possible from v0.17.0 to the next release.
+- While this phone is playing, progress saved on another device is not applied and the next save replaces it (as in
+  earlier releases).
 
 ## v0.16.0 — LLAMA visual refresh and stability fixes
 

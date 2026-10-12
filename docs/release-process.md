@@ -65,7 +65,7 @@ published (release, prerelease, or test build):
 | 131 | **Audiobookshelf+ v0.15.1** (upstream v0.14.2-beta), versionName `0.14.2-beta`: hotfix release, built from `plus` at `d2795e4c` and tagged `v0.14.2-beta-plus-v0.15.1`. It is published as the Latest GitHub release with the asset `audiobookshelf-plus-v0.15.1-release.apk` (SHA-256 `1c391c9367e4e9f6d5204d6d08924b4d27633e8c789dfda5e2cff80a9e02db1d`), and announced in Discussions #17. It fixes the series bookshelf that showed only its first one or two books (`defb3cf8`; physical S26 debug validation passed before release). |
 | 132 | **Audiobookshelf+ v0.16.0** (upstream v0.14.2-beta), versionName `0.14.2-beta`: "LLAMA visual refresh and stability fixes", built from `plus` at `10db9077` and tagged `v0.14.2-beta-plus-v0.16.0`. Published 2026-10-11 as the Latest GitHub release with the assets `audiobookshelf-plus-v0.16.0-release.apk` (SHA-256 `5db2ed02ecabbd3a119094e12cb2b944aa97981d83b0bda77adcd35886dde5a8`) and its `.sha256` checksum file, and announced in Discussions #21. Physical S22 release validation passed, including an in-place update from v0.15.1. An earlier candidate built from `6505177b` was superseded before publication and never distributed. |
 
-**Next distributed versionCode: 133.** The temporary GitHub prereleases/tags for 124–126 were
+**Next distributed versionCode: 133,** assigned to the Audiobookshelf+ v0.17.0 candidate; its row is added here when it is published. The temporary GitHub prereleases/tags for 124–126 were
 deleted after approval; these ledger rows are the permanent record, and those numbers (and 127,
 128, 129, 130, 131, 132) must never be reused.
 
