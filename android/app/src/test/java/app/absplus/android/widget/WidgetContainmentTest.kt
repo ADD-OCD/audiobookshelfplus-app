@@ -85,7 +85,8 @@ class WidgetContainmentTest {
     val build = WidgetRenderer::class.java.declaredMethods.first { it.name == "build" && it.parameterCount == 7 }.apply { isAccessible = true }
     val state = WidgetRenderer.State(session = null, isPlaying = false, showControls = true, positionMs = 5_000_000L, durationMs = 41_000_000L)
     val cover = WidgetRenderer.widgetArtwork(Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888))
-    return build.invoke(WidgetRenderer, context, size, theme, state, cover, actions, plan) as RemoteViews
+    // build takes a WidgetLook since RICE; no palette = the unchanged built-in widget
+    return build.invoke(WidgetRenderer, context, size, WidgetLook(theme, null), state, cover, actions, plan) as RemoteViews
   }
 
   private fun render(theme: WidgetTheme, widthDp: Float, heightDp: Float, fontScale: Float = 1f, title: String = longTitle, author: String = longAuthor, forceIcons: Boolean? = null): Rendered {

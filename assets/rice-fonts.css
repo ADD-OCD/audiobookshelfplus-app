@@ -1,0 +1,29 @@
+/*
+  RICE font aliases (docs/rice-customization.md). New family names for fonts already bundled in static/fonts, declared
+  with the correct format('truetype') hint and real weights. They are only referenced by RICE presets under
+  html[data-rice='active'] (theme/rice/runtime.js), so the built-in themes' fonts (assets/fonts.css) are unchanged.
+  Licenses: static/fonts/Source_Sans_Pro/OFL.txt, static/fonts/Ubuntu_Mono/UFL.txt.
+*/
+@font-face {
+  font-family: 'AbsRiceSourceSans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/Source_Sans_Pro/SourceSansPro-Regular.ttf) format('truetype');
+}
+
+@font-face {
+  font-family: 'AbsRiceSourceSans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(/fonts/Source_Sans_Pro/SourceSansPro-SemiBold.ttf) format('truetype');
+}
+
+@font-face {
+  font-family: 'AbsRiceUbuntuMono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/Ubuntu_Mono/UbuntuMono-Regular.ttf) format('truetype');
+}

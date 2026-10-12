@@ -878,6 +878,19 @@ These are still hardcoded, by decision, and documented rather than forced into t
   - **No unrestricted fonts:** no font fields exist yet, and future presets must be enums over bundled or system families.
 - The persisted selection is only an id, resolved against built-ins.
 
+## RICE customization (branch `feature/rice-customization`)
+
+The imported/user themes, Follow Device and dynamic-color items below are implemented as RICE (`docs/rice-customization.md`). It reuses this engine:
+
+- **Data:** RICE snapshots carry the same 29 tokens.
+- **CSS:** `themeDeclarations` stays the only serializer.
+- **Boundaries:**
+  - `html[data-theme]` stays a built-in base;
+  - one runtime `<style>` scoped under `data-rice` overrides the token variables;
+  - a strict validator (`theme/rice/schema.js`) runs before anything is serialized.
+- **Built-ins:** the four built-in definitions, their compiled CSS and their recipes are unchanged.
+- **Galaxy Themes:** no Galaxy Themes or Theme Park import, since there's no public API for it.
+
 ## Future work (not implemented)
 
 - **Imported/user themes:** a versioned JSON format (`format`, `version`, `metadata`, `base`, `tokens`), validated with `validateTheme` against the default theme, with size and depth limits, and flattened when exported.

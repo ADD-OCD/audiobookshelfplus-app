@@ -16,6 +16,16 @@ On `plus`, not in any release yet (merged from `fix/auth-refresh-single-flight`)
 - **No crossed sessions:** a renewal still running when you sign out or switch server or account can't change the new
   session or the saved sign-in. Details: `docs/authentication.md`.
 
+On branch `feature/rice-customization` (not merged or released):
+
+- **RICE customization** (Settings → Appearance), off by default; the built-in themes are unchanged.
+  - Ten starter palette adaptations: Catppuccin Mocha and Latte, Dracula, Nord, Gruvbox, Tokyo Night, Rosé Pine,
+    Solarized Dark and Light, Everforest.
+  - Device colors (Android 12+, including Samsung One UI's Color palette) with light/dark.
+  - Up to 32 personal presets with bounded color and style options, readability checks, and a live preview.
+  - Import of palette colors from public GitHub Linux theme projects: pywal, Kitty, Base16/Base24 and hex lists.
+  - Details: `docs/rice-customization.md`.
+
 ## v0.17.0 — In-app GitHub updates
 
 **Released 2026-10-11:** versionCode 133, versionName `0.14.2-beta` (upstream base unchanged), tag
