@@ -273,6 +273,7 @@
   "LabelTheme": "Tema",
   "LabelThemeBlack": "Svart",
   "LabelThemeDark": "Mörkt",
+  "LabelThemeEink": "E-ink",
   "LabelThemeLight": "Ljust",
   "LabelTimeRemaining": "{0} kvar",
   "LabelTitle": "Titel",

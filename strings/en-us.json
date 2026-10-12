@@ -413,6 +413,7 @@
   "LabelThemeBlack": "Black",
   "LabelThemeCustom": "Custom",
   "LabelThemeDark": "Dark",
+  "LabelThemeEink": "E-ink",
   "LabelThemeLight": "Light",
   "LabelThemeLlama": "LLAMA",
   "LabelTimeRemaining": "{0} remaining",

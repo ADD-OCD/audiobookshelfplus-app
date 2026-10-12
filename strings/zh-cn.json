@@ -273,6 +273,7 @@
   "LabelTheme": "主题",
   "LabelThemeBlack": "黑色",
   "LabelThemeDark": "黑暗",
+  "LabelThemeEink": "E-ink",
   "LabelThemeLight": "明亮",
   "LabelTimeRemaining": "剩余 {0}",
   "LabelTitle": "标题",

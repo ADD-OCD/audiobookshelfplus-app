@@ -272,6 +272,7 @@
   "LabelTheme": "Тема",
   "LabelThemeBlack": "Чорний",
   "LabelThemeDark": "Темна",
+  "LabelThemeEink": "E-ink",
   "LabelThemeLight": "Світла",
   "LabelTimeRemaining": "Лишилося: {0}",
   "LabelTitle": "Назва",

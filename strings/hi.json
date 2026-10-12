@@ -46,6 +46,7 @@
   "HeaderAccount": "खाता",
   "HeaderAdvanced": "विकसित",
   "LabelStartTime": "Start Time",
+  "LabelThemeEink": "E-ink",
   "MessageFollowTheProjectOnGithub": "Follow the project on GitHub",
   "MessageSocketConnectedOverMeteredWifi": "Socket connected over metered Wi-Fi",
   "MessageSocketConnectedOverUnmeteredWifi": "Socket connected over unmetered Wi-Fi"

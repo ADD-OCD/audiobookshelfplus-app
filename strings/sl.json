@@ -272,6 +272,7 @@
   "LabelTheme": "Tema",
   "LabelThemeBlack": "Črna",
   "LabelThemeDark": "Temna",
+  "LabelThemeEink": "E-ink",
   "LabelThemeLight": "Svetla",
   "LabelTimeRemaining": "Še {0}",
   "LabelTitle": "Naslov",

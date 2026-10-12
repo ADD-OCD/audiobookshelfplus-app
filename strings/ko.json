@@ -265,6 +265,7 @@
   "LabelTheme": "테마",
   "LabelThemeBlack": "Black",
   "LabelThemeDark": "Dark",
+  "LabelThemeEink": "E-ink",
   "LabelThemeLight": "Light",
   "LabelTimeRemaining": "{0} 남음",
   "LabelTitle": "제목",

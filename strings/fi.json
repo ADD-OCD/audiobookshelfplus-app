@@ -273,6 +273,7 @@
   "LabelTheme": "Teema",
   "LabelThemeBlack": "Musta",
   "LabelThemeDark": "Tumma",
+  "LabelThemeEink": "E-ink",
   "LabelThemeLight": "Kirkas",
   "LabelTimeRemaining": "{0} jäljellä",
   "LabelTitle": "Nimi",

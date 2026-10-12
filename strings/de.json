@@ -273,6 +273,7 @@
   "LabelTheme": "Farbschema",
   "LabelThemeBlack": "Schwarz",
   "LabelThemeDark": "Dunkel",
+  "LabelThemeEink": "E-ink",
   "LabelThemeLight": "Hell",
   "LabelTimeRemaining": "{0} verbleibend",
   "LabelTitle": "Titel",
