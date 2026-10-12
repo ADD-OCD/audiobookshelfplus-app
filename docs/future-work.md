@@ -253,6 +253,27 @@ No timestamp from this phone is compared with the server's. The earlier 10-secon
 - a paused move after an applied remote update is kept;
 - on a fresh session before any save, a paused move is kept and a remote update is applied.
 
+## In-app updater: what is not yet proven
+
+The updater (`feature/in-app-github-updater`, docs/in-app-updates.md) was tested on the S22 with a disposable fixture
+package and disposable test keys: real downloads, Android's real package parser and real installer confirmations.
+
+**Not yet exercised:**
+- **The production signing path end to end:** a production-signed APK verified against the pinned
+  `c540046a…b9d4` certificate, then installed over a production-signed app. That happens with the first release that
+  contains the updater, when the next release is installed through it.
+- **The installer completing a self-update:** the app replacing itself and its process restarting.
+- **Instrumentation tests:** the project has no instrumented test setup, so APK parsing and the installer are covered
+  by the device runs, not by `androidTest`.
+
+**Play Protect:** on the S22, Google Play Protect sometimes put an "App scan recommended" dialog in front of Android's
+installer for the unknown fixture package. When it was dismissed, the installer reported a cancel and the verified
+update was kept. "Install without scanning" completed the install. A published Audiobookshelf+ release may see the same
+dialog; nothing in the app can or should bypass it.
+
+**A Google Play build** would need a variant without `REQUEST_INSTALL_PACKAGES` and the updater (see
+docs/in-app-updates.md, "Google Play separation").
+
 ## Widget ANR on display-size changes
 
 Changing the display size (`adb shell wm size`) sends `APPWIDGET_UPDATE_OPTIONS` to the home-screen widget provider, and its handling has produced an "isn't responding" dialog on the emulator. Needs a separate reliability investigation of the widget's options update path.

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: lets the in-app updater's device tests read the disposable fixture package's installed version
+     (package visibility, Android 11+). Release builds query no other packages. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <queries>
+    <package android:name="app.absplus.updaterfixture" />
+  </queries>
+</manifest>
