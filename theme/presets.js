@@ -1183,8 +1183,9 @@ const EINK_RULES = [
   ['.absolute.bottom-0.left-0.z-10.bg-yellow-400', { 'background-color': 'rgb(var(--color-track-cursor))', 'box-shadow': `0 -1px 0 ${PAPER}` }],
   ['.absolute.bottom-0.left-0.z-10.bg-success', { 'box-shadow': `0 -1px 0 ${PAPER}` }],
   ['.modal .chapters-panel li > .bg-yellow-400', { 'background-color': 'rgb(var(--color-track-cursor))' }],
-  // List-row play button: paper with an ink ring instead of translucent gray
+  // List-row play button: paper with an ink ring instead of translucent gray, so its white glyph becomes ink
   ['.list-play-key', { 'background-color': PAPER, 'box-shadow': EINK_FRAME_INSIDE }],
+  ['.list-play-key > .material-symbols', { color: INK }],
   ['.list-play-key > div.rounded-full', { 'background-color': PAPER }],
 
   // Player: seek channels are solid gray in an ink outline; the played line is ink in every seek state (settled and

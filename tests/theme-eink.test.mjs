@@ -103,6 +103,18 @@ test('E-ink recipe: played progress is the ink played token in every seek state 
   for (const s of ['#playerTrack div.relative.rounded-full', '.total-track div.relative.rounded-full']) assert.equal(rules[`${ROOT} ${s}`]['background-color'], 'rgb(var(--color-track))', s)
 })
 
+test('E-ink recipe: controls it turns paper never keep a white glyph', async () => {
+  const rules = presets.presentationRules([eink()])
+  // The list-row play key's glyph is text-white over the key; on the paper key it must be ink
+  assert.match(await read('../components/cards/LazyListBookCard.vue'), /class="list-play-key[^"]*"[^>]*>\s*<span [^>]*class="material-symbols[^"]*text-white/)
+  assert.equal(rules[`${ROOT} .list-play-key > .material-symbols`].color, 'rgb(var(--color-fg))')
+  // The full player's key is drawn paper with an ink glyph
+  assert.equal(rules[`${ROOT} .play-btn`].color, 'rgb(var(--color-fg))')
+  // Modal titles and the close glyph sit on the paper backdrop
+  assert.equal(rules[`${ROOT} .modal > .z-40.text-white`].color, 'rgb(var(--color-fg))')
+  assert.equal(rules[`${ROOT} .modal > .z-40 .text-white`].color, 'rgb(var(--color-fg))')
+})
+
 test('E-ink recipe: frames and lines come after shadow removal, so they win on shared elements', () => {
   const order = presets.EINK_RULES.map(([s]) => s)
   const lastShadowReset = Math.max(...presets.EINK_RULES.map(([, d], i) => (d['box-shadow'] === 'none' && Object.keys(d).length === 1 ? i : -1)))
