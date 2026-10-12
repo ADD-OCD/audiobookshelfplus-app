@@ -54,12 +54,15 @@ test('app.css: under prefers-reduced-motion every element gets near-zero transit
   assert.ok(block, 'reduced-motion block present')
   const rules = [...block[1].matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.trim(), body }))
   const transitions = rules.find((r) => r.body.includes('transition-duration'))
-  const animations = rules.find((r) => r.body.includes('animation-duration'))
+  const animations = rules.find((r) => r.body.includes('animation-duration') && r.selector.includes(':not('))
+  // Pseudo-elements in a rule of their own, so a WebView that rejects the complex :not() still keeps it
+  const pseudo = rules.find((r) => r.body.includes('animation-duration') && !r.selector.includes(':not('))
+  assert.match(pseudo.selector, /^\*::before,\s*\*::after$/)
   assert.match(transitions.selector, /^\*,\s*\*::before,\s*\*::after$/)
   for (const declaration of ['transition-duration: 0.01ms !important', 'transition-delay: 0s !important', 'scroll-behavior: auto !important']) assert.ok(transitions.body.includes(declaration), declaration)
   for (const declaration of ['animation-duration: 0.01ms !important', 'animation-delay: 0s !important', 'animation-iteration-count: 1 !important']) assert.ok(animations.body.includes(declaration), declaration)
   // The toast closes on its timer bar's animationend; loading spinners keep turning so loading never reads as a hang
-  const universal = animations.selector.split(/,\s*(?![^()]*\))/)[0]
+  const universal = animations.selector
   for (const kept of ['.Vue-Toastification__progress-bar', '.animate-spin', '.la-ball-spin-clockwise > div', '.loader-dots > div']) assert.ok(universal.includes(`:not(${kept})`), kept)
   // Not `none`: Vue transitions wait for transitionend, which a removed transition never fires
   assert.doesNotMatch(block[1], /transition: none|animation: none/)

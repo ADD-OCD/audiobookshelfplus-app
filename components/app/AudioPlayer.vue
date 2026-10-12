@@ -516,7 +516,8 @@ export default {
     // of the book is drawn exactly, so a finished book reads 100% and no time left
     drawTime(time, chapter) {
       if (!this.coarseDrawing) return time
-      if (this.isEnded || time >= this.totalDuration) return Math.min(time, this.totalDuration)
+      // Before metadata arrives the duration is 0, which is not the end
+      if (this.totalDuration > 0 && (this.isEnded || time >= this.totalDuration)) return Math.min(time, this.totalDuration)
       const step = COARSE_STEP_S * (this.playerSettings.scaleElapsedTimeBySpeed && this.currentPlaybackRate > 0 ? this.currentPlaybackRate : 1)
       const origin = this.playerSettings.useChapterTrack && chapter ? Number(chapter.start) : 0
       return coarseTime(time, step, origin)
@@ -623,6 +624,7 @@ export default {
       console.log(`[AudioPlayer] Set Playback Rate: ${speed}`)
       this.currentPlaybackRate = speed
       this.updateTimestamp()
+      this.updateCoarseTrack()
       AbsAudioPlayer.setPlaybackSpeed({ value: speed })
     },
     restart() {
@@ -712,6 +714,11 @@ export default {
 
       this.updateTimestamp()
       this.updateTrack()
+    },
+    // The coarse step follows the speed and the elapsed-time scaling, so the bars are redrawn with the time when they
+    // change (also while paused, when no poll would do it)
+    updateCoarseTrack() {
+      if (this.playerSettings.updateEveryMinute) this.updateTrack()
     },
     // `at`: draw this position instead of the current one (a seek target, before playback reports it)
     updateTrack(at) {
@@ -908,6 +915,7 @@ export default {
         } else if (action === 'scale_elapsed_time') {
           this.playerSettings.scaleElapsedTimeBySpeed = !this.playerSettings.scaleElapsedTimeBySpeed
           this.updateTimestamp()
+          this.updateCoarseTrack()
           this.savePlayerSettings()
         } else if (action === 'update_every_minute') {
           this.playerSettings.updateEveryMinute = !this.playerSettings.updateEveryMinute
@@ -1065,6 +1073,7 @@ export default {
       if (rate === null) return
       this.currentPlaybackRate = rate
       this.updateTimestamp()
+      this.updateCoarseTrack()
     },
     async init() {
       await this.loadPlayerSettings()

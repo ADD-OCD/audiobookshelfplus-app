@@ -79,7 +79,7 @@ async function loadPlayer() {
     .match(/<script>([\s\S]*?)<\/script>/)[1]
     .replace(/^import .*$/gm, '')
     .replace('export default', 'globalThis.component =')
-  const sandbox = { ...clock, AbsAudioPlayer: { seek: () => {} }, Capacitor: {}, Dialog: {}, jumpLabelMixin: {}, console: { log() {}, error() {}, warn() {} } }
+  const sandbox = { ...clock, AbsAudioPlayer: { seek: () => {}, setPlaybackSpeed: () => {} }, Capacitor: {}, Dialog: {}, jumpLabelMixin: {}, console: { log() {}, error() {}, warn() {} } }
   vm.runInNewContext(script, sandbox)
   return sandbox.component
 }
@@ -284,6 +284,31 @@ test('AudioPlayer, once a minute: the buffered bar steps by a fixed minute of me
     ctx.timeupdate()
     assert.equal(ctx.$refs.bufferedTrack.style.width, `${(120 / 36000) * 100}%`, `${rate}x`)
   }
+})
+
+test('AudioPlayer, once a minute: a speed or scaling change redraws the bar with the time, also while paused', async () => {
+  const component = await loadPlayer()
+  const { ctx } = makePlayer(component, { everyMinute: true, rate: 1 })
+  ctx.currentTime = 100
+  ctx.bufferedTime = 100
+  ctx.timeupdate()
+  assert.equal(ctx.$refs.playedTrack.style.width, `${(60 / 36000) * 100}%`)
+  ctx.setPlaybackSpeed(2)
+  assert.equal(ctx.$refs.playedTrack.style.width, '0%', 'a 120 s step at 2x')
+  ctx.playerSettings.scaleElapsedTimeBySpeed = true
+  ctx.clickMenuAction = component.methods.clickMenuAction.bind(ctx)
+  ctx.$hapticsImpact = async () => {}
+  ctx.$nextTick = (fn) => fn()
+  ctx.savePlayerSettings = () => {}
+  await ctx.clickMenuAction('scale_elapsed_time')
+  assert.equal(ctx.$refs.playedTrack.style.width, `${(60 / 36000) * 100}%`, 'media minutes when not scaled')
+})
+
+test('AudioPlayer, once a minute: before the duration is known, the position is not drawn as the end', async () => {
+  const component = await loadPlayer()
+  const { ctx } = makePlayer(component, { everyMinute: true, duration: 0 })
+  ctx.currentTime = 125
+  assert.equal(ctx.drawnTime, 120)
 })
 
 test('AudioPlayer, once a minute: the sleep timer readout is in minutes', async () => {

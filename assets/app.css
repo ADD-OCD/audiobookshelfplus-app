@@ -183,9 +183,14 @@ Bookshelf Label
     transition-delay: 0s !important;
     scroll-behavior: auto !important;
   }
-  *:not(.Vue-Toastification__progress-bar):not(.animate-spin):not(.la-ball-spin-clockwise > div):not(.loader-dots > div),
   *::before,
   *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+  /* Its own rule: a WebView without complex :not() (before Chromium 88) drops only this one */
+  *:not(.Vue-Toastification__progress-bar):not(.animate-spin):not(.la-ball-spin-clockwise > div):not(.loader-dots > div) {
     animation-duration: 0.01ms !important;
     animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
