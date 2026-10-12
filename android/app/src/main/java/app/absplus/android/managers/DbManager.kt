@@ -129,7 +129,7 @@ class DbManager {
   fun getDownloadItems(): List<DownloadItem> {
     val downloadItems: MutableList<DownloadItem> = mutableListOf()
     Paper.book("downloadItems").allKeys.forEach { downloadItemId ->
-      Paper.book("downloadItems").read<DownloadItem>(downloadItemId)?.let { downloadItems.add(it) }
+      Paper.book("downloadItems").read<DownloadItem>(downloadItemId)?.let { downloadItems.add(it.withoutPodcastEpisodes()) }
     }
     return downloadItems
   }

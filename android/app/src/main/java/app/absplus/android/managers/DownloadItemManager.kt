@@ -125,11 +125,12 @@ class DownloadItemManager(
   }
 
   @Synchronized
-  fun addDownloadItem(downloadItem: DownloadItem) {
-    val existingItem = downloadItemQueue.find { it.id == downloadItem.id }
+  fun addDownloadItem(newItem: DownloadItem) {
+    val existingItem = downloadItemQueue.find { it.id == newItem.id }
     if (existingItem != null) {
       return
     }
+    val downloadItem = newItem.withoutPodcastEpisodes()
     persist(downloadItem, force = true)
     downloadItemQueue.add(downloadItem)
     clientEventEmitter.onDownloadItem(downloadItem)
