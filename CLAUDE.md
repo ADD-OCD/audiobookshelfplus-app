@@ -69,7 +69,7 @@ The Galaxy S26 Ultra is the user's final acceptance device: never send ADB comma
 
 ### Custom Capacitor Plugins
 
-The bridge between JS and native is six custom Capacitor plugins. Each has a JS counterpart in `plugins/capacitor/` and a Kotlin implementation in `android/.../plugins/`:
+The bridge between JS and native is custom Capacitor plugins. Each has a JS counterpart in `plugins/capacitor/` and a Kotlin implementation in `android/.../plugins/`:
 
 | Plugin | Purpose |
 |---|---|
@@ -79,6 +79,8 @@ The bridge between JS and native is six custom Capacitor plugins. Each has a JS 
 | `AbsFileSystem` | File system access, folder scanning |
 | `AbsLogger` | Native log capture |
 | `AbsUpdater` | Settings → Updates: GitHub release check, verified download, Android installer (`updater/`, docs/in-app-updates.md) |
+| `AbsAppearance` | RICE: device light/dark, Android 12+ system palette, contrast; app-owned background (`appearance/`, docs/rice-customization.md) |
+| `AbsThemeImport` | RICE: bounded GitHub palette-file import (`themeimport/`); start/readCandidate/cancel only |
 
 **JS → Native**: Call plugin methods directly, e.g. `AbsAudioPlayer.prepareLibraryItem({...})`.
 **Native → JS**: Use Capacitor's `notifyListeners()` on the native side and `addListener()` on the JS side.

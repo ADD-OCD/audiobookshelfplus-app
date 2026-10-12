@@ -41,6 +41,12 @@ A `Chronometer` was considered and rejected: it counts wall-clock time at 1×, s
 - **Source of truth:** the saved built-in theme id (Capacitor Preferences key `theme`, SharedPreferences `CapacitorStorage`), read natively. It works when the app process is dead.
 - **Allow-list only:** the id selects one of two repository-owned layout sets. No colors, styles, paths, drawable names or resource ids cross from preference data into native code.
 - **Refresh bridge:** `AbsDatabase.refreshWidgets()` takes no arguments and only redraws. `ThemeService.select()` calls it after persisting, native only, errors logged and ignored. Startup restore doesn't call it.
+- **RICE (branch `feature/rice-customization`):**
+  - Once the user has used RICE, the committed RICE store (`appearance/AppearanceSnapshotReader.kt`, read-only, verified by SHA-256) decides instead of the `theme` key.
+  - A RICE preset or starter on Android 12+ keeps the standard layouts; `WidgetPaint.kt` tints them (container, panels, text, key icons, FULL progress) after `WidgetRenderer.build`.
+  - LLAMA-family RICE copies keep the LLAMA layouts as they are, and Android 11 and older keep the standard look.
+  - Device mode re-reads the public system palette at each widget update.
+  - Details: `docs/rice-customization.md`.
 - **Parity:** `tests/widget-theme.test.mjs` fails if the generated XML is stale, if its colors differ from the tokens, if the Kotlin allow-list names an id that isn't a built-in with a generated palette, or if a LLAMA layout's view ids differ from its standard layout.
 
 ## Placed-widget compatibility
