@@ -48,16 +48,28 @@ test('prefersReducedMotion: true only when the reduce query matches; false witho
   assert.equal(prefersReducedMotion({}), false)
 })
 
-test('app.css: under prefers-reduced-motion every element gets near-zero transitions and single, undelayed animations', async () => {
+test('app.css: under prefers-reduced-motion every element gets near-zero transitions, and animations stop except spinners and the toast timer', async () => {
   const css = await read('../assets/app.css')
   const block = css.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/)
   assert.ok(block, 'reduced-motion block present')
-  assert.match(block[1], /\*,\s*\*::before,\s*\*::after \{/)
-  for (const declaration of ['animation-duration: 0.01ms !important', 'animation-delay: 0s !important', 'animation-iteration-count: 1 !important', 'transition-duration: 0.01ms !important', 'transition-delay: 0s !important', 'scroll-behavior: auto !important']) {
-    assert.ok(block[1].includes(declaration), declaration)
-  }
+  const rules = [...block[1].matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.trim(), body }))
+  const transitions = rules.find((r) => r.body.includes('transition-duration'))
+  const animations = rules.find((r) => r.body.includes('animation-duration'))
+  assert.match(transitions.selector, /^\*,\s*\*::before,\s*\*::after$/)
+  for (const declaration of ['transition-duration: 0.01ms !important', 'transition-delay: 0s !important', 'scroll-behavior: auto !important']) assert.ok(transitions.body.includes(declaration), declaration)
+  for (const declaration of ['animation-duration: 0.01ms !important', 'animation-delay: 0s !important', 'animation-iteration-count: 1 !important']) assert.ok(animations.body.includes(declaration), declaration)
+  // The toast closes on its timer bar's animationend; loading spinners keep turning so loading never reads as a hang
+  const universal = animations.selector.split(/,\s*(?![^()]*\))/)[0]
+  for (const kept of ['.Vue-Toastification__progress-bar', '.animate-spin', '.la-ball-spin-clockwise > div', '.loader-dots > div']) assert.ok(universal.includes(`:not(${kept})`), kept)
   // Not `none`: Vue transitions wait for transitionend, which a removed transition never fires
   assert.doesNotMatch(block[1], /transition: none|animation: none/)
+})
+
+test('app.css: the excluded classes are the ones the toast library and the spinners actually animate', async () => {
+  const toast = await readFile(new URL('../node_modules/vue-toastification/dist/index.css', import.meta.url), 'utf8')
+  assert.match(toast, /\.Vue-Toastification__progress-bar \{[^}]*animation:/)
+  assert.match(await read('../components/widgets/LoadingSpinner.vue'), /\.la-ball-spin-clockwise > div \{[^}]*animation:/)
+  assert.match(await read('../components/ui/LoadingIndicator.vue'), /class="loader-dots/)
 })
 
 test('WrappingMarquee: with reduced motion an overflowing title stays static with an ellipsis and never schedules a scroll', () => {

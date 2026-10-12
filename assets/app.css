@@ -173,16 +173,21 @@ Bookshelf Label
 }
 
 /* System "remove animations" (Android animator scale 0, e.g. e-ink devices). Near-zero rather than none, so code waiting
-   for transitionend/animationend (Vue transitions) still completes; one iteration leaves spinners static */
+   for transitionend/animationend (Vue transitions) still completes. Kept: loading spinners (a stopped one reads as a hang)
+   and the toast timer bar, whose animationend is what closes the toast */
 @media (prefers-reduced-motion: reduce) {
   *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+  *:not(.Vue-Toastification__progress-bar):not(.animate-spin):not(.la-ball-spin-clockwise > div):not(.loader-dots > div),
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    transition-delay: 0s !important;
-    scroll-behavior: auto !important;
   }
 }
