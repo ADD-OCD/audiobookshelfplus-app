@@ -6,6 +6,27 @@ export function nativeQueueItems(items) {
   }))
 }
 
+// Up Next display for a queue the native player holds without this UI having set it: the UI restarted (reattach), or
+// a widget/headset/notification Play restored the session and its queue while the UI was already open. The saved
+// display copy is used only if it describes exactly the native queue (same IDs, same order, valid index) and, when
+// the session is known, the native current item is that session's item. Returns { queue } or { reason }.
+export function queueDisplayFromNative(saved, native, session = null) {
+  const items = native?.items
+  if (!items?.length) return { reason: 'no-native-queue' }
+  const index = native.currentIndex
+  if (!Number.isInteger(index) || index < 0 || index >= items.length) return { reason: 'invalid-index' }
+  if (!saved?.items?.length) return { reason: 'no-saved-display' }
+  const savedIds = nativeQueueItems(saved.items)
+  const same = savedIds.length === items.length && savedIds.every((item, i) => item.libraryItemId === items[i].libraryItemId && item.episodeId === (items[i].episodeId || null))
+  if (!same) return { reason: 'mismatch' }
+  if (session) {
+    const libraryItemId = session.localLibraryItem?.id || session.libraryItemId
+    const episodeId = session.localLibraryItem ? session.localEpisodeId || null : session.episodeId || null
+    if (items[index].libraryItemId !== libraryItemId || (items[index].episodeId || null) !== episodeId) return { reason: 'session-mismatch' }
+  }
+  return { queue: { ...saved, currentIndex: index } }
+}
+
 export function queueItemPayload(item) {
   const nativeItem = nativeQueueItems([item])[0]
   return {
