@@ -306,9 +306,13 @@ test('AudioPlayer, once a minute: a speed or scaling change redraws the bar with
 
 test('AudioPlayer, once a minute: before the duration is known, the position is not drawn as the end', async () => {
   const component = await loadPlayer()
-  const { ctx } = makePlayer(component, { everyMinute: true, duration: 0 })
+  const { ctx, counts } = makePlayer(component, { everyMinute: true, duration: 0 })
   ctx.currentTime = 125
+  ctx.bufferedTime = 125
   assert.equal(ctx.drawnTime, 120)
+  ctx.timeupdate()
+  ctx.setPlaybackSpeed(2)
+  assert.equal(counts.playedTrack, undefined, 'the bar is not drawn, so it never reads as finished')
 })
 
 test('AudioPlayer, once a minute: the sleep timer readout is in minutes', async () => {

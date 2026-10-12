@@ -722,6 +722,8 @@ export default {
     },
     // `at`: draw this position instead of the current one (a seek target, before playback reports it)
     updateTrack(at) {
+      // Coarse drawing writes only what changes, so it never draws an unknown duration (x / 0 would read as finished)
+      if (this.coarseDrawing && !(this.totalDuration > 0)) return
       // Update progress track UI
       const chapter = at === undefined ? this.currentChapter : this.chapterAt(at)
       const currentTimeToUse = at === undefined ? this.drawnTime : this.drawTime(at, chapter)
