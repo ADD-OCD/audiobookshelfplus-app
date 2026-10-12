@@ -32,6 +32,7 @@
   "HeaderAdvanced": "અડ્વાન્સડ",
   "LabelStartTime": "Start Time",
   "LabelThemeEink": "E-ink",
+  "LabelUpdatePlayerEveryMinute": "Update once a minute",
   "MessageFollowTheProjectOnGithub": "Follow the project on GitHub",
   "MessageSocketConnectedOverMeteredWifi": "Socket connected over metered Wi-Fi",
   "MessageSocketConnectedOverUnmeteredWifi": "Socket connected over unmetered Wi-Fi"

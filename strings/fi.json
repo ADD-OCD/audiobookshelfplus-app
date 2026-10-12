@@ -283,6 +283,7 @@
   "LabelType": "Tyyppi",
   "LabelUnknown": "Tuntematon",
   "LabelUnlockPlayer": "Avaa soittimen lukitus",
+  "LabelUpdatePlayerEveryMinute": "Update once a minute",
   "LabelUseBookshelfView": "Käytä kirjahyllynäkymää",
   "LabelUser": "Käyttäjä",
   "LabelUsername": "Käyttäjätunnus",

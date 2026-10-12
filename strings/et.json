@@ -176,5 +176,6 @@
   "LabelTitle": "Pealkiri",
   "LabelTotalSize": "Kogusuurus",
   "LabelType": "Tüüp",
-  "LabelUnknown": "Teadmata"
+  "LabelUnknown": "Teadmata",
+  "LabelUpdatePlayerEveryMinute": "Update once a minute"
 }

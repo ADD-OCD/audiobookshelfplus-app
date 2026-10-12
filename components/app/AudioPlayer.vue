@@ -158,7 +158,12 @@ import { normalizePlaybackRate, formatPlaybackRate } from '@/utils/playbackRate'
 import coverPresentation from '@/theme/coverPresentation'
 import playerLayout from '@/theme/playerLayout'
 import WrappingMarquee from '@/assets/WrappingMarquee.js'
+import { coarseTime, coarseClock, sleepRemainingLabel, createPainter } from '@/utils/playerClock'
 import jumpLabelMixin from '@/mixins/jumpLabel'
+
+const setText = (el, value) => (el.innerText = value)
+const setWidth = (el, value) => (el.style.width = value)
+const setLeft = (el, value) => (el.style.left = value)
 
 export default {
   props: {
@@ -199,7 +204,8 @@ export default {
         useTotalTrack: true,
         scaleElapsedTimeBySpeed: true,
         lockUi: false,
-        showQueueIcon: false
+        showQueueIcon: false,
+        updateEveryMinute: false
       },
       isLoading: false,
       isCheckingServerProgress: false,
@@ -298,6 +304,11 @@ export default {
             text: this.$strings.LabelScaleElapsedTimeBySpeed,
             value: 'scale_elapsed_time',
             icon: this.playerSettings.scaleElapsedTimeBySpeed ? 'check_box' : 'check_box_outline_blank'
+          },
+          {
+            text: this.$strings.LabelUpdatePlayerEveryMinute,
+            value: 'update_every_minute',
+            icon: this.playerSettings.updateEveryMinute ? 'check_box' : 'check_box_outline_blank'
           },
           {
             text: this.playerSettings.lockUi ? this.$strings.LabelUnlockPlayer : this.$strings.LabelLockPlayer,
@@ -437,15 +448,24 @@ export default {
     totalDurationPretty() {
       return this.$secondsToTimestamp(this.totalDuration)
     },
+    // "Update once a minute" (utils/playerClock.js). A drag always draws exact times, so a precise seek stays possible
+    coarseDrawing() {
+      return this.playerSettings.updateEveryMinute && !this.isDraggingCursor
+    },
+    // The position the readouts and bars are drawn from
+    drawnTime() {
+      const time = this.isDraggingCursor ? this.draggingCurrentTime : this.currentTime
+      return this.coarseDrawing ? coarseTime(time, this.currentPlaybackRate) : time
+    },
     currentTimePretty() {
-      let currentTimeToUse = this.isDraggingCursor ? this.draggingCurrentTime : this.currentTime
+      let currentTimeToUse = this.drawnTime
       if (this.playerSettings.scaleElapsedTimeBySpeed) {
         currentTimeToUse = currentTimeToUse / this.currentPlaybackRate
       }
-      return this.$secondsToTimestamp(currentTimeToUse)
+      return this.clockText(currentTimeToUse)
     },
     timeRemaining() {
-      let currentTimeToUse = this.isDraggingCursor ? this.draggingCurrentTime : this.currentTime
+      let currentTimeToUse = this.drawnTime
       if (this.playerSettings.useChapterTrack && this.currentChapter) {
         var currChapTime = currentTimeToUse - this.currentChapter.start
         return (this.currentChapterDuration - currChapTime) / this.currentPlaybackRate
@@ -453,32 +473,26 @@ export default {
       return this.totalTimeRemaining
     },
     totalTimeRemaining() {
-      let currentTimeToUse = this.isDraggingCursor ? this.draggingCurrentTime : this.currentTime
+      let currentTimeToUse = this.drawnTime
       return (this.totalDuration - currentTimeToUse) / this.currentPlaybackRate
     },
     totalTimeRemainingPretty() {
       if (this.totalTimeRemaining < 0) {
-        return this.$secondsToTimestamp(this.totalTimeRemaining * -1)
+        return this.clockText(this.totalTimeRemaining * -1)
       }
-      return '-' + this.$secondsToTimestamp(this.totalTimeRemaining)
+      return '-' + this.clockText(this.totalTimeRemaining, true)
     },
     timeRemainingPretty() {
       if (this.timeRemaining < 0) {
-        return this.$secondsToTimestamp(this.timeRemaining * -1)
+        return this.clockText(this.timeRemaining * -1)
       }
-      return '-' + this.$secondsToTimestamp(this.timeRemaining)
+      return '-' + this.clockText(this.timeRemaining, true)
     },
     playbackRateLabel() {
       return formatPlaybackRate(this.currentPlaybackRate)
     },
     sleepTimeRemainingPretty() {
-      if (!this.sleepTimeRemaining) return '0s'
-      var secondsRemaining = Math.round(this.sleepTimeRemaining)
-      if (secondsRemaining > 91) {
-        return Math.ceil(secondsRemaining / 60) + 'm'
-      } else {
-        return secondsRemaining + 's'
-      }
+      return sleepRemainingLabel(this.sleepTimeRemaining, this.playerSettings.updateEveryMinute)
     },
     socketConnected() {
       return this.$store.state.socketConnected
@@ -495,6 +509,14 @@ export default {
     }
   },
   methods: {
+    clockText(seconds, roundUp = false) {
+      return this.coarseDrawing ? coarseClock(seconds, roundUp) : this.$secondsToTimestamp(seconds)
+    },
+    // Every per-second write to the seek row goes through here: with coarse drawing an unchanged value is not rewritten
+    // (each write is a refresh on e-paper); otherwise it writes every time, as before
+    paint(el, key, value) {
+      return this.painter(el, key, value, key === 'text' ? setText : key === 'left' ? setLeft : setWidth, !this.coarseDrawing)
+    },
     showSyncsFailedDialog() {
       Dialog.alert({
         title: this.$strings.HeaderProgressSyncFailed,
@@ -649,7 +671,7 @@ export default {
         return
       }
 
-      let currentTime = this.isDraggingCursor ? this.draggingCurrentTime : this.currentTime
+      let currentTime = this.drawnTime
       if (this.playerSettings.useChapterTrack && this.currentChapter) {
         currentTime = Math.max(0, currentTime - this.currentChapter.start)
       }
@@ -657,7 +679,7 @@ export default {
         currentTime = currentTime / this.currentPlaybackRate
       }
 
-      ts.innerText = this.$secondsToTimestamp(currentTime)
+      this.paint(ts, 'text', this.clockText(currentTime))
     },
     timeupdate() {
       if (!this.$refs.playedTrack) {
@@ -679,36 +701,34 @@ export default {
     },
     updateTrack() {
       // Update progress track UI
-      let currentTimeToUse = this.isDraggingCursor ? this.draggingCurrentTime : this.currentTime
+      let currentTimeToUse = this.drawnTime
+      const bufferedTime = this.coarseDrawing ? coarseTime(this.bufferedTime, this.currentPlaybackRate) : this.bufferedTime
       let percentDone = currentTimeToUse / this.totalDuration
       const totalPercentDone = percentDone
-      let bufferedPercent = this.bufferedTime / this.totalDuration
+      let bufferedPercent = bufferedTime / this.totalDuration
       const totalBufferedPercent = bufferedPercent
 
       if (this.playerSettings.useChapterTrack && this.currentChapter) {
         const currChapTime = currentTimeToUse - this.currentChapter.start
         percentDone = currChapTime / this.currentChapterDuration
-        bufferedPercent = Math.max(0, Math.min(1, (this.bufferedTime - this.currentChapter.start) / this.currentChapterDuration))
+        bufferedPercent = Math.max(0, Math.min(1, (bufferedTime - this.currentChapter.start) / this.currentChapterDuration))
       }
 
       const playedPercent = percentDone * 100
       const bufferedPercentWidth = bufferedPercent * 100
-      if (this.$refs.playedTrack) {
-        this.$refs.playedTrack.style.width = playedPercent + '%'
-      }
-      if (this.$refs.bufferedTrack) {
-        this.$refs.bufferedTrack.style.width = bufferedPercentWidth + '%'
-      }
+      this.paint(this.$refs.playedTrack, 'width', playedPercent + '%')
+      this.paint(this.$refs.bufferedTrack, 'width', bufferedPercentWidth + '%')
 
       if (this.$refs.trackCursor && this.$refs.track) {
         const trackWidth = this.$refs.track.clientWidth
-        this.$refs.trackCursor.style.left = Math.round(percentDone * trackWidth) - 14 + 'px'
-        if (this.$refs.trackCursorHit) this.$refs.trackCursorHit.style.left = this.$refs.trackCursor.style.left
+        const left = Math.round(percentDone * trackWidth) - 14 + 'px'
+        this.paint(this.$refs.trackCursor, 'left', left)
+        this.paint(this.$refs.trackCursorHit, 'left', left)
       }
 
       if (this.playerSettings.useChapterTrack) {
-        if (this.$refs.totalPlayedTrack) this.$refs.totalPlayedTrack.style.width = totalPercentDone * 100 + '%'
-        if (this.$refs.totalBufferedTrack) this.$refs.totalBufferedTrack.style.width = totalBufferedPercent * 100 + '%'
+        this.paint(this.$refs.totalPlayedTrack, 'width', totalPercentDone * 100 + '%')
+        this.paint(this.$refs.totalBufferedTrack, 'width', totalBufferedPercent * 100 + '%')
       }
     },
     seek(time) {
@@ -726,7 +746,8 @@ export default {
 
       if (this.$refs.playedTrack) {
         const perc = time / this.totalDuration
-        this.$refs.playedTrack.style.width = perc * 100 + '%'
+        // A seek is drawn at once, coarse drawing or not
+        this.painter(this.$refs.playedTrack, 'width', perc * 100 + '%', setWidth, true)
 
         this.$refs.playedTrack.classList.remove('bg-gray-200')
         this.$refs.playedTrack.classList.add('bg-yellow-300')
@@ -859,6 +880,12 @@ export default {
           this.playerSettings.scaleElapsedTimeBySpeed = !this.playerSettings.scaleElapsedTimeBySpeed
           this.updateTimestamp()
           this.savePlayerSettings()
+        } else if (action === 'update_every_minute') {
+          this.playerSettings.updateEveryMinute = !this.playerSettings.updateEveryMinute
+          this.painter = createPainter()
+          this.updateTimestamp()
+          this.updateTrack()
+          this.savePlayerSettings()
         } else if (action === 'lock') {
           this.playerSettings.lockUi = !this.playerSettings.lockUi
           this.savePlayerSettings()
@@ -927,6 +954,7 @@ export default {
         this.playerSettings.lockUi = !!savedPlayerSettings.lockUi
         this.playerSettings.scaleElapsedTimeBySpeed = !!savedPlayerSettings.scaleElapsedTimeBySpeed
         this.playerSettings.showQueueIcon = !!savedPlayerSettings.showQueueIcon
+        this.playerSettings.updateEveryMinute = !!savedPlayerSettings.updateEveryMinute
       }
     },
     savePlayerSettings() {
@@ -1125,6 +1153,10 @@ export default {
     showProgressSyncSuccess() {
       this.syncStatus = this.$constants.SyncStatus.SUCCESS
     }
+  },
+  created() {
+    // Not reactive on purpose: it only remembers what was last written to the seek row
+    this.painter = createPainter()
   },
   mounted() {
     this.updateScreenSize()

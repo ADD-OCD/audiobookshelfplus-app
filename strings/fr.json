@@ -283,6 +283,7 @@
   "LabelType": "Type",
   "LabelUnknown": "Inconnu",
   "LabelUnlockPlayer": "Déverrouiller le lecteur",
+  "LabelUpdatePlayerEveryMinute": "Update once a minute",
   "LabelUseBookshelfView": "Utiliser l'interface bibliothèque",
   "LabelUser": "Utilisateur",
   "LabelUsername": "Nom d’utilisateur",

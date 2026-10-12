@@ -846,6 +846,7 @@ A light theme for e-paper readers (tested target: Boox Note Air 5C, a color Kale
   - toggle switches: ink outline and thumb edge (on is ink, off is paper).
 - Geometry, layout and behavior are unchanged; `playerLayout` treats E-ink as standard. The home-screen widget has no E-ink palette: `WidgetTheme.fromThemeId` maps `eink` to the standard widget, which already draws a static snapshot.
 - Animations are not part of the theme. The app honors the system "remove animations" setting for every theme (`prefers-reduced-motion`, `assets/app.css` and `utils/reducedMotion.js`), which Boox turns on.
+- Redraw frequency is not part of the theme either. The player menu's **Update once a minute** (`playerSettings.updateEveryMinute`, off by default) keeps polling the native position every second, since bookmarks and the refocus checks read it, but draws times as H:MM, the seek bars in minute steps and the sleep timer in minutes, and writes to the page only when one of those values changes (`utils/playerClock.js`). Seeks and drags are drawn at once and exactly.
 - Not covered yet (no e-ink-specific rule): the remaining translucent tints (`bg-*/10` notices, `bg-black/…` badges on cards, `bg-fg/10` count badges), the podcast "new episodes" yellow badge and the stats chart. They are small; check them on the device.
 
 ## Content-derived color (intentionally not tokens)
