@@ -113,9 +113,39 @@ test('wiring: plugin registered natively and in JS; Settings shows the section o
   assert.match(settings, /<!-- In-app updates from the official GitHub releases \(Android\) -->\n\s+<settings-updates \/>\n\s+<\/template>/)
   const component = await read('../components/settings/Updates.vue')
   const calls = [...component.matchAll(/AbsUpdater\.(\w+)\(([^)]*)\)/g)]
-  assert.deepEqual([...new Set(calls.map((m) => m[1]))].sort(), ['addListener', 'cancelDownload', 'checkForUpdates', 'downloadUpdate', 'getState', 'installUpdate', 'openInstallPermissionSettings', 'openReleaseNotes'])
+  assert.deepEqual([...new Set(calls.map((m) => m[1]))].sort(), ['addListener', 'cancelDownload', 'checkForUpdates', 'downloadUpdate', 'getState', 'installUpdate', 'openInstallPermissionSettings', 'openReleaseNotes', 'reopenInstaller'])
   for (const m of calls) if (m[1] !== 'addListener') assert.equal(m[2], '', `${m[1]} takes no arguments`)
   assert.doesNotMatch(component, /v-html|window\.open|setTestSource/)
   // Installing while audio plays asks first
   assert.match(component, /if \(this\.\$store\.state\.playerIsPlaying && this\.status\.state === 'READY'\) \{\n\s+const \{ value \} = await Dialog\.confirm/)
+})
+
+test('Open installer shows the waiting confirmation again (review fix: it used to call Install, which is refused while installing)', async () => {
+  const component = await read('../components/settings/Updates.vue')
+  assert.match(component, /reopen: \{ icon: 'open_in_new', text: this\.\$strings\.ButtonOpenInstaller, handler: this\.reopenInstaller \}/)
+  assert.match(component, /reopenInstaller\(\) \{\n\s+return this\.run\(\(\) => AbsUpdater\.reopenInstaller\(\)\)/)
+  const plugin = await read('../android/app/src/main/java/app/absplus/android/plugins/AbsUpdater.kt')
+  assert.match(plugin, /fun reopenInstaller\(call: PluginCall\) \{\n\s+val pending = UpdateManager\.pendingConfirm\n\s+if \(pending == null \|\| UpdateManager\.snapshot\(\)\.state != UpdateState\.INSTALLING\) return call\.resolve\(JSObject\(\)\.put\("opened", false\)\)\n\s+showConfirm\(pending\)/)
+})
+
+test('PLUS_VERSION follows the release ledger, so installed apps neither miss releases nor re-offer their own', async () => {
+  const gradle = await read('../android/app/build.gradle')
+  const versionCode = Number(gradle.match(/^\s+versionCode (\d+)$/m)[1])
+  const plus = gradle.match(/buildConfigField "String", "PLUS_VERSION", "\\"(\d+\.\d+\.\d+)\\""/)[1]
+  const ledger = await read('../docs/release-process.md')
+  // The newest ledger row that is a public release ("| 132 | **Audiobookshelf+ v0.16.0** ...")
+  const releases = [...ledger.matchAll(/^\| (\d+) \| \*\*Audiobookshelf\+ v(\d+\.\d+\.\d+)\*\*/gm)].map((m) => ({ code: Number(m[1]), version: m[2] }))
+  const latest = releases.sort((a, b) => b.code - a.code)[0]
+  const cmp = (a, b) => {
+    const x = a.split('.').map(Number)
+    const y = b.split('.').map(Number)
+    for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]
+    return 0
+  }
+  assert.ok(latest, 'a released row in the ledger')
+  if (versionCode === latest.code) assert.equal(plus, latest.version, `versionCode ${versionCode} is ${latest.version}; PLUS_VERSION must match`)
+  else {
+    assert.ok(versionCode > latest.code, 'versionCode never goes below the last release')
+    assert.ok(cmp(plus, latest.version) > 0, `versionCode ${versionCode} is beyond release ${latest.version} (${latest.code}): set PLUS_VERSION to the new public version`)
+  }
 })

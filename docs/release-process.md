@@ -170,4 +170,5 @@ copies.
   rotation (lineage) from this key, or installed apps reject the update.
 - **Version code:** higher than the previous release's, as always. The updater refuses same-version and older APKs.
 - **Public version:** `PLUS_VERSION` set to `X.Y.Z`, or the next check reports the release as newer than the app that
-  contains it.
+  contains it. `tests/updater.test.mjs` enforces this against the ledger: while `versionCode` equals the last
+  released row, `PLUS_VERSION` must be that release's version; once `versionCode` is higher, it must be a newer version.

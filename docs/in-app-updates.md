@@ -60,7 +60,8 @@ The Android `versionName` stays the upstream version (`0.14.2-beta`), so it cann
 
 - **Discovery:** the release tag's `vX.Y.Z` is compared numerically with `BuildConfig.PLUS_VERSION`. That field is set in
   `android/app/build.gradle` next to `versionCode`, and is bumped with it for every release (docs/release-process.md).
-  "Up to date" means the tag's version is not higher.
+  "Up to date" means the tag's version is not higher. `tests/updater.test.mjs` checks `PLUS_VERSION` against the
+  release ledger, so a release cannot ship with a stale or skipped public version.
 - **Installation:** the downloaded APK's own `versionCode`, read by Android's package parser, must be greater than the
   installed `versionCode`. The comparison uses 64-bit values. Same-version and downgrade APKs are rejected, whatever the
   tag says.
@@ -97,8 +98,9 @@ the installed app. The app never disables that check.
 - **Installer:** a `PackageInstaller` session (`MODE_FULL_INSTALL`, the target package name, and `USER_ACTION_REQUIRED` on
   Android 12+). There is no `file://` URI and no FileProvider sharing.
 - **Confirmation:** Android answers `STATUS_PENDING_USER_ACTION` with its own confirmation screen. The app shows it from
-  its activity when it is in the foreground; otherwise it waits and shows it on the next resume. The app never accepts it
-  on the user's behalf.
+  its activity when it is in the foreground; otherwise it waits and shows it on the next resume. **Open installer** shows
+  it again while the session waits, for example after leaving it with Home. The app never accepts it on the user's
+  behalf.
 - **Permission:** `REQUEST_INSTALL_PACKAGES`. From Android 8 the user must allow "Install unknown apps" for Audiobookshelf+.
   - The app asks only after the user taps **Install update**. It then explains why and offers **Open Android settings**
     (`Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES` for this package).

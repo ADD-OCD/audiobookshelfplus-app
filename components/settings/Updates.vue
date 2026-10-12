@@ -86,7 +86,7 @@ export default {
         cancel: { icon: 'close', text: this.$strings.ButtonCancelDownload, handler: this.cancel },
         install: { icon: 'install_mobile', text: this.$strings.ButtonInstallUpdate, handler: this.install },
         permission: { icon: 'settings', text: this.$strings.ButtonOpenInstallSettings, handler: this.openPermissionSettings },
-        reopen: { icon: 'open_in_new', text: this.$strings.ButtonOpenInstaller, handler: this.install },
+        reopen: { icon: 'open_in_new', text: this.$strings.ButtonOpenInstaller, handler: this.reopenInstaller },
         notes: { icon: 'description', text: this.$strings.ButtonReleaseNotes, handler: this.openNotes }
       }
       return this.view.actions.map((id) => ({ id, ...all[id] }))
@@ -129,6 +129,9 @@ export default {
         this.permissionPrompt = true
         this.status = { ...this.status, installPermissionNeeded: true }
       }
+    },
+    reopenInstaller() {
+      return this.run(() => AbsUpdater.reopenInstaller())
     },
     openPermissionSettings() {
       return this.run(() => AbsUpdater.openInstallPermissionSettings())

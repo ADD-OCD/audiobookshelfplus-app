@@ -76,6 +76,15 @@ class AbsUpdater : Plugin() {
     call.resolve(JSObject().put("result", result.name.lowercase()))
   }
 
+  /** Shows Android's installer confirmation again (left with Home or Recents) while the session still waits for it */
+  @PluginMethod
+  fun reopenInstaller(call: PluginCall) {
+    val pending = UpdateManager.pendingConfirm
+    if (pending == null || UpdateManager.snapshot().state != UpdateState.INSTALLING) return call.resolve(JSObject().put("opened", false))
+    showConfirm(pending)
+    call.resolve(JSObject().put("opened", true))
+  }
+
   /** Android's "Install unknown apps" page for this app, opened only from the user's button */
   @PluginMethod
   fun openInstallPermissionSettings(call: PluginCall) {

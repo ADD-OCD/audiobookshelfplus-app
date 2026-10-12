@@ -23,6 +23,10 @@ class AbsUpdaterWeb extends WebPlugin {
     return { result: 'unsupported' }
   }
 
+  async reopenInstaller() {
+    return { opened: false }
+  }
+
   async openInstallPermissionSettings() {
     return { opened: false }
   }
