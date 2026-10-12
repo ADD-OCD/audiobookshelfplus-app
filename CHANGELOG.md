@@ -23,10 +23,12 @@ v0.16.0 (`10db9077`).
 
 ### Known limitations
 
-- **Production self-update not yet proven:** the in-app installer was tested on a phone with a disposable test app.
-  Updating a production-signed Audiobookshelf+ through the updater is first possible from v0.17.0 to the next release.
-- While this phone is playing, progress saved on another device is not applied and the next save replaces it (as in
-  earlier releases).
+- **Production self-update not yet verified:** the in-app updater has been tested with signed test applications.
+  Updating an existing production Audiobookshelf+ installation through the updater will be verified with a subsequent
+  release.
+- **Progress from another device:** while an audiobook is playing, progress updates from another device are not
+  applied, and the next progress save from this device may overwrite those updates. When you return to a paused
+  audiobook, progress changes from another device are recognized and applied.
 
 ## v0.16.0 — LLAMA visual refresh and stability fixes
 
@@ -68,6 +70,7 @@ LLAMA only; Black, Dark and Light are unchanged.
 ### Known limitations
 
 See `docs/future-work.md`:
-- While this phone is playing, progress saved on another device is not applied and the next save replaces it (as in
-  earlier releases); it is applied when you return to the app with the book paused.
+- **Progress from another device:** while an audiobook is playing, progress updates from another device are not
+  applied, and the next progress save from this device may overwrite those updates. When you return to a paused
+  audiobook, progress changes from another device are recognized and applied.
 - Not tested on a device: comic CBR, compressed or KF8/AZW3 MOBI files, and real podcast feeds.

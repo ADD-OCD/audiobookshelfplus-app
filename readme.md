@@ -72,9 +72,9 @@ releases, downloads and verifies an update, and hands it to Android's installer 
   removed. Please look over a log before sharing it publicly.
 - Many smaller playback and download fixes from a full stability audit.
 
-**Known limitations:** while this phone is playing, progress saved on another device isn't picked up, and this phone's
-next save replaces it (it is picked up when you return to a paused book). See
-[CHANGELOG.md](CHANGELOG.md) for other known limitations.
+**Known limitations:** While an audiobook is playing, progress updates from another device are not applied. The next
+progress save from this device may overwrite those updates. However, when you return to a paused audiobook, progress
+changes from another device are recognized and applied. See [CHANGELOG.md](https://github.com/ADD-OCD/audiobookshelfplus-app/blob/plus/CHANGELOG.md) for other known limitations.
 
 ### Getting builds
 

@@ -243,7 +243,7 @@ Returning to the app with a paused streamed book compares the server's progress 
 No timestamp from this phone is compared with the server's. The earlier 10-second rule (unpublished v0.16.0 candidate) missed remote updates inside that window and let the next sync overwrite them.
 
 **Remaining limits:**
-- While this phone is playing, refocus does not check the server and its syncs overwrite another device's update (last writer wins, as upstream: the Play-time server check is commented out in `PlayerListener`).
+- While an audiobook is playing, refocus does not check the server: progress updates from another device are not applied, and this device's next progress save may overwrite those updates (last writer wins, as upstream: the Play-time server check is commented out in `PlayerListener`). Returning to a paused audiobook applies them, as described above.
 - A remote position within 1 second of this phone's last saved position counts as this phone's own.
 - Downloaded books follow the separate local-progress rules (`checkSyncServerProgressWithLocalProgress`).
 
