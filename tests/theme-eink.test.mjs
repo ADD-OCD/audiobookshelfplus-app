@@ -160,6 +160,9 @@ test('E-ink: ink fills never carry an ink label', async () => {
   // ui/Btn colors other than success keep the inherited (ink) label on a state fill, which is ink in E-ink
   assert.match(await read('../components/ui/Btn.vue'), /list\.push\(`bg-\$\{this\.color\}`\)/)
   for (const fill of ['error', 'info', 'warning']) assert.equal(rules[`${ROOT} .btn.bg-${fill}`].color, PAPER_VAR, fill)
+  // ...and its loading spinner (text-fg, ink) shows on every ink fill, success-action included
+  assert.match(await read('../components/ui/Btn.vue'), /<div v-if="loading" class="text-fg absolute/)
+  for (const fill of ['success-action', 'error', 'info', 'warning']) assert.equal(rules[`${ROOT} .btn.bg-${fill} > div.text-fg`].color, PAPER_VAR, fill)
   assert.equal(rules[`${ROOT} .icon-btn.bg-error > .material-symbols`].color, PAPER_VAR)
   assert.equal(rules[`${ROOT} .bg-black\\/80.text-fg`].color, PAPER_VAR)
   assert.equal(rules[`${ROOT} .bg-black\\/75 svg.animate-spin`].color, PAPER_VAR, 'server connect spinner on its dark overlay')

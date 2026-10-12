@@ -1232,6 +1232,11 @@ const EINK_RULES = [
   ['.btn.bg-error', { color: PAPER }],
   ['.btn.bg-info', { color: PAPER }],
   ['.btn.bg-warning', { color: PAPER }],
+  // ui/Btn's loading spinner is ink (text-fg) over the button: on the ink fills it would vanish
+  ['.btn.bg-success-action > div.text-fg', { color: PAPER }],
+  ['.btn.bg-error > div.text-fg', { color: PAPER }],
+  ['.btn.bg-info > div.text-fg', { color: PAPER }],
+  ['.btn.bg-warning > div.text-fg', { color: PAPER }],
   ['.icon-btn.bg-error > .material-symbols', { color: PAPER }],
   ['.bg-black\\/80.text-fg', { color: PAPER }],
   ['.bg-black\\/75 svg.animate-spin', { color: PAPER }],
