@@ -50,10 +50,10 @@ Use the first level that is sufficient:
 
    Start it only with `~/.android/emu-tools/start-emulator.sh`:
 
-   - headless by default; `--window` for visual work, minimized as soon as it appears;
-   - Below Normal priority;
+   - headless by default; `--window` for visual work, minimized without taking focus as soon as it appears;
+   - Below Normal priority for its own processes only;
    - one instance only, and not during busy builds;
-   - it clears the home screen for widget tests.
+   - it never changes the home screen, apps or data. Home-screen cleanup is a separate opt-in command that is disabled until validated.
 
    Reuse it across tests rather than restarting it. Stop it with `stop-emulator.sh`, which stops only the emulator this session started and verifies cleanup.
 
