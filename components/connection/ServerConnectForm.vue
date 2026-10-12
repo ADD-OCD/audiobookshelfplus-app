@@ -865,7 +865,7 @@ export default {
           }
 
           // If the token was renewed during /api/authorize (utils/authRenewal.js), save the renewed one
-          this.serverConfig.token = this.$authRenewal.renewedToken(this.serverConfig.id) || this.$store.getters['user/getToken'] || this.serverConfig.token
+          this.serverConfig.token = this.$authRenewal.latestToken(this.serverConfig.id) || this.serverConfig.token
         }
       } else {
         // Server version before new JWT auth, use old user.token

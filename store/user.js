@@ -141,6 +141,8 @@ export const actions = {
     }
   },
   async logout({ state, commit }, logoutFromServer = false) {
+    // Renewals still running must not reach this session while the steps below run (docs/authentication.md)
+    this.$authRenewal.invalidate()
     // Logging out from server deletes the session so the refresh token is no longer valid
     // Currently this is not being used to support switching servers without logging back in (assuming refresh token is still valid)
     // We may want to make this change in the future

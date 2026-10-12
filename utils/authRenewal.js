@@ -108,6 +108,11 @@ export function createAuthRenewal({ refresh, getSession, onRenewed = () => {}, o
     renewedToken(serverConnectionConfigId) {
       return renewed.get(serverConnectionConfigId) || null
     },
+    /**
+     * Newest access token known for a saved server: the signed-in session's if it is that server, else one renewed for
+     * it in this epoch, else null. Never another server's or account's token.
+     */
+    latestToken,
     /** Logout or server switch: pending callers fail with 'stale' now and late results are ignored. */
     invalidate() {
       epoch++

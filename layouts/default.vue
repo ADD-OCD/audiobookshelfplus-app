@@ -189,8 +189,8 @@ export default {
           return
         }
 
-        // Token may have been refreshed during the authorize call so refetch from store
-        serverConfig.token = this.$store.getters['user/getToken'] || serverConfig.token
+        // Token may have been renewed during the authorize call (utils/authRenewal.js); save the renewed one
+        serverConfig.token = this.$authRenewal.latestToken(serverConfig.id) || serverConfig.token
       }
 
       // Set library - Use last library if set and available fallback to default user library

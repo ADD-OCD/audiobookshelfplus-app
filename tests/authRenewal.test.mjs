@@ -14,7 +14,7 @@ const { createAuthRenewal, AuthRenewalError, isRenewableUrl } = util
 async function loadPlugin(path, deps) {
   let src = await read(path)
   src = src.replace(/^import \{([^}]+)\} from '[^']+'\n/gm, (_, names) => `const {${names}} = __deps\n`)
-  src = src.replace('export default function', 'return function')
+  src = src.replace('export default ', 'return ')
   return new Function('__deps', src)(deps)
 }
 
@@ -547,4 +547,76 @@ test('the session token renewed natively later wins over an older JS renewal', a
   assert.equal(native.calls.length, 2, 'renews instead of retrying with the older access-1')
   native.calls[1].resolve({ status: 'success', accessToken: 'access-3' })
   assert.equal(await next, 'access-3')
+})
+
+// Final review: logout, startup reconnect and late native events
+
+test('latestToken never hands out another server or account token', async () => {
+  const { renewal, native } = coordinator()
+  assert.equal(renewal.latestToken('server-a'), 'access-0', 'the signed-in session')
+  assert.equal(renewal.latestToken('server-a-account-2'), null, 'not the session token of another account')
+  const b = renewal.renew({ serverConnectionConfigId: 'server-b', token: 'b-expired' })
+  await flush()
+  native.calls[0].resolve({ status: 'success', accessToken: 'b-1' })
+  await b
+  assert.equal(renewal.latestToken('server-b'), 'b-1', 'renewed while connecting')
+  renewal.invalidate()
+  assert.equal(renewal.latestToken('server-b'), null, 'forgotten after logout or a switch')
+})
+
+test('app startup: authorize with an expired saved token renews, and the renewed token is the one to save', async () => {
+  // layouts/default.vue attemptConnection: nobody is signed in yet, the saved server's token has expired
+  const store = fakeStore({ id: null, token: null })
+  const { ctx, native, http } = await app({ store })
+  const saved = { id: 'server-a', address: 'https://a.test.invalid', token: 'access-expired' }
+  const authorize = ctx.$nativeHttp.post(`${saved.address}/api/authorize`, null, { headers: { Authorization: `Bearer ${saved.token}` }, serverConnectionConfig: saved })
+  await flush(30)
+  answer(native, http, 0, 'access-1')
+  assert.equal((await authorize).token, 'access-1')
+  assert.equal(ctx.$authRenewal.latestToken(saved.id) || saved.token, 'access-1', 'not the expired token')
+  assert.equal(native.calls.length, 1)
+})
+
+test('logout invalidates renewals before its own async steps finish', async () => {
+  let src = await read('../store/user.js')
+  src = src.replace(/^import .*\n/gm, '').replace(/^export const (\w+) =/gm, 'exports.$1 =')
+  const exports = {}
+  new Function('exports', 'AbsLogger', src)(exports, { info: async () => {} })
+  const { renewal, native } = coordinator()
+  const waiting = kindOf(renewal.renew({ serverConnectionConfigId: 'server-a', token: 'access-0' }))
+  await flush()
+  const dbLogout = deferred()
+  const thisCtx = { $authRenewal: renewal, $db: { logout: () => dbLogout.promise }, $socket: { logout() {} }, $localStore: { removeLastLibraryId() {} } }
+  const done = exports.actions.logout.call(thisCtx, { state: { serverConnectionConfig: { id: 'server-a', name: 'synthetic' } }, commit() {} })
+  assert.equal(await waiting, 'stale', 'settled while native logout is still running')
+  native.calls[0].resolve({ status: 'success', accessToken: 'access-late' })
+  dbLogout.resolve()
+  await done
+  assert.equal(renewal.latestToken('server-a'), 'access-0', 'the late token was not taken')
+})
+
+test('late native token events after logout or in a recreated WebView do not sign anything in or out', async () => {
+  const listeners = {}
+  const db = await loadPlugin('../plugins/db.js', {
+    AbsDatabase: { addListener: (name, fn) => (listeners[name] = fn) },
+    deviceDataSummary: () => '',
+    serverConnectionConfigSummary: () => ''
+  })
+  const store = fakeStore({ id: null, token: null }) // signed out (or a fresh WebView after logout)
+  const signedOut = []
+  const appCtx = { $authRenewal: { signInAgain: async (id) => signedOut.push(id) } }
+  db.call(null, { app: appCtx, store }, () => {})
+  listeners.onTokenRefresh({ accessToken: 'access-late', serverConnectionConfigId: 'server-a' })
+  assert.equal(store.getters['user/getToken'], null)
+
+  // Signed into server B: a late token or failure for server A is ignored by the listener and the sign-in guard
+  const storeB = fakeStore({ id: 'server-b', address: 'https://b.test.invalid', token: 'b-0' })
+  db.call(null, { app: appCtx, store: storeB }, () => {})
+  listeners.onTokenRefresh({ accessToken: 'access-late', serverConnectionConfigId: 'server-a' })
+  assert.equal(storeB.getters['user/getToken'], 'b-0')
+  listeners.onTokenRefresh({ accessToken: 'b-1', serverConnectionConfigId: 'server-b' })
+  assert.equal(storeB.getters['user/getToken'], 'b-1', 'its own renewal still applies')
+  const { ctx } = await app({ store: storeB })
+  await ctx.$authRenewal.signInAgain('server-a')
+  assert.deepEqual(storeB.dispatched, [])
 })

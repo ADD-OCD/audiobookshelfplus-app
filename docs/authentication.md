@@ -53,9 +53,20 @@ How the app signs in to an Audiobookshelf server and renews an expired access to
 
 **Connecting a saved server.**
 - `ServerConnectForm` calls `/api/authorize` with the saved access token before the connection becomes the session. A 401 there renews that connection without touching the store.
-- `setUserAndConnection` then saves `$authRenewal.renewedToken(id)`, not the expired token.
+- `setUserAndConnection` then saves `$authRenewal.latestToken(id)`, not the expired token. App startup does the same (`layouts/default.vue` `attemptConnection`). `latestToken` returns the signed-in session's token only when the session is that server, so another server's or account's token is never saved.
 
 **Logging.** Refresh logs carry no tokens, server addresses or usernames. The 401 log line has the request path only.
+
+## Logout semantics (upstream, unchanged)
+
+| Action | UI | Credentials |
+|---|---|---|
+| A. Disconnect / B. Logout | side drawer Disconnect, Account → Logout, the old-token check at startup (`user/logout`, without `logoutFromServer`) | The session ends at once: the store is cleared, native forgets the active and last server, and every renewal still running is invalidated. The saved server keeps its refresh token, so tapping it on the connect page reconnects without a password (upstream's intent: "support switching servers without logging back in"). |
+| C. Logout from the server | `user/logout(true)`: not used by any screen | Also ends the server's session (`POST /logout`). The refresh token stays in secure storage but is no longer valid. |
+| D. Remove a saved server | connect page, delete | Config and refresh token removed (`removeServerConnectionConfig`). A refresh finishing afterwards is discarded and can't store anything. |
+
+- **A late renewal after a logout** is stored for that saved server, because it's the same credential, rotated (a server answer is only written while the token it replaced is still stored).
+- It is never applied to the signed-out app, and it doesn't make the server the last or active one again. After an app or WebView restart, the app stays signed out until that server is chosen on the connect page.
 
 ## Tests
 
