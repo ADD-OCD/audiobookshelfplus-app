@@ -18,8 +18,12 @@ be) in the official app.
 
 ### Latest release
 
-**[Audiobookshelf+ v0.18.0](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/tag/v0.14.2-beta-plus-v0.18.0)** — RICE customization and sign-in reliability
-([download the APK](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/download/v0.14.2-beta-plus-v0.18.0/audiobookshelf-plus-v0.18.0-release.apk)). [CHANGELOG.md](CHANGELOG.md) lists the changes.
+**[Audiobookshelf+ v0.18.1](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/tag/v0.14.2-beta-plus-v0.18.1)** — Up Next restoration fix
+([download the APK](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/download/v0.14.2-beta-plus-v0.18.1/audiobookshelf-plus-v0.18.1-release.apk)). [CHANGELOG.md](CHANGELOG.md) lists the changes.
+
+New in v0.18.1:
+- Up Next shows your queue again after resuming a book once Android has closed the app (for example after a long
+  break or an update).
 
 New in v0.18.0:
 - Optional RICE customization (Settings → Appearance): ten starter palettes, your own color presets, the phone's
