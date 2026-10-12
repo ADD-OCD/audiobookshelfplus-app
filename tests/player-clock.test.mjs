@@ -10,16 +10,19 @@ const read = (path) => readFile(new URL(path, import.meta.url), 'utf8').then((s)
 const clock = await import(`data:text/javascript;base64,${Buffer.from(await read('../utils/playerClock.js')).toString('base64')}`)
 const { coarseTime, coarseClock, sleepRemainingLabel, createPainter } = clock
 
-test('coarseTime: whole minutes of listening time, so the step follows the playback rate', () => {
+test('coarseTime: whole steps from an origin, never before it', () => {
   assert.equal(coarseTime(0), 0)
   assert.equal(coarseTime(59.9), 0)
   assert.equal(coarseTime(60), 60)
   assert.equal(coarseTime(3725.4), 3720)
-  assert.equal(coarseTime(179, 1.5), 90)
-  assert.equal(coarseTime(180, 1.5), 180)
-  assert.equal(coarseTime(250, 2), 240)
+  assert.equal(coarseTime(179, 90), 90, 'a minute of listening at 1.5x is 90 s of media')
+  assert.equal(coarseTime(180, 90), 180)
+  assert.equal(coarseTime(250, 120), 240)
+  assert.equal(coarseTime(1037.5, 60, 1000.25), 1000.25, 'counted from a fractional chapter start')
+  assert.equal(coarseTime(1061, 60, 1000.25), 1060.25)
+  assert.equal(coarseTime(990, 60, 1000.25), 1000.25, 'never before the origin')
   for (const bad of [NaN, -5, Infinity]) assert.equal(coarseTime(bad), 0, String(bad))
-  assert.equal(coarseTime(125, 0), 120, 'a zero rate counts as 1')
+  assert.equal(coarseTime(125, 0), 120, 'a zero step counts as a minute')
 })
 
 test('coarseClock: H:MM, elapsed rounds down, remaining rounds up', () => {
@@ -115,12 +118,15 @@ const secondsToTimestamp = (seconds) => {
   return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`
 }
 
-function makePlayer(component, { everyMinute, rate = 1 }) {
+function makePlayer(component, { everyMinute, rate = 1, chapters = null, scaled = true, duration = 36000 }) {
   const counts = {}
   const ctx = { ...component.data.call({}) }
   ctx.playerSettings.updateEveryMinute = everyMinute
-  ctx.playerSettings.useChapterTrack = false
-  ctx.totalDuration = 36000
+  ctx.playerSettings.useChapterTrack = !!chapters
+  ctx.playerSettings.scaleElapsedTimeBySpeed = scaled
+  ctx.playbackSession = chapters ? { chapters } : null
+  ctx.$eventBus = { $emit() {} }
+  ctx.totalDuration = duration
   ctx.currentPlaybackRate = rate
   ctx.sleepTimeRemaining = 0
   ctx.$emit = () => {}
@@ -177,22 +183,107 @@ test('AudioPlayer, once a minute at 2x: still once per minute of listening, not 
   assert.equal(counts.playedTrack, 5)
 })
 
-test('AudioPlayer, once a minute: a seek and a drag are drawn at once and exactly', async () => {
+test('AudioPlayer, once a minute: a seek is drawn at once as the coarse position playback will report', async () => {
   const component = await loadPlayer()
   const { ctx, counts } = makePlayer(component, { everyMinute: true })
   play(ctx, { from: 1000, seconds: 5 })
-  const before = counts.playedTrack
-  ctx.seek(1010) // same minute: still drawn immediately
-  assert.equal(counts.playedTrack, before + 1)
-  assert.equal(ctx.$refs.playedTrack.style.width, `${(1010 / 36000) * 100}%`)
+  const before = { ...counts }
+  ctx.seek(1130) // another minute: bar and elapsed time move at once
+  assert.equal(counts.playedTrack, before.playedTrack + 1)
+  assert.equal(ctx.$refs.playedTrack.style.width, `${(1080 / 36000) * 100}%`)
+  assert.equal(ctx.$refs.currentTimestamp.innerText, '0:18')
+  // ...and when playback reports the position, the position is not redrawn (the buffered bar follows the new buffer)
+  const position = ({ bufferedTrack, ...rest }) => rest
+  const afterSeek = position(counts)
+  play(ctx, { from: 1131, seconds: 3 })
+  assert.deepEqual(position(counts), afterSeek)
   ctx.seekLoading = false
+  ctx.seek(1135) // same minute: nothing to redraw
+  assert.deepEqual(position(counts), afterSeek)
+})
 
+test('AudioPlayer, once a minute: a drag is drawn exactly, and its release snaps to the coarse position once', async () => {
+  const component = await loadPlayer()
+  const { ctx, counts } = makePlayer(component, { everyMinute: true })
+  play(ctx, { from: 1000, seconds: 5 })
   ctx.isDraggingCursor = true
   ctx.draggingCurrentTime = 1012.5
   ctx.updateTimestamp()
   ctx.updateTrack()
   assert.equal(ctx.$refs.currentTimestamp.innerText, '16:52')
   assert.equal(ctx.$refs.playedTrack.style.width, `${(1012.5 / 36000) * 100}%`)
+
+  ctx.draggingCurrentTime = 1500.5
+  ctx.touchend({ changedTouches: [{ pageY: 0 }] })
+  assert.equal(ctx.isDraggingCursor, false)
+  assert.equal(ctx.$refs.playedTrack.style.width, `${(1500 / 36000) * 100}%`)
+  assert.equal(ctx.$refs.currentTimestamp.innerText, '0:25')
+  const position = ({ bufferedTrack, ...rest }) => rest
+  const released = position(counts)
+  ctx.seekLoading = false
+  play(ctx, { from: 1501, seconds: 3 })
+  assert.deepEqual(position(counts), released, 'playback reporting the released position does not redraw it')
+})
+
+const chapters = [
+  { id: 0, start: 0, end: 95.5, title: 'One' },
+  { id: 1, start: 95.5, end: 130.25, title: 'Two' },
+  { id: 2, start: 130.25, end: 3000, title: 'Three' }
+]
+
+test('AudioPlayer, once a minute, chapter track: short chapters and fractional starts never draw before the chapter', async () => {
+  const component = await loadPlayer()
+  for (const rate of [1, 1.5, 2]) {
+    const { ctx } = makePlayer(component, { everyMinute: true, chapters, duration: 3000, rate })
+    for (let t = 0; t < 400; t += 0.5) {
+      ctx.currentTime = t
+      ctx.bufferedTime = t + 30
+      ctx.timeupdate()
+      const chapter = ctx.currentChapter
+      const width = parseFloat(ctx.$refs.playedTrack.style.width)
+      const left = parseFloat(ctx.$refs.trackCursor.style.left)
+      assert.ok(width >= 0 && width <= 100, `${rate}x t=${t}: width ${width}`)
+      assert.ok(left >= -14, `${rate}x t=${t}: thumb ${left}`)
+      assert.ok(ctx.timeRemaining >= 0 && ctx.timeRemaining <= (chapter.end - chapter.start) / rate + 1e-9, `${rate}x t=${t}: remaining ${ctx.timeRemaining}`)
+      assert.ok(!ctx.$refs.currentTimestamp.innerText.startsWith('-'), `${rate}x t=${t}`)
+    }
+  }
+})
+
+test('AudioPlayer, once a minute: the end of the book is drawn exactly, with no time left', async () => {
+  const component = await loadPlayer()
+  const { ctx } = makePlayer(component, { everyMinute: true, duration: 3725.4 })
+  play(ctx, { from: 3700, seconds: 20 })
+  assert.equal(ctx.$refs.playedTrack.style.width, `${(3660 / 3725.4) * 100}%`)
+  ctx.onMetadata({ duration: 3725.4, currentTime: 3725.4, playerState: 'ENDED' })
+  assert.equal(ctx.$refs.playedTrack.style.width, '100%')
+  assert.equal(ctx.timeRemainingPretty, '-0:00')
+  assert.equal(ctx.totalTimeRemainingPretty, '-0:00')
+  assert.equal(ctx.$refs.currentTimestamp.innerText, '1:02')
+})
+
+test('AudioPlayer, once a minute, elapsed not scaled by speed: media minutes are drawn one by one at 1.5x', async () => {
+  const component = await loadPlayer()
+  const { ctx } = makePlayer(component, { everyMinute: true, rate: 1.5, scaled: false })
+  const shown = []
+  for (let s = 0; s < 200; s++) {
+    ctx.currentTime = s * 1.5
+    ctx.bufferedTime = 0
+    ctx.timeupdate()
+    if (shown.at(-1) !== ctx.$refs.currentTimestamp.innerText) shown.push(ctx.$refs.currentTimestamp.innerText)
+  }
+  assert.deepEqual(shown, ['0:00', '0:01', '0:02', '0:03', '0:04'])
+})
+
+test('AudioPlayer, once a minute: the buffered bar steps by a fixed minute of media, whatever the speed', async () => {
+  const component = await loadPlayer()
+  for (const rate of [1, 2]) {
+    const { ctx } = makePlayer(component, { everyMinute: true, rate })
+    ctx.currentTime = 10
+    ctx.bufferedTime = 179
+    ctx.timeupdate()
+    assert.equal(ctx.$refs.bufferedTrack.style.width, `${(120 / 36000) * 100}%`, `${rate}x`)
+  }
 })
 
 test('AudioPlayer, once a minute: the sleep timer readout is in minutes', async () => {

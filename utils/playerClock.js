@@ -4,12 +4,14 @@
 
 export const COARSE_STEP_S = 60
 
-// The position the player draws: whole minutes of listening time (media time over the playback rate), so every readout
-// and bar derived from it changes at the same moment, once per minute of listening at any speed
-export function coarseTime(seconds, rate = 1) {
-  const step = COARSE_STEP_S * (rate > 0 ? rate : 1)
-  if (!Number.isFinite(seconds) || seconds <= 0) return 0
-  return Math.floor(seconds / step) * step
+// The position the player draws: `seconds` rounded down to whole `step`s counted from `origin` (the start of the book, or of
+// the chapter on the chapter track), never before the origin. Every readout and bar derived from it changes at the same
+// moment. The step is a minute of whatever the readout shows: listening time (60 s times the rate) or media time (60 s).
+export function coarseTime(seconds, step = COARSE_STEP_S, origin = 0) {
+  const from = Number.isFinite(origin) ? origin : 0
+  if (!Number.isFinite(seconds) || seconds <= from) return from
+  const size = step > 0 ? step : COARSE_STEP_S
+  return from + Math.floor((seconds - from) / size) * size
 }
 
 // H:MM. Elapsed time rounds down; remaining time rounds up, so it reaches 0:00 only at the end

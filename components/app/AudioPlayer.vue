@@ -158,7 +158,7 @@ import { normalizePlaybackRate, formatPlaybackRate } from '@/utils/playbackRate'
 import coverPresentation from '@/theme/coverPresentation'
 import playerLayout from '@/theme/playerLayout'
 import WrappingMarquee from '@/assets/WrappingMarquee.js'
-import { coarseTime, coarseClock, sleepRemainingLabel, createPainter } from '@/utils/playerClock'
+import { COARSE_STEP_S, coarseTime, coarseClock, sleepRemainingLabel, createPainter } from '@/utils/playerClock'
 import jumpLabelMixin from '@/mixins/jumpLabel'
 
 const setText = (el, value) => (el.innerText = value)
@@ -432,8 +432,7 @@ export default {
       return this.playbackSession?.chapters || []
     },
     currentChapter() {
-      if (!this.chapters.length) return null
-      return this.chapters.find((ch) => Number(Number(ch.start).toFixed(2)) <= this.currentTime && Number(Number(ch.end).toFixed(2)) > this.currentTime)
+      return this.chapterAt(this.currentTime)
     },
     nextChapter() {
       if (!this.chapters.length) return
@@ -454,8 +453,7 @@ export default {
     },
     // The position the readouts and bars are drawn from
     drawnTime() {
-      const time = this.isDraggingCursor ? this.draggingCurrentTime : this.currentTime
-      return this.coarseDrawing ? coarseTime(time, this.currentPlaybackRate) : time
+      return this.drawTime(this.isDraggingCursor ? this.draggingCurrentTime : this.currentTime, this.currentChapter)
     },
     currentTimePretty() {
       let currentTimeToUse = this.drawnTime
@@ -509,6 +507,20 @@ export default {
     }
   },
   methods: {
+    chapterAt(time) {
+      if (!this.chapters.length) return null
+      return this.chapters.find((ch) => Number(Number(ch.start).toFixed(2)) <= time && Number(Number(ch.end).toFixed(2)) > time)
+    },
+    // Coarse drawing: whole minutes of what the elapsed readout shows (listening time when it is scaled by speed, media
+    // time otherwise), counted from the chapter start on the chapter track so its bar never starts below zero. The end
+    // of the book is drawn exactly, so a finished book reads 100% and no time left
+    drawTime(time, chapter) {
+      if (!this.coarseDrawing) return time
+      if (this.isEnded || time >= this.totalDuration) return Math.min(time, this.totalDuration)
+      const step = COARSE_STEP_S * (this.playerSettings.scaleElapsedTimeBySpeed && this.currentPlaybackRate > 0 ? this.currentPlaybackRate : 1)
+      const origin = this.playerSettings.useChapterTrack && chapter ? Number(chapter.start) : 0
+      return coarseTime(time, step, origin)
+    },
     clockText(seconds, roundUp = false) {
       return this.coarseDrawing ? coarseClock(seconds, roundUp) : this.$secondsToTimestamp(seconds)
     },
@@ -664,16 +676,18 @@ export default {
         this.$refs.readyTrack.style.width = readyPercent + '%'
       }
     },
-    updateTimestamp() {
+    // `at`: draw this position instead of the current one (a seek target, before playback reports it)
+    updateTimestamp(at) {
       const ts = this.$refs.currentTimestamp
       if (!ts) {
         console.error('No timestamp el')
         return
       }
 
-      let currentTime = this.drawnTime
-      if (this.playerSettings.useChapterTrack && this.currentChapter) {
-        currentTime = Math.max(0, currentTime - this.currentChapter.start)
+      const chapter = at === undefined ? this.currentChapter : this.chapterAt(at)
+      let currentTime = at === undefined ? this.drawnTime : this.drawTime(at, chapter)
+      if (this.playerSettings.useChapterTrack && chapter) {
+        currentTime = Math.max(0, currentTime - chapter.start)
       }
       if (this.playerSettings.scaleElapsedTimeBySpeed) {
         currentTime = currentTime / this.currentPlaybackRate
@@ -699,20 +713,26 @@ export default {
       this.updateTimestamp()
       this.updateTrack()
     },
-    updateTrack() {
+    // `at`: draw this position instead of the current one (a seek target, before playback reports it)
+    updateTrack(at) {
       // Update progress track UI
-      let currentTimeToUse = this.drawnTime
-      const bufferedTime = this.coarseDrawing ? coarseTime(this.bufferedTime, this.currentPlaybackRate) : this.bufferedTime
+      const chapter = at === undefined ? this.currentChapter : this.chapterAt(at)
+      const currentTimeToUse = at === undefined ? this.drawnTime : this.drawTime(at, chapter)
+      const onChapterTrack = this.playerSettings.useChapterTrack && chapter
+      // The buffered bar is a fixed media-time step: it does not depend on the playback speed
+      const bufferedTime = this.coarseDrawing ? coarseTime(this.bufferedTime, COARSE_STEP_S, onChapterTrack ? Number(chapter.start) : 0) : this.bufferedTime
       let percentDone = currentTimeToUse / this.totalDuration
       const totalPercentDone = percentDone
       let bufferedPercent = bufferedTime / this.totalDuration
       const totalBufferedPercent = bufferedPercent
 
-      if (this.playerSettings.useChapterTrack && this.currentChapter) {
-        const currChapTime = currentTimeToUse - this.currentChapter.start
-        percentDone = currChapTime / this.currentChapterDuration
-        bufferedPercent = Math.max(0, Math.min(1, (bufferedTime - this.currentChapter.start) / this.currentChapterDuration))
+      if (onChapterTrack) {
+        const chapterDuration = chapter.end - chapter.start
+        const currChapTime = currentTimeToUse - chapter.start
+        percentDone = currChapTime / chapterDuration
+        bufferedPercent = Math.max(0, Math.min(1, (bufferedTime - chapter.start) / chapterDuration))
       }
+      if (this.coarseDrawing) percentDone = Math.max(0, Math.min(1, percentDone))
 
       const playedPercent = percentDone * 100
       const bufferedPercentWidth = bufferedPercent * 100
@@ -745,9 +765,14 @@ export default {
       AbsAudioPlayer.seek({ value: time })
 
       if (this.$refs.playedTrack) {
-        const perc = time / this.totalDuration
-        // A seek is drawn at once, coarse drawing or not
-        this.painter(this.$refs.playedTrack, 'width', perc * 100 + '%', setWidth, true)
+        if (this.coarseDrawing) {
+          // Drawn at once, and already as the coarse position playback will report, so it is not redrawn a second later
+          this.updateTimestamp(time)
+          this.updateTrack(time)
+        } else {
+          const perc = time / this.totalDuration
+          this.painter(this.$refs.playedTrack, 'width', perc * 100 + '%', setWidth, true)
+        }
 
         this.$refs.playedTrack.classList.remove('bg-gray-200')
         this.$refs.playedTrack.classList.add('bg-yellow-300')
@@ -824,10 +849,14 @@ export default {
       this.touchStartY = 0
 
       if (this.isDraggingCursor) {
+        // Ended before the seek, so a coarse player draws the released position coarse right away
+        this.isDraggingCursor = false
         if (this.draggingCurrentTime !== this.currentTime) {
           this.seek(this.draggingCurrentTime)
+        } else if (this.playerSettings.updateEveryMinute) {
+          this.updateTimestamp()
+          this.updateTrack()
         }
-        this.isDraggingCursor = false
       } else {
         if (touchDuration > 1200) {
           // console.log('touch too long', touchDuration)
