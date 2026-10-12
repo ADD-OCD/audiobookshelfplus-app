@@ -1,6 +1,6 @@
 # RICE customization
 
-Settings → Appearance. Status: branch `feature/rice-customization`, not merged or released.
+Settings → Appearance. Status: merged into `plus` (2026-10-12), not in any release yet.
 
 RICE lets the user customize colors and a few bounded style options, choose established starter palettes, follow the device's colors, and import palettes from public Linux theme projects. It extends the semantic theme engine (`docs/theme-architecture.md`); it doesn't replace it. Dark, Black, Light and LLAMA are unchanged and remain the only built-in themes.
 
@@ -227,6 +227,8 @@ The browser development build refuses imports, because a browser fetch can't enf
 | `ThemeImportTest.kt` | URL policy, address classification, guarded DNS, fake GitHub API: discovery, direct paths, symlinks/executables/submodules, private repos, refs, tags, truncated trees, blob integrity/UTF-8/LFS, redirects, size/compression/rate-limit/request/byte/time budgets, cancel |
 
 The device checklist (`docs/device-regression-checklist.md`) has a RICE item for a Samsung phone.
+
+**Physical validation (Galaxy S22 Ultra, One UI 8, 2026-10-12):** the current system palette matched the rendered app and widget colors in light and dark; live light/dark switching, background/foreground, WebView reload, widget Play/Pause and the return to built-ins passed. Two light-appearance fixes came from it (mini-player play glyph, widget button faces). Not exercised: changing the One UI Color palette itself (checklist item 8.3, first step).
 
 ## Limitations
 

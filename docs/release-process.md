@@ -114,6 +114,11 @@ Milestones on `plus` that weren't distributed builds, so they have no `versionCo
   - **Evidence scope:** the final grid-title fix was validated on the accepted build. The rest of the on-device evidence comes from the build before it (`a5828114`), which differed only in that fix.
 - **Not tested on a device** (no test content): the EPUB, MOBI, comic and podcast flows; see `docs/future-work.md`. The S26 Ultra was not part of this validation.
 
+**RICE customization (2026-10-12).** Merged from `feature/rice-customization` (final commit `bae478a4`); not a distributed build, so `versionCode` stays 133 and 134 is still unused. Listed under Unreleased in `CHANGELOG.md`; details in `docs/rice-customization.md`.
+
+- **Automated results:** JS 364/364, Kotlin 283/283 (WidgetContainment 8/8), `lintDebug` 0 errors / 108 warnings (the baseline register), `lintRelease` 0 / 103, web build, Capacitor sync, debug and release builds, translation order; GitHub Build APK and translation checks passed.
+- **Physical validation:** Samsung Galaxy S22 Ultra (Android 16, One UI 8): the system palette through public APIs matched the rendered colors in light and dark, live system light/dark switching, background/foreground, WebView reload, return to the built-in themes, widget colors, text and Play/Pause. Two light-appearance defects found there were fixed and rechecked (mini-player play glyph, widget button faces). Emulator (Android 15) covered starters, the editor, playback continuity, recovery and a live GitHub import. The S26 Ultra was not part of this validation.
+
 ## Announcements
 
 **Deferred for v0.17.0:** v0.17.0 introduced the in-app updater and was published without an Announcement. The updater

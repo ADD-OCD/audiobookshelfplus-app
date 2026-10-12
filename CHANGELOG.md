@@ -16,7 +16,7 @@ On `plus`, not in any release yet (merged from `fix/auth-refresh-single-flight`)
 - **No crossed sessions:** a renewal still running when you sign out or switch server or account can't change the new
   session or the saved sign-in. Details: `docs/authentication.md`.
 
-On branch `feature/rice-customization` (not merged or released):
+Also on `plus`, not in any release yet (merged from `feature/rice-customization`):
 
 - **RICE customization** (Settings → Appearance), off by default; the built-in themes are unchanged.
   - Ten starter palette adaptations: Catppuccin Mocha and Latte, Dracula, Nord, Gruvbox, Tokyo Night, Rosé Pine,
