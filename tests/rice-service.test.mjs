@@ -332,3 +332,28 @@ test('the applied appearance never restyles the editor preview, and the preview 
   assert.match(preview, /\.rice-preview \{ font-weight: 400; \}/)
   assert.doesNotMatch(preview, /html/)
 })
+
+test('the player play glyph is black on light RICE schemes and unchanged for built-ins (S22 Follow device, light)', async () => {
+  const { coverColorPresentation } = require('../theme/coverPresentation.js')
+  const player = await read('../components/app/AudioPlayer.vue')
+  const binding = player.match(/<span v-if="!showLoadingState" class="material-symbols fill" :class="(\{[^"]*\})">/)
+  assert.ok(binding, 'play glyph class binding')
+  const classes = (coverChrome) =>
+    Object.entries(vm.runInNewContext(`(${binding[1]})`, { coverChrome, seekLoading: false }))
+      .filter(([, on]) => on)
+      .map(([c]) => c)
+  const lightRice = coverColorPresentation({ id: 'light', colorScheme: 'light', tokens: { 'presentation.cover-color': 'theme' } }, { rgb: 'rgb(9, 9, 9)', isLight: false })
+  const darkRice = coverColorPresentation({ id: 'dark', colorScheme: 'dark', tokens: { 'presentation.cover-color': 'theme' } }, { rgb: 'rgb(9, 9, 9)', isLight: false })
+  assert.deepEqual(classes(lightRice), ['text-black']) // the contrast model's '#black' glyph pair (theme/rice/contrast.js)
+  assert.deepEqual(classes(darkRice), ['text-white'])
+  // Built-ins (legacy cover policy, and LLAMA's dark theme policy) render exactly as before
+  for (const id of ['dark', 'black', 'light', 'llama']) {
+    for (const cover of [
+      { rgb: 'rgb(9, 9, 9)', isLight: false },
+      { rgb: 'rgb(240, 240, 240)', isLight: true }
+    ]) {
+      const chrome = coverColorPresentation(engine.getTheme(id), cover)
+      assert.deepEqual(classes(chrome), chrome.control && !chrome.isLight ? ['text-white'] : [], `${id} ${cover.rgb}`)
+    }
+  }
+})

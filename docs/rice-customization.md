@@ -155,8 +155,9 @@ No wallpaper bitmap, Samsung settings, Theme Park or Galaxy Themes data, private
 - **Without a palette:** Android 11 and older (or an unreadable palette) follow light/dark with built-in Dark/Light.
 - **Native background:** the app-owned window background behind the WebView's inset margins takes the custom background; built-ins restore the original `#232323`. Inset handling is unchanged.
 - **Status bar icons:** follow the appearance's light/dark through the existing StatusBar call.
+- **Player glyph:** on light RICE appearances the play/pause glyph is black on the `surface.raised` face (the `#black` glyph pair in `contrast.js`); dark ones keep white.
 - **Widget:**
-  - **RICE presets and starters on Android 12+:** the standard layouts are tinted by `WidgetPaint` (container, panels, text, icons, progress); ids, actions, sizes and artwork are unchanged.
+  - **RICE presets and starters on Android 12+:** the standard layouts are tinted by `WidgetPaint` (container, panels, text, icons, progress); ids, actions, sizes and artwork are unchanged. On a light container the buttons take `widget_button_bg_on_light` (the standard face's dark-ink twin), since the standard white-wash faces would vanish.
   - **LLAMA copies:** keep the LLAMA widget.
   - **Android 11 and older:** the standard look.
   - **Device mode:** re-reads the current palette at each widget update, even without the app running.
@@ -233,6 +234,7 @@ The device checklist (`docs/device-regression-checklist.md`) has a RICE item for
 - **Fixed colors:** some component colors predate the token system and stay fixed in every appearance: the yellow in-progress bar on book cards, series badges, overlay scrims. See "Remaining hardcoded presentation values" in `docs/theme-architecture.md`.
 - **Widget:** the RICE widget tint needs Android 12+. LLAMA-family copies use the LLAMA widget unchanged.
 - **Not themed:** the media notification, launcher icon and native dialogs are not themed.
+- **Three-button navigation:** with button navigation, One UI draws its own mostly opaque dark scrim over the navigation bar (seen on an S22: `#212122` over a dark custom background, `#4F4E4F` over a light one; built-in Light shows the same dark bar). Gesture navigation shows the custom background.
 - **Samsung propagation:** how quickly a changed One UI Color palette reaches the public resources (and a widget while the app is closed) depends on the OEM. It is re-read on configuration change, resume and widget updates.
 - **Import:** GitHub only, four formats. Importing doesn't run in the browser development build. Rate limits are GitHub's (60 unauthenticated requests per hour per IP).
 - **Not yet:** image-based palettes (the schema reserves `source.kind = 'image'`), more formats and other hosts.

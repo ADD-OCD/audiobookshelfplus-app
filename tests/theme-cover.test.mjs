@@ -85,7 +85,8 @@ test('no cover-derived style binding bypasses the policy in the player or item h
   assert.doesNotMatch(template, /backgroundColor:[^}]*coverRgb/)
   assert.doesNotMatch(template, /coverBgIsLight/)
   assert.doesNotMatch(template, /theme !== 'black'/)
-  assert.equal((template.match(/coverChrome\./g) || []).length, 10)
+  // 12: RICE added the play glyph's 'text-black' for the theme policy on light schemes (usesTheme && isLight)
+  assert.equal((template.match(/coverChrome\./g) || []).length, 12)
   // The play button's white wash follows the projection, never a theme id check in the player
   assert.match(template, /<div v-if="coverChrome\.controlWash" class="absolute top-0 left-0 w-full h-full bg-white bg-opacity-20 pointer-events-none" \/>/)
   assert.doesNotMatch(player, /llama|theme\.id|\$theme\.(id|current)/i)

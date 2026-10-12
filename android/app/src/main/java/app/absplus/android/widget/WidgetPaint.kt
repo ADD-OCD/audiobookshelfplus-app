@@ -30,7 +30,13 @@ object WidgetPaint {
     views.setColorStateList(R.id.widgetButtonContainer, "setBackgroundTintList", tint(palette.background))
     views.setTextColor(R.id.widgetMediaTitle, RiceColor.toArgb(palette.text))
     views.setTextColor(R.id.widgetArtistText, RiceColor.toArgb(palette.muted))
-    for (id in intArrayOf(R.id.widgetRewindButton, R.id.widgetPlayPauseButton, R.id.widgetFastForwardButton)) views.setInt(id, "setColorFilter", RiceColor.toArgb(palette.icon))
+    // Button faces: the standard face is a white wash made for the dark container; on a light container it would
+    // vanish, so light palettes take its dark-ink twin
+    val face = if (RiceColor.isDark(palette.background)) R.drawable.widget_button_bg else R.drawable.widget_button_bg_on_light
+    for (id in intArrayOf(R.id.widgetRewindButton, R.id.widgetPlayPauseButton, R.id.widgetFastForwardButton)) {
+      views.setInt(id, "setColorFilter", RiceColor.toArgb(palette.icon))
+      views.setInt(id, "setBackgroundResource", face)
+    }
     if (size == WidgetSize.FULL) {
       views.setTextColor(R.id.widgetElapsedText, RiceColor.toArgb(palette.text))
       views.setTextColor(R.id.widgetRemainingText, RiceColor.toArgb(palette.text))

@@ -107,7 +107,7 @@
           <div class="play-btn cursor-pointer shadow-sm flex items-center justify-center rounded-full text-primary mx-4 relative overflow-hidden" :style="{ backgroundColor: coverChrome.control }" @mousedown.prevent @mouseup.prevent @click.stop="playPauseClick">
             <div v-if="coverChrome.controlWash" class="absolute top-0 left-0 w-full h-full bg-white bg-opacity-20 pointer-events-none" />
 
-            <span v-if="!showLoadingState" class="material-symbols fill" :class="{ 'text-white': coverChrome.control && !coverChrome.isLight, 'animate-spin': seekLoading }">{{ seekLoading ? 'autorenew' : !isPlaying ? 'play_arrow' : 'pause' }}</span>
+            <span v-if="!showLoadingState" class="material-symbols fill" :class="{ 'text-white': coverChrome.control && !coverChrome.isLight, 'text-black': coverChrome.usesTheme && coverChrome.isLight, 'animate-spin': seekLoading }">{{ seekLoading ? 'autorenew' : !isPlaying ? 'play_arrow' : 'pause' }}</span>
             <widgets-spinner-icon v-else class="h-8 w-8" />
           </div>
           <div v-show="!playerSettings.lockUi" class="player-key jump-icon text-fg cursor-pointer flex flex-col items-center" :class="showLoadingState ? 'text-opacity-10 key-disabled' : 'text-opacity-75'" @click.stop="jumpForward">

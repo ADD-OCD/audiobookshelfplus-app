@@ -1,6 +1,7 @@
 package app.absplus.android.appearance
 
 import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -227,4 +228,20 @@ class RiceAppearanceTest {
     assertNull(root.findViewById<ImageView>(R.id.widgetPlayPauseButton).colorFilter)
   }
 
+  @Test
+  fun lightPalettesGetDarkInkButtonFacesAndDarkPalettesKeepTheStandardFace() {
+    // S22 Follow device (light): the standard white-wash faces vanished on a light container
+    fun faces(background: IntArray): List<Int> {
+      val palette = WidgetPalette(background, background, intArrayOf(26, 27, 32), intArrayOf(68, 70, 79), intArrayOf(26, 27, 32), intArrayOf(224, 221, 225), intArrayOf(71, 93, 146))
+      val views = RemoteViews(ctx.packageName, R.layout.media_player_widget_full)
+      WidgetPaint.apply(views, WidgetSize.FULL, WidgetLook(WidgetTheme.STANDARD, palette))
+      val root = LayoutInflater.from(ctx).inflate(R.layout.media_player_widget_full, FrameLayout(ctx), false)
+      views.reapply(ctx, root)
+      return listOf(R.id.widgetRewindButton, R.id.widgetPlayPauseButton, R.id.widgetFastForwardButton).map {
+        (root.findViewById<ImageView>(it).background as GradientDrawable).color!!.defaultColor
+      }
+    }
+    assertEquals(List(3) { 0x1A000000 }, faces(intArrayOf(254, 251, 255)))
+    assertEquals(List(3) { 0x1AFFFFFF }, faces(intArrayOf(26, 27, 32)))
+  }
 }
