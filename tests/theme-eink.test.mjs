@@ -17,6 +17,9 @@ const eink = () => engine.getTheme('eink')
 const ROOT = "html[data-theme='eink']"
 const INK = [0, 0, 0]
 const PAPER = [255, 255, 255]
+const INK_VAR = 'rgb(var(--color-fg))'
+const PAPER_VAR = 'rgb(var(--color-bg))'
+const MUTED_VAR = 'rgb(var(--color-fg-muted))'
 
 const luminance = ([r, g, b]) => {
   const lin = (c) => ((c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
@@ -74,7 +77,7 @@ test('E-ink uses its own finish and theme cover color: chrome is paper, cover ar
   assert.doesNotMatch(chrome.backdrop, /200/)
 })
 
-const PAINT_ONLY = /^(background-color|background-image|box-shadow|border-color|color)$/
+const PAINT_ONLY = /^(background-color|background-image|box-shadow|border-color|color|text-decoration-line)$/
 // A hard line: no offset beyond 1px, no blur, an ink or paper token color
 const LINE = /^(inset )?(0|-?1px) (0|-?1px) 0( [12]px)? rgb\(var\(--color-(fg|bg)\)\)$/
 
@@ -89,6 +92,7 @@ test('E-ink recipe: paint only, under its own root, no gradients, translucency o
       assert.doesNotMatch(value, /gradient|url|['"]|\//, `${selector}: ${property}: ${value}`)
       if (property === 'box-shadow') assert.ok(value === 'none' || LINE.test(value), `${selector}: ${value}`)
       else if (property === 'background-image') assert.equal(value, 'none', selector)
+      else if (property === 'text-decoration-line') assert.equal(value, 'underline', selector)
       else assert.match(value, /^(rgb\(var\(--color-[a-z-]+\)\)|transparent)$/, `${selector}: ${value}`)
     }
   }
@@ -113,6 +117,49 @@ test('E-ink recipe: controls it turns paper never keep a white glyph', async () 
   // Modal titles and the close glyph sit on the paper backdrop
   assert.equal(rules[`${ROOT} .modal > .z-40.text-white`].color, 'rgb(var(--color-fg))')
   assert.equal(rules[`${ROOT} .modal > .z-40 .text-white`].color, 'rgb(var(--color-fg))')
+})
+
+// Foregrounds hardcoded for the dark themes, where they sit on paper in E-ink: [template, class it uses, eink selector, color]
+const ON_PAPER = [
+  ['../components/ui/ReadIconBtn.vue', 'w-5 h-5 text-white', '.icon-btn > div.text-white', INK_VAR],
+  ['../components/tables/podcast/EpisodeRow.vue', "'text-white text-opacity-40'", '.episode-play-control.text-white', MUTED_VAR],
+  ['../components/tables/podcast/LatestEpisodeRow.vue', "'text-fg text-opacity-40'", '.episode-play-control.text-opacity-40', MUTED_VAR],
+  ['../components/ui/MultiSelect.vue', 'text-gray-50', '.text-gray-50', INK_VAR],
+  ['../components/modals/AutoSleepTimerRewindLengthModal.vue', 'text-gray-50', '.text-gray-50', INK_VAR],
+  ['../components/ui/MultiSelect.vue', 'material-symbols text-white', '.bg-opacity-75 > .material-symbols.text-white', INK_VAR],
+  ['../components/ui/MultiSelect.vue', 'text-yellow-400', '.text-yellow-400', INK_VAR],
+  ['../components/modals/OrderModal.vue', 'text-yellow-300', '.text-yellow-300', INK_VAR],
+  ['../pages/localMedia/folders/index.vue', 'text-yellow-400', '.text-yellow-400', INK_VAR],
+  ['../components/cards/AuthorCard.vue', 'truncate text-gray-200', '.text-gray-200', MUTED_VAR],
+  ['../components/cards/ItemSearchCard.vue', 'text-gray-300', '.text-gray-300', MUTED_VAR],
+  ['../components/modals/PodcastEpisodesFeedModal.vue', 'text-gray-300', '.text-gray-300', MUTED_VAR],
+  ['../components/modals/downloads/DownloadItem.vue', 'text-gray-400', '.text-gray-400', MUTED_VAR],
+  ['../pages/item/_id/_episode/index.vue', 'text-blue-400', '.text-blue-400', INK_VAR],
+  ['../components/ui/Checkbox.vue', 'checkbox-mark', '.checkbox-box .checkbox-mark', INK_VAR]
+]
+
+test('E-ink: foregrounds hardcoded light for the dark themes are ink or the secondary gray on paper', async () => {
+  const rules = presets.presentationRules([eink()])
+  for (const [file, used, selector, color] of ON_PAPER) {
+    assert.ok((await read(file)).includes(used), `${file} still uses ${used}`)
+    assert.equal(rules[`${ROOT} ${selector}`]?.color, color, `${file}: ${selector}`)
+  }
+  // On a dark box they stay paper (author name overlay on the portrait, the card's play corner)
+  assert.equal(rules[`${ROOT} .bg-black .text-gray-200`].color, PAPER_VAR)
+  assert.equal(rules[`${ROOT} .bg-gradient-to-r.to-black .text-gray-200`].color, PAPER_VAR)
+  // Light borders and borderless fields get ink lines
+  for (const s of ['.border-white', '.row-play-btn', '.checkbox-box']) assert.equal(rules[`${ROOT} ${s}`]['border-color'], INK_VAR, s)
+  assert.equal(rules[`${ROOT} input.outline-none:not(.border)`]['box-shadow'], 'inset 0 0 0 1px rgb(var(--color-fg))')
+})
+
+test('E-ink: ink fills never carry an ink label', async () => {
+  const rules = presets.presentationRules([eink()])
+  // ui/Btn colors other than success keep the inherited (ink) label on a state fill, which is ink in E-ink
+  assert.match(await read('../components/ui/Btn.vue'), /list\.push\(`bg-\$\{this\.color\}`\)/)
+  for (const fill of ['error', 'info', 'warning']) assert.equal(rules[`${ROOT} .btn.bg-${fill}`].color, PAPER_VAR, fill)
+  assert.equal(rules[`${ROOT} .icon-btn.bg-error > .material-symbols`].color, PAPER_VAR)
+  assert.equal(rules[`${ROOT} .bg-black\\/80.text-fg`].color, PAPER_VAR)
+  for (const id of ['state.error', 'state.info', 'state.warning']) assert.deepEqual(eink().tokens[id], INK, id)
 })
 
 test('E-ink recipe: frames and lines come after shadow removal, so they win on shared elements', () => {

@@ -1124,6 +1124,7 @@ const EQUIPMENT_RULES = [
 // only: lines are hard, unblurred box-shadows (inside the box or a ring around it), so no size or position changes.
 const INK = 'rgb(var(--color-fg))'
 const PAPER = 'rgb(var(--color-bg))'
+const MUTED = 'rgb(var(--color-fg-muted))'
 const EINK_FRAME = `0 0 0 1px ${INK}`
 const EINK_FRAME_INSIDE = `inset 0 0 0 1px ${INK}`
 const EINK_RULE_BELOW = `inset 0 -1px 0 ${INK}`
@@ -1198,7 +1199,41 @@ const EINK_RULES = [
   // Mini-player: a line above it instead of its upward shadow (the full player keeps its own none)
   ['#streamContainer:not(.fullscreen) #playerContent', { 'box-shadow': EINK_RULE_ABOVE }],
   // Play/Pause: a paper key with an ink ring and ink glyph (its theme fill is paper, and its glyph would be paper too)
-  ['.play-btn', { color: INK, 'box-shadow': `inset 0 0 0 2px ${INK}` }]
+  ['.play-btn', { color: INK, 'box-shadow': `inset 0 0 0 2px ${INK}` }],
+
+  // Visibility on paper: foregrounds hardcoded for the dark themes (white, light grays, yellow and blue accents) would
+  // vanish on paper, so they become ink or the secondary gray. Where they sit on a dark box, they stay paper
+  ['.text-gray-50', { color: INK }],
+  ['.text-gray-200', { color: MUTED }],
+  ['.text-gray-300', { color: MUTED }],
+  ['.text-gray-400', { color: MUTED }],
+  ['.bg-black .text-gray-200', { color: PAPER }],
+  ['.bg-gradient-to-r.to-black .text-gray-200', { color: PAPER }],
+  ['.text-yellow-300', { color: INK }],
+  ['.text-yellow-400', { color: INK }],
+  // Timestamp links in episode descriptions: ink, so they keep an underline to read as links
+  ['.text-blue-400', { color: INK, 'text-decoration-line': 'underline' }],
+  ['.border-white', { 'border-color': INK }],
+  // Read-status ("mark as finished") key: its outline glyph is white
+  ['.icon-btn > div.text-white', { color: INK }],
+  // A finished episode's play control: dimmed white (or 40% ink, under 3:1) becomes the secondary gray
+  ['.episode-play-control.text-white', { color: MUTED }],
+  ['.episode-play-control.text-opacity-40', { color: MUTED }],
+  // Chip actions shown over a paper chip
+  ['.bg-opacity-75 > .material-symbols.text-white', { color: INK }],
+  ['.row-play-btn', { 'border-color': INK }],
+  // Episode number, season and type chips: half-transparent paper on paper, so they get an outline
+  ['.rounded-full.bg-primary.bg-opacity-50', { 'box-shadow': EINK_FRAME_INSIDE }],
+  // Text fields without a border (search) would be invisible on paper
+  ['input.outline-none:not(.border)', { 'box-shadow': EINK_FRAME_INSIDE }],
+  ['.checkbox-box', { 'border-color': INK }],
+  ['.checkbox-box .checkbox-mark', { color: INK }],
+  // Ink fills whose label inherits ink: buttons and icon keys in the state colors get a paper label
+  ['.btn.bg-error', { color: PAPER }],
+  ['.btn.bg-info', { color: PAPER }],
+  ['.btn.bg-warning', { color: PAPER }],
+  ['.icon-btn.bg-error > .material-symbols', { color: PAPER }],
+  ['.bg-black\\/80.text-fg', { color: PAPER }]
 ]
 
 const rootedRules = (theme, entries, base = {}) => {
