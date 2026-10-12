@@ -3,6 +3,19 @@
 Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and dates are recorded in
 `docs/release-process.md`, and the feature list in `readme.md` describes what the app contains.
 
+## Unreleased
+
+On `plus`, not in any release yet (merged from `fix/auth-refresh-single-flight`).
+
+- **Sign-in renewal:** when several requests find the sign-in expired at once, the app renews it once and retries
+  each of them. Overlapping renewals could use the same single-use refresh token and sign you out.
+- **Fewer unexpected sign-outs:**
+  - being offline or a server error while renewing no longer signs you out;
+  - neither does a request that fails for another reason after renewing.
+  You're signed out only when the server refuses the sign-in.
+- **No crossed sessions:** a renewal still running when you sign out or switch server or account can't change the new
+  session or the saved sign-in. Details: `docs/authentication.md`.
+
 ## v0.17.0 — In-app GitHub updates
 
 **Released 2026-10-11:** versionCode 133, versionName `0.14.2-beta` (upstream base unchanged), tag

@@ -14,6 +14,9 @@ Items marked **emulator-covered** already pass on an AOSP API 35 emulator (see t
 
 1. Install in place over the previous build. The app starts, the existing downloads are listed, and the Diagnostics log shows no "invalid download queue" line on a healthy install.
 2. Cold start after a reboot. There's no auto-play, and no restore happens until Play is pressed.
+3. Expired sign-in (test server with a short `ACCESS_TOKEN_EXPIRY`, `docs/authentication.md`):
+   - after the token expires, open a busy screen such as Home. It loads without a sign-in screen, and the server logs one `/auth/refresh`;
+   - with the phone offline when the token expires, you stay signed in, and going back online recovers.
 
 ## 2. Queue and continuous playback (emulator-covered)
 

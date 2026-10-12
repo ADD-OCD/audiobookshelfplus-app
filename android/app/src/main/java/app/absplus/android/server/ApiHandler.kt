@@ -42,6 +42,23 @@ class ApiHandler(var ctx:Context) {
     fun checkAbsDatabaseNotifyListenersInitted():Boolean {
       return ::absDatabaseNotifyListeners.isInitialized
     }
+
+    /** Bumped on logout and server switches; a request sent before then is not retried with renewed credentials. */
+    @Volatile var authGeneration = 0L
+      private set
+
+    fun invalidateAuthRequests() {
+      authGeneration++
+    }
+  }
+
+  /** Which saved server and token a request was sent with, so a 401 renews that server and not the current one. */
+  private data class AuthTag(val serverConnectionConfigId: String, val token: String, val generation: Long)
+
+  private fun Request.Builder.auth(config: ServerConnectionConfig?): Request.Builder {
+    val token = config?.token ?: DeviceManager.token
+    tag(AuthTag::class.java, AuthTag(config?.id ?: DeviceManager.serverConnectionConfigId, token, authGeneration))
+    return addHeader("Authorization", "Bearer $token")
   }
 
   private var defaultClient = OkHttpClient.Builder()
@@ -52,6 +69,12 @@ class ApiHandler(var ctx:Context) {
   private var pingClient = OkHttpClient.Builder().callTimeout(3, TimeUnit.SECONDS).build()
   private var jacksonMapper = jacksonObjectMapper().enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS.mappedFeature())
   private var secureStorage = SecureStorage(ctx)
+  private val tokenRefresher = TokenRefresher(
+          secureStorage,
+          addressFor = { id -> DeviceManager.getServerConnectionConfig(id)?.address },
+          onRotated = ::updateTokens,
+          onRejected = ::handleRefreshRejected,
+          log = { message -> AbsLogger.error(tag, message) })
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   data class LocalSessionSyncResult(val id:String, val success:Boolean, val progressSynced:Boolean?, val error:String?)
@@ -59,11 +82,10 @@ class ApiHandler(var ctx:Context) {
 
   private fun getRequest(endpoint:String, httpClient:OkHttpClient?, config:ServerConnectionConfig?, cb: (JSObject) -> Unit) {
     val address = config?.address ?: DeviceManager.serverAddress
-    val token = config?.token ?: DeviceManager.token
 
     try {
       val request = Request.Builder()
-        .url("${address}$endpoint").addHeader("Authorization", "Bearer $token")
+        .url("${address}$endpoint").auth(config)
         .build()
       makeRequest(request, httpClient, cb)
     } catch(e: Exception) {
@@ -76,14 +98,13 @@ class ApiHandler(var ctx:Context) {
 
   private fun postRequest(endpoint:String, payload: JSObject?, config:ServerConnectionConfig?, cb: (JSObject) -> Unit) {
     val address = config?.address ?: DeviceManager.serverAddress
-    val token = config?.token ?: DeviceManager.token
     val mediaType = "application/json; charset=utf-8".toMediaType()
     val requestBody = payload?.toString()?.toRequestBody(mediaType) ?: EMPTY_REQUEST
     val requestUrl = "${address}$endpoint"
     Log.d(tag, "postRequest to $requestUrl")
     try {
       val request = Request.Builder().post(requestBody)
-        .url(requestUrl).addHeader("Authorization", "Bearer ${token}")
+        .url(requestUrl).auth(config)
         .build()
       makeRequest(request, null, cb)
     } catch(e: Exception) {
@@ -99,7 +120,7 @@ class ApiHandler(var ctx:Context) {
     val requestBody = payload.toString().toRequestBody(mediaType)
     try {
       val request = Request.Builder().patch(requestBody)
-        .url("${DeviceManager.serverAddress}$endpoint").addHeader("Authorization", "Bearer ${DeviceManager.token}")
+        .url("${DeviceManager.serverAddress}$endpoint").auth(null)
         .build()
       makeRequest(request, null, cb)
     } catch(e: Exception) {
@@ -127,7 +148,7 @@ class ApiHandler(var ctx:Context) {
         response.use {
           if (it.code == 401) {
             // Handle 401 Unauthorized by attempting token refresh
-            AbsLogger.info(tag, "makeRequest: 401 Unauthorized for request to \"${request.url}\" - attempt token refresh")
+            AbsLogger.info(tag, "makeRequest: 401 Unauthorized for request to \"${request.url.encodedPath}\" - attempt token refresh")
             handleTokenRefresh(request, httpClient, cb)
             return
           }
@@ -165,37 +186,31 @@ class ApiHandler(var ctx:Context) {
   }
 
   /**
-   * Handles token refresh when a 401 Unauthorized response is received
-   * This function will:
-   * 1. Get the refresh token from secure storage for the current server connection
-   * 2. Make a request to /auth/refresh endpoint with the refresh token
-   * 3. Update the stored tokens with the new access token
-   * 4. Retry the original request with the new access token
-   * 5. If refresh fails, fail the request ([refreshAuthTokens] owns clearing the session)
-   *
-   * @param originalRequest The original request that failed with 401
-   * @param httpClient The HTTP client to use for the request
-   * @param callback The callback to return the response
+   * Handles a 401 for a request sent with a saved server's access token:
+   * - after a logout or server switch since the request was sent, it fails without renewing anything;
+   * - if that server already has a newer access token (another request renewed it), it retries with that one;
+   * - otherwise it waits for the shared refresh of that server ([TokenRefresher]) and retries once.
+   * Each request is retried at most once, and a failed refresh fails the request ([TokenRefresher] owns clearing the
+   * session when the server rejects the refresh token).
    */
   private fun handleTokenRefresh(originalRequest: Request, httpClient: OkHttpClient?, callback: (JSObject) -> Unit) {
-    val serverConnectionConfigId = DeviceManager.serverConnectionConfigId
-    refreshAuthTokens(serverConnectionConfigId, httpClient) { result ->
-      if (result is RefreshResult.Success) {
-        retryOriginalRequest(originalRequest, result.accessToken, httpClient, callback)
-      } else {
-        callback(JSObject().put("error", "Authentication failed - login again"))
-      }
+    val auth = originalRequest.tag(AuthTag::class.java)
+    val failed = { callback(JSObject().put("error", "Authentication failed - login again")) }
+    if (auth == null || auth.serverConnectionConfigId.isEmpty() || auth.generation != authGeneration) {
+      failed()
+      return
     }
-  }
-
-  sealed interface RefreshResult {
-    data class Success(val accessToken: String) : RefreshResult
-
-    /** The server rejected the refresh token, so the session has already been cleared. */
-    data object Rejected : RefreshResult
-
-    /** The refresh could not be completed. Credentials are untouched and the caller may retry. */
-    data object Transient : RefreshResult
+    when (val action = renewalAction(auth.token, DeviceManager.getServerConnectionConfig(auth.serverConnectionConfigId)?.token)) {
+      is RenewalAction.RetryWith -> retryOriginalRequest(originalRequest, action.accessToken, httpClient, callback)
+      RenewalAction.Refresh ->
+        refreshAuthTokens(auth.serverConnectionConfigId, httpClient) { result ->
+          if (result is RefreshResult.Success && auth.generation == authGeneration) {
+            retryOriginalRequest(originalRequest, result.accessToken, httpClient, callback)
+          } else {
+            failed()
+          }
+        }
+    }
   }
 
   /** Refreshes tokens for a specific saved server, including downloads queued while another server is active. */
@@ -204,61 +219,7 @@ class ApiHandler(var ctx:Context) {
           httpClient: OkHttpClient? = null,
           onResult: (RefreshResult) -> Unit
   ) {
-    val config = DeviceManager.getServerConnectionConfig(serverConnectionConfigId)
-    val refreshToken = secureStorage.getRefreshToken(serverConnectionConfigId)
-    if (config == null || refreshToken.isNullOrEmpty()) {
-      AbsLogger.error(tag, "No refresh token or server configuration for the saved server connection (config found=${config != null}, refresh token found=${!refreshToken.isNullOrEmpty()})")
-      handleRefreshRejected(serverConnectionConfigId)
-      onResult(RefreshResult.Rejected)
-      return
-    }
-    val request = try {
-      Request.Builder()
-              .url("${config.address}/auth/refresh")
-              .addHeader("x-refresh-token", refreshToken)
-              .addHeader("Content-Type", "application/json")
-              .post(EMPTY_REQUEST)
-              .build()
-    } catch (e: Exception) {
-      AbsLogger.error(tag, "Could not create refresh request for ${config.name}: ${e.message}")
-      onResult(RefreshResult.Transient)
-      return
-    }
-    (httpClient ?: defaultClient).newCall(request).enqueue(object : Callback {
-      override fun onFailure(call: Call, e: IOException) {
-        AbsLogger.error(tag, "Token refresh failed for ${config.name}: ${e.message}")
-        onResult(RefreshResult.Transient)
-      }
-
-      override fun onResponse(call: Call, response: Response) {
-        response.use {
-          if (!it.isSuccessful) {
-            AbsLogger.error(tag, "Token refresh returned ${it.code} for ${config.name}")
-            if (it.code != 401 && it.code != 403) {
-              onResult(RefreshResult.Transient)
-              return
-            }
-            handleRefreshRejected(serverConnectionConfigId)
-            onResult(RefreshResult.Rejected)
-            return
-          }
-          try {
-            val user = JSONObject(it.body!!.string()).optJSONObject("user")
-            val accessToken = user?.optString("accessToken").orEmpty()
-            if (accessToken.isEmpty()) {
-              AbsLogger.error(tag, "Refresh response had no access token for ${config.name}")
-              onResult(RefreshResult.Transient)
-              return
-            }
-            updateTokens(accessToken, user?.optString("refreshToken").orEmpty().ifEmpty { refreshToken }, serverConnectionConfigId)
-            onResult(RefreshResult.Success(accessToken))
-          } catch (e: Exception) {
-            AbsLogger.error(tag, "Could not parse refresh response for ${config.name}: ${e.message}")
-            onResult(RefreshResult.Transient)
-          }
-        }
-      }
-    })
+    tokenRefresher.refresh(serverConnectionConfigId, httpClient ?: defaultClient, onResult)
   }
 
   /**
@@ -269,35 +230,29 @@ class ApiHandler(var ctx:Context) {
   private fun handleRefreshRejected(serverConnectionConfigId: String) {
     // Must not throw: callers still have to report the refresh result to an in-flight request or download.
     try {
-      secureStorage.removeRefreshToken(serverConnectionConfigId)
       if (DeviceManager.serverConnectionConfigId != serverConnectionConfigId) return
       DeviceManager.serverConnectionConfig = null
       DeviceManager.deviceData.lastServerConnectionConfigId = null
       DeviceManager.dbManager.saveDeviceData(DeviceManager.deviceData)
+      invalidateAuthRequests()
       if (checkAbsDatabaseNotifyListenersInitted()) {
         absDatabaseNotifyListeners(
                 "onTokenRefreshFailure",
                 JSObject().put("error", "Token refresh failed").put("serverConnectionConfigId", serverConnectionConfigId))
       }
     } catch (e: Exception) {
-      AbsLogger.error(tag, "Could not clear session for $serverConnectionConfigId: ${e.message}")
+      AbsLogger.error(tag, "Could not clear the rejected session: ${e.message}")
     }
   }
 
   /**
-   * Updates the stored tokens with new access and refresh tokens
+   * Applies a renewed access token; [TokenRefresher] has already stored the rotated refresh token.
    *
+   * @param serverConnectionConfigId The saved server the token belongs to
    * @param newAccessToken The new access token
-   * @param newRefreshToken The new refresh token (or existing one if not provided)
    */
-  private fun updateTokens(newAccessToken: String, newRefreshToken: String, serverConnectionConfigId: String) {
+  private fun updateTokens(serverConnectionConfigId: String, newAccessToken: String) {
     try {
-      // Update the refresh token in secure storage if it's new
-      if (newRefreshToken != secureStorage.getRefreshToken(serverConnectionConfigId)) {
-        secureStorage.storeRefreshToken(serverConnectionConfigId, newRefreshToken)
-        Log.d(tag, "updateTokens: Updated refresh token in secure storage")
-      }
-
       // The refreshed connection may be queued in the downloader rather than currently active.
       DeviceManager.getServerConnectionConfig(serverConnectionConfigId)?.let { config ->
         config.token = newAccessToken
@@ -305,19 +260,20 @@ class ApiHandler(var ctx:Context) {
         Log.d(tag, "updateTokens: Updated access token in server connection config")
       }
 
-      // Send access token to Webview frontend
+      // Send access token to Webview frontend, only for the server it is using
       if (DeviceManager.serverConnectionConfigId == serverConnectionConfigId && checkAbsDatabaseNotifyListenersInitted()) {
         val tokenJsObject = JSObject()
         tokenJsObject.put("accessToken", newAccessToken)
+        tokenJsObject.put("serverConnectionConfigId", serverConnectionConfigId)
         absDatabaseNotifyListeners("onTokenRefresh", tokenJsObject)
       } else {
-        // Can happen if Webview is never run
-        Log.i(tag, "AbsDatabaseNotifyListeners is not initialized so cannot send new access token")
+        // Can happen if Webview is never run, or the refresh was for a server that is not active
+        Log.i(tag, "Not sending the new access token to the Webview")
       }
-      AbsLogger.info(tag, "updateTokens: Successfully refreshed auth tokens for server ${DeviceManager.serverConnectionConfigString}")
+      AbsLogger.info(tag, "updateTokens: Successfully refreshed auth tokens")
     } catch (e: Exception) {
       Log.e(tag, "updateTokens: Failed to update tokens", e)
-      AbsLogger.error(tag, "updateTokens: Failed to refresh auth tokens for server ${DeviceManager.serverConnectionConfigString} (error: ${e.message})")
+      AbsLogger.error(tag, "updateTokens: Failed to apply refreshed auth tokens (error: ${e.message})")
     }
   }
 

@@ -89,6 +89,30 @@ class AbsDatabaseWeb extends WebPlugin {
     return refreshToken ? { refreshToken } : null
   }
 
+  // Web version is only used for testing: no shared native refresh, so overlapping calls each refresh
+  async refreshAccessToken({ serverConnectionConfigId }) {
+    const deviceData = await this.getDeviceData()
+    const ssc = deviceData.serverConnectionConfigs.find((_ssc) => _ssc.id == serverConnectionConfigId)
+    const refreshToken = localStorage.getItem(`refresh_token_${serverConnectionConfigId}`)
+    if (!ssc || !refreshToken) return { status: 'rejected' }
+    try {
+      const response = await fetch(`${ssc.address}/auth/refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-refresh-token': refreshToken } })
+      if (response.status === 401 || response.status === 403) {
+        if (localStorage.getItem(`refresh_token_${serverConnectionConfigId}`) === refreshToken) localStorage.removeItem(`refresh_token_${serverConnectionConfigId}`)
+        return { status: 'rejected' }
+      }
+      const user = response.ok ? (await response.json()).user : null
+      if (!user?.accessToken) return { status: 'transient' }
+      if (localStorage.getItem(`refresh_token_${serverConnectionConfigId}`) !== refreshToken) return { status: 'transient' }
+      if (user.refreshToken) localStorage.setItem(`refresh_token_${serverConnectionConfigId}`, user.refreshToken)
+      ssc.token = user.accessToken
+      localStorage.setItem('device', JSON.stringify(deviceData))
+      return { status: 'success', accessToken: user.accessToken }
+    } catch (error) {
+      return { status: 'transient' }
+    }
+  }
+
   async clearRefreshToken({ serverConnectionConfigId }) {
     console.log('[AbsDatabase] Clearing refresh token...', serverConnectionConfigId)
     localStorage.removeItem(`refresh_token_${serverConnectionConfigId}`)

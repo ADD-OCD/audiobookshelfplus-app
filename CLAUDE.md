@@ -97,6 +97,7 @@ Playlist playback uses a two-layer approach so advancement works even when the s
 
 - **Server REST API**: `$axios` (configured in `plugins/axios.js`); base URL is the connected server address.
 - **Real-time updates**: socket.io via `$socket`; socket must be authenticated with `auth` event after connection.
+- **Expired access token (401)**: `$nativeHttp`, `$axios` and native `ApiHandler` share one renewal per saved server (`$authRenewal` → `AbsDatabase.refreshAccessToken` → `server/TokenRefresher.kt`); never refresh directly. See `docs/authentication.md`.
 - **Playback events**: flow from `PlayerNotificationService` → `AbsAudioPlayer.kt` (via `ClientEventEmitter`) → `notifyListeners()` → JS `addListener()` handlers → Vuex mutations.
 
 ### i18n

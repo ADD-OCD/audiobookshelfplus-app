@@ -133,16 +133,15 @@ export default ({ app, store }, inject) => {
 
   // Listen for token refresh events from native app
   AbsDatabase.addListener('onTokenRefresh', (data) => {
+    // A late refresh for a server that is no longer signed in must not replace the current session's token
+    if (data.serverConnectionConfigId !== store.getters['user/getServerConnectionConfigId']) return
     store.commit('user/setAccessToken', data.accessToken)
   })
 
   // Listen for token refresh failure events from native app
   AbsDatabase.addListener('onTokenRefreshFailure', async (data) => {
     console.log('[db] onTokenRefreshFailure')
-    // Clear store and redirect to login page
-    await store.dispatch('user/logout')
-    if (window.location.pathname !== '/connect') {
-      window.location.href = '/connect?error=refreshTokenFailed&serverConnectionConfigId=' + data.serverConnectionConfigId || ''
-    }
+    // Clear store and redirect to login page, unless another server's session is active by now
+    await app.$authRenewal.signInAgain(data.serverConnectionConfigId || '')
   })
 }

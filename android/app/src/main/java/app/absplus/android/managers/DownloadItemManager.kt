@@ -13,6 +13,7 @@ import app.absplus.android.models.DownloadItem
 import app.absplus.android.models.DownloadItemPart
 import app.absplus.android.plugins.AbsLogger
 import app.absplus.android.server.ApiHandler
+import app.absplus.android.server.RefreshResult
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.getcapacitor.JSObject
@@ -474,16 +475,16 @@ class DownloadItemManager(
       synchronized(this@DownloadItemManager) {
         refreshingServerIds.remove(serverConnectionConfigId)
         when (result) {
-          is ApiHandler.RefreshResult.Success -> {
+          is RefreshResult.Success -> {
             AbsLogger.info(
                     tag,
                     "Token refresh succeeded; resuming downloads for $serverConnectionConfigId"
             )
             checkUpdateDownloadQueue()
           }
-          ApiHandler.RefreshResult.Rejected -> failParkedAuthParts(serverConnectionConfigId)
+          RefreshResult.Rejected -> failParkedAuthParts(serverConnectionConfigId)
           // Parked parts are still queued, so MAX_AUTH_RETRIES bounds the reattempts.
-          ApiHandler.RefreshResult.Transient -> {
+          RefreshResult.Transient -> {
             AbsLogger.info(
                     tag,
                     "Token refresh could not be completed; retrying downloads for $serverConnectionConfigId"
