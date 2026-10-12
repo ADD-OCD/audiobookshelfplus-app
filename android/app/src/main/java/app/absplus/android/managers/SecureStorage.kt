@@ -5,15 +5,18 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.util.Log
+import app.absplus.android.server.RefreshTokenStore
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-class SecureStorage(private val context: Context) {
+class SecureStorage(private val context: Context) : RefreshTokenStore {
     companion object {
         private const val TAG = "SecureStorage"
+        // Every instance shares the same preferences, so writes are serialised process-wide.
+        private val LOCK = Any()
         private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
         private const val KEY_ALIAS = "AudiobookshelfRefreshTokens"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
@@ -28,8 +31,8 @@ class SecureStorage(private val context: Context) {
     /**
      * Encrypts and stores a refresh token for a specific server connection
      */
-    fun storeRefreshToken(serverConnectionId: String, refreshToken: String): Boolean {
-        return try {
+    fun storeRefreshToken(serverConnectionId: String, refreshToken: String): Boolean = synchronized(LOCK) {
+        try {
             val key = getOrCreateKey()
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, key)
@@ -53,7 +56,7 @@ class SecureStorage(private val context: Context) {
     /**
      * Retrieves and decrypts a refresh token for a specific server connection
      */
-    fun getRefreshToken(serverConnectionId: String): String? {
+    override fun getRefreshToken(serverConnectionId: String): String? {
         return try {
             val sharedPrefs = context.getSharedPreferences("SecureStorage", Context.MODE_PRIVATE)
             val encoded = sharedPrefs.getString("refresh_token_$serverConnectionId", null) ?: return null
@@ -78,8 +81,8 @@ class SecureStorage(private val context: Context) {
     /**
      * Removes a refresh token for a specific server connection
      */
-    fun removeRefreshToken(serverConnectionId: String): Boolean {
-        return try {
+    fun removeRefreshToken(serverConnectionId: String): Boolean = synchronized(LOCK) {
+        try {
             val sharedPrefs = context.getSharedPreferences("SecureStorage", Context.MODE_PRIVATE)
             sharedPrefs.edit().remove("refresh_token_$serverConnectionId").apply()
             Log.d(TAG, "Successfully removed refresh token for server: $serverConnectionId")
@@ -88,6 +91,16 @@ class SecureStorage(private val context: Context) {
             Log.e(TAG, "Failed to remove refresh token for server: $serverConnectionId", e)
             false
         }
+    }
+
+    override fun replaceRefreshToken(serverConnectionId: String, expected: String, newToken: String): Boolean =
+            synchronized(LOCK) {
+                getRefreshToken(serverConnectionId) == expected &&
+                        (newToken == expected || storeRefreshToken(serverConnectionId, newToken))
+            }
+
+    override fun removeRefreshTokenIf(serverConnectionId: String, expected: String): Boolean = synchronized(LOCK) {
+        getRefreshToken(serverConnectionId) == expected && removeRefreshToken(serverConnectionId)
     }
 
     /**

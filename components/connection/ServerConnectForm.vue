@@ -864,8 +864,8 @@ export default {
             return
           }
 
-          // If the token was updated during a refresh (in nativeHttp.js) it gets updated in the store, so refetch
-          this.serverConfig.token = this.$store.getters['user/getToken'] || this.serverConfig.token
+          // If the token was renewed during /api/authorize (utils/authRenewal.js), save the renewed one
+          this.serverConfig.token = this.$authRenewal.renewedToken(this.serverConfig.id) || this.$store.getters['user/getToken'] || this.serverConfig.token
         }
       } else {
         // Server version before new JWT auth, use old user.token

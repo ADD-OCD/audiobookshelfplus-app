@@ -8,6 +8,7 @@ import app.absplus.android.data.*
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.media.MediaEventManager
 import app.absplus.android.server.ApiHandler
+import app.absplus.android.server.RefreshResult
 import app.absplus.android.managers.SecureStorage
 import app.absplus.android.widget.WidgetRenderer
 import com.fasterxml.jackson.core.json.JsonReadFeature
@@ -201,6 +202,8 @@ class AbsDatabase : Plugin() {
         if (shouldSave) DeviceManager.dbManager.saveDeviceData(DeviceManager.deviceData)
       }
 
+      // Requests sent for another server must not be retried with renewed credentials after the switch.
+      if (DeviceManager.serverConnectionConfig?.id != serverConnectionConfig?.id) ApiHandler.invalidateAuthRequests()
       DeviceManager.serverConnectionConfig = serverConnectionConfig
       call.resolve(JSObject(jacksonMapper.writeValueAsString(DeviceManager.serverConnectionConfig)))
     }
@@ -221,6 +224,7 @@ class AbsDatabase : Plugin() {
       DeviceManager.dbManager.saveDeviceData(DeviceManager.deviceData)
       if (DeviceManager.serverConnectionConfig?.id == serverConnectionConfigId) {
         DeviceManager.serverConnectionConfig = null
+        ApiHandler.invalidateAuthRequests()
       }
       call.resolve()
     }
@@ -252,6 +256,30 @@ class AbsDatabase : Plugin() {
     call.resolve(result)
   }
 
+  /**
+   * Renews the access token of a saved server connection. Shares the refresh with every other caller in the app
+   * (native requests, downloads), so the rotating refresh token is used once. Resolves with status "success" and
+   * the access token, "rejected" (the server refused the refresh token; the session was cleared) or "transient"
+   * (offline, timeout, server error; nothing changed).
+   */
+  @PluginMethod
+  fun refreshAccessToken(call:PluginCall) {
+    val serverConnectionConfigId = call.getString("serverConnectionConfigId", "").toString()
+    if (serverConnectionConfigId.isEmpty()) {
+      call.resolve(JSObject().put("status", "transient"))
+      return
+    }
+    apiHandler.refreshAuthTokens(serverConnectionConfigId) { result ->
+      val ret = JSObject()
+      when (result) {
+        is RefreshResult.Success -> ret.put("status", "success").put("accessToken", result.accessToken)
+        RefreshResult.Rejected -> ret.put("status", "rejected")
+        RefreshResult.Transient -> ret.put("status", "transient")
+      }
+      call.resolve(ret)
+    }
+  }
+
   @PluginMethod
   fun getAccessToken(call:PluginCall) {
     val serverConnectionConfigId = call.getString("serverConnectionConfigId", "").toString()
@@ -264,6 +292,7 @@ class AbsDatabase : Plugin() {
 
   @PluginMethod
   fun logout(call:PluginCall) {
+    ApiHandler.invalidateAuthRequests()
     GlobalScope.launch(Dispatchers.IO) {
       DeviceManager.serverConnectionConfig = null
       DeviceManager.deviceData.lastServerConnectionConfigId = null
