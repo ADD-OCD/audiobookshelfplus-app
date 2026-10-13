@@ -195,6 +195,7 @@
   "LabelDownloadQueued": "Queued",
   "LabelDownloadStorageInternal": "Internal",
   "LabelDownloadStorageSdCard": "SD card",
+  "LabelDownloadStorageUnavailable": "SD card not available",
   "LabelDownloadUsingCellular": "Download using Cellular",
   "LabelDownloadWaitingForStorage": "Waiting for storage space",
   "LabelDownloaded": "Downloaded",

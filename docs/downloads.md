@@ -17,15 +17,16 @@ How a book or episode download moves through the app, and what the user's contro
 | Downloading (n%) | a file is transferring, or a finished file is being saved to its folder | Cancel |
 | Download failed | a file failed for good (automatic retries used up, server refusal, failed save) | Retry, Clear |
 | Folder access lost | the device folder can't be written (access revoked, or the folder was deleted or moved) | Choose folder, Clear |
+| SD card not available | the download's SD card is not mounted (removed, unmounted, or another card is in) | Retry (once the card is back), Clear |
 | Finishing | every file is in place; becoming a local item | none |
 
-The state comes from the parts' flags (`downloadId`, `completed`, `moved`, `isMoving`, `failed`, `permissionLost`, `waitingForSpace`); it is always shown in words next to an icon. The item page shows the failed states and links to the Downloads screen, and its Download button opens the Downloads screen while a download exists.
+The state comes from the parts' flags (`downloadId`, `completed`, `moved`, `isMoving`, `failed`, `permissionLost`, `storageUnavailable`, `waitingForSpace`); it is always shown in words next to an icon. The item page shows the failed states and links to the Downloads screen, and its Download button opens the Downloads screen while a download exists.
 
 ## Retry is not Resume
 
 - **Automatic retries** (up to 5 per file, inside one service session) continue a partial file with an HTTP `Range` request where the server allows it.
 - **Retry** (the user's button, or the Download button on a failed item) and **app/process restart** start every unfinished file again from byte 0. Files already finished in their destination are kept and are not downloaded again. The button is therefore called Retry, and the Downloads screen says so.
-- A failed download stays failed across restarts with its reason (including lost folder access); it is never retried silently.
+- A failed download stays failed across restarts with its reason (including lost folder access); it is never retried silently. A download whose SD card is missing is not retried automatically and keeps the episode counted as auto-downloaded; Retry is refused until the card is back.
 
 ## Cancel and Clear
 

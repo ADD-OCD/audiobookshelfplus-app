@@ -24,7 +24,7 @@
             </div>
             <div class="flex-grow min-w-0">
               <p class="break-all text-fg-muted">{{ itemPart.filename }}</p>
-              <p v-if="itemPart.failed && !itemPart.permissionLost && itemPart.failureReason" class="text-xs text-error mt-0.5">{{ itemPart.failureReason }}</p>
+              <p v-if="itemPart.failed && !itemPart.permissionLost && !itemPart.storageUnavailable && itemPart.failureReason" class="text-xs text-error mt-0.5">{{ itemPart.failureReason }}</p>
             </div>
           </div>
         </div>
@@ -80,20 +80,22 @@ export default {
           return this.$strings.LabelDownloadFailed
         case DownloadState.FOLDER_ACCESS:
           return this.$strings.LabelDownloadFolderAccessLost
+        case DownloadState.STORAGE_UNAVAILABLE:
+          return this.$strings.LabelDownloadStorageUnavailable
         default:
           return this.$strings.LabelDownloadFinishing
       }
     },
     stateIcon(item) {
       const state = this.stateOf(item)
-      if (state === DownloadState.FAILED) return 'error'
+      if (state === DownloadState.FAILED || state === DownloadState.STORAGE_UNAVAILABLE) return 'error'
       if (state === DownloadState.FOLDER_ACCESS) return 'folder_off'
       if (state === DownloadState.QUEUED || state === DownloadState.WAITING_FOR_STORAGE) return 'schedule'
       return 'downloading'
     },
     stateIconClass(item) {
       const state = this.stateOf(item)
-      return state === DownloadState.FAILED || state === DownloadState.FOLDER_ACCESS ? 'text-error' : 'text-fg-muted'
+      return state === DownloadState.FAILED || state === DownloadState.FOLDER_ACCESS || state === DownloadState.STORAGE_UNAVAILABLE ? 'text-error' : 'text-fg-muted'
     },
     actionLabel(action) {
       return {
@@ -125,6 +127,7 @@ export default {
       const result = await AbsDownloader.retryDownload({ downloadItemId: item.id })
       if (result?.errorCode === 'folderAccess') return this.$toast.error(this.$getString('MessageDownloadChooseFolder', [this.lostFolderName(item)]))
       if (result?.errorCode === 'notFound') return this.$store.commit('globals/removeItemDownload', item.id)
+      if (result?.errorCode === 'storageUnavailable') return this.$toast.error(this.$strings.LabelDownloadStorageUnavailable)
       if (result?.errorCode) return this.$toast.error(this.$strings.MessageDownloadBusy)
     },
     async chooseFolder(item) {

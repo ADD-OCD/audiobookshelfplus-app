@@ -81,7 +81,7 @@
         <div v-if="downloadItem" class="py-3">
           <!-- A stopped download says so and leads to its controls (Retry, Choose folder, Clear) -->
           <div v-if="downloadStopped" class="text-center">
-            <p class="text-lg">{{ downloadItemState === 'folderAccess' ? $strings.LabelDownloadFolderAccessLost : $strings.LabelDownloadFailed }}</p>
+            <p class="text-lg">{{ downloadItemState === 'folderAccess' ? $strings.LabelDownloadFolderAccessLost : downloadItemState === 'storageUnavailable' ? $strings.LabelDownloadStorageUnavailable : $strings.LabelDownloadFailed }}</p>
             <nuxt-link to="/downloading" class="underline text-sm">{{ $strings.ButtonOpenDownloads }}</nuxt-link>
           </div>
           <p v-else-if="downloadItem.itemProgress == 1" class="text-center text-lg">{{ $strings.MessageDownloadCompleteProcessing }}</p>
@@ -485,7 +485,7 @@ export default {
       return this.downloadItem ? downloadState(this.downloadItem) : null
     },
     downloadStopped() {
-      return this.downloadItemState === DownloadState.FAILED || this.downloadItemState === DownloadState.FOLDER_ACCESS
+      return this.downloadItemState === DownloadState.FAILED || this.downloadItemState === DownloadState.FOLDER_ACCESS || this.downloadItemState === DownloadState.STORAGE_UNAVAILABLE
     },
     episodes() {
       return this.media.episodes || []
