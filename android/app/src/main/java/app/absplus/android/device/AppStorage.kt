@@ -71,13 +71,15 @@ object AppStorage {
     return rest.substring(0, dash)
   }
 
-  fun downloadsRoot(folder: LocalFolder, probe: VolumeProbe): File? = rootDir(folder, probe, DOWNLOADS_DIR)
+  fun downloadsRoot(folder: LocalFolder, probe: VolumeProbe): File? = downloadsRoot(folder.id, probe)
 
-  fun stagingRoot(folder: LocalFolder, probe: VolumeProbe): File? = rootDir(folder, probe, STAGING_DIR)
+  fun downloadsRoot(folderId: String, probe: VolumeProbe): File? = rootDir(folderId, probe, DOWNLOADS_DIR)
 
-  private fun rootDir(folder: LocalFolder, probe: VolumeProbe, name: String): File? {
-    if (folder.id.startsWith(INTERNAL_PREFIX)) return File(probe.internalFilesDir(), name)
-    val volume = mountedVolumeFor(folder.id, probe) ?: return null
+  fun stagingRoot(folder: LocalFolder, probe: VolumeProbe): File? = rootDir(folder.id, probe, STAGING_DIR)
+
+  private fun rootDir(folderId: String, probe: VolumeProbe, name: String): File? {
+    if (folderId.startsWith(INTERNAL_PREFIX)) return File(probe.internalFilesDir(), name)
+    val volume = mountedVolumeFor(folderId, probe) ?: return null
     return File(volume.filesDir, name)
   }
 
