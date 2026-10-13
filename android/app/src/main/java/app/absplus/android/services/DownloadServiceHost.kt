@@ -7,6 +7,7 @@ import app.absplus.android.device.FolderScanner
 import app.absplus.android.managers.DbManager
 import app.absplus.android.managers.DownloadItemManager
 import app.absplus.android.managers.IncompleteDownloadCleanup
+import app.absplus.android.managers.LocalItemLocks
 import app.absplus.android.models.DownloadItem
 import app.absplus.android.plugins.AbsLogger
 import com.getcapacitor.JSObject
@@ -96,12 +97,33 @@ object DownloadServiceHost {
     bridgeEmitter = NoopEmitter
   }
 
-  fun enqueue(context: Context, item: DownloadItem, callback: (String?) -> Unit) {
+  /** Builds and queues a download under the local item's lock; [build] returns the item or an error. */
+  fun enqueueResolved(
+          context: Context,
+          localItemId: String,
+          build: () -> Pair<DownloadItem?, String?>,
+          callback: (String?) -> Unit
+  ) {
     val queue = ensure(context)
     scope.launch {
       restoreJob?.join()
-      queue.addDownloadItem(item)
-      if (startService(context)) callback(null)
+      val error = try {
+        LocalItemLocks.withItem(localItemId) {
+          val (item, err) = build()
+          if (item != null) {
+            queue.addDownloadItem(item)
+            LocalItemLocks.bump(localItemId)
+            null
+          } else {
+            err ?: "Could not start download"
+          }
+        }
+      } catch (e: Exception) {
+        AbsLogger.error(TAG, "Could not start download for $localItemId (${e.javaClass.simpleName}: ${e.message})")
+        "Could not start download (${e.javaClass.simpleName}: ${e.message})"
+      }
+      if (error != null) callback(error)
+      else if (startService(context)) callback(null)
       else callback(SERVICE_START_FAILED_MESSAGE)
     }
   }

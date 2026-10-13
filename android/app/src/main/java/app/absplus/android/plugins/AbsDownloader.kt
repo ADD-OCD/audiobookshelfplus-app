@@ -145,7 +145,7 @@ class AbsDownloader : Plugin() {
     val libraryItemId = call.data.getString("libraryItemId").toString()
     var episodeId = call.data.getString("episodeId").toString()
     if (episodeId == "null") episodeId = ""
-    var localFolderId = call.data.getString("localFolderId", "").toString()
+    val localFolderId = call.data.getString("localFolderId", "").toString()
     AbsLogger.info(tag, "Requested download for item $libraryItemId${if (episodeId.isEmpty()) "" else " / episode $episodeId"}")
 
     val downloadId = if (episodeId.isEmpty()) libraryItemId else "$libraryItemId-$episodeId"
@@ -167,12 +167,8 @@ class AbsDownloader : Plugin() {
             } else {
               AbsLogger.info(tag, "Preparing download for ${libraryItem.id}")
 
-              if (localFolderId == "") localFolderId = "internal-${libraryItem.mediaType}"
-              val localFolder = LibraryItemDownloadStarter.getOrCreateLocalFolder(localFolderId, libraryItem.mediaType)
-
-              if (localFolder == null) {
-                call.resolve(JSObject("{\"error\":\"Local Folder Not Found\"}"))
-              } else if (episodeId.isNotEmpty() && libraryItem.mediaType != "podcast") {
+              val explicitFolderId = localFolderId.takeUnless { it.isEmpty() || it == "null" }
+              if (episodeId.isNotEmpty() && libraryItem.mediaType != "podcast") {
                 call.resolve(JSObject("{\"error\":\"Invalid library item not a podcast\"}"))
               } else if (episodeId.isNotEmpty()) {
                 val podcast = libraryItem.media as Podcast
@@ -180,10 +176,10 @@ class AbsDownloader : Plugin() {
                 if (episode == null) {
                   call.resolve(JSObject("{\"error\":\"Invalid podcast episode not found\"}"))
                 } else {
-                  LibraryItemDownloadStarter.startLibraryItemDownload(mainActivity, libraryItem, localFolder, episode) { error -> resolveDownloadCall(call, error) }
+                  LibraryItemDownloadStarter.startLibraryItemDownload(mainActivity, libraryItem, explicitFolderId, episode) { error -> resolveDownloadCall(call, error) }
                 }
               } else {
-                LibraryItemDownloadStarter.startLibraryItemDownload(mainActivity, libraryItem, localFolder, null) { error -> resolveDownloadCall(call, error) }
+                LibraryItemDownloadStarter.startLibraryItemDownload(mainActivity, libraryItem, explicitFolderId, null) { error -> resolveDownloadCall(call, error) }
               }
             }
           }

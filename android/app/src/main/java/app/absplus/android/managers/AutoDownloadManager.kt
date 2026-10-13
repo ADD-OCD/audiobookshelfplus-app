@@ -191,6 +191,7 @@ object AutoDownloadManager {
     val localItems = DeviceManager.dbManager.getLocalLibraryItems()
     var queued = 0
     var retried = 0
+    var skipped = 0
     var failedPodcasts = 0
 
     for (id in targets) {
@@ -271,21 +272,22 @@ object AutoDownloadManager {
             val result = await<StartResult> { cb ->
               LibraryItemDownloadStarter.startPodcastEpisodeDownload(appContext, item, episode) { cb(StartResult(it)) }
             }
-            when {
-              result == null -> {
-                AbsLogger.error(TAG, "Timed out starting download $downloadId")
-                podcastFailed = true
-              }
-              result.error == null -> {
+            if (result == null) {
+              AbsLogger.error(TAG, "Timed out starting download $downloadId")
+              podcastFailed = true
+              continue
+            }
+            when (AutoDownloadPolicy.outcomeFor(result.error)) {
+              // On a service start failure the item is already persisted in the queue and resumes when the app opens
+              AutoDownloadPolicy.EpisodeOutcome.QUEUED -> {
                 queued++
                 AutoDownloadStore.addEpisodeId(serverConfigId, id, episode.id)
               }
-              // The item is already persisted in the queue and resumes when the app opens
-              result.error == DownloadServiceHost.SERVICE_START_FAILED_MESSAGE -> {
-                queued++
-                AutoDownloadStore.addEpisodeId(serverConfigId, id, episode.id)
+              AutoDownloadPolicy.EpisodeOutcome.SKIPPED -> {
+                skipped++
+                AbsLogger.info(TAG, "Skipped $downloadId: ${result.error}")
               }
-              else -> {
+              AutoDownloadPolicy.EpisodeOutcome.FAILED -> {
                 AbsLogger.error(TAG, "Could not start download $downloadId: ${result.error}")
                 podcastFailed = true
               }
@@ -296,6 +298,6 @@ object AutoDownloadManager {
       if (podcastFailed) failedPodcasts++
     }
 
-    AbsLogger.info(TAG, "Auto download check finished: queued $queued, retried $retried, failed podcasts $failedPodcasts")
+    AbsLogger.info(TAG, "Auto download check finished: queued $queued, retried $retried, skipped $skipped, failed podcasts $failedPodcasts")
   }
 }

@@ -3,7 +3,10 @@ package app.absplus.android.managers
 import android.content.Context
 import android.os.Environment
 import app.absplus.android.data.*
+import app.absplus.android.device.AndroidVolumeProbe
+import app.absplus.android.device.AppStorage
 import app.absplus.android.device.DeviceManager
+import app.absplus.android.device.DownloadStorageSetting
 import app.absplus.android.models.DownloadItem
 import app.absplus.android.models.DownloadItemPart
 import app.absplus.android.plugins.AbsLogger
@@ -12,30 +15,15 @@ import java.io.File
 
 object LibraryItemDownloadStarter {
   private const val tag = "AbsDownloader"
-
-  fun getOrCreateLocalFolder(localFolderId: String, mediaType: String): LocalFolder? {
-    var localFolder = DeviceManager.dbManager.getLocalFolder(localFolderId)
-    if (localFolder == null && localFolderId.startsWith("internal-")) {
-      AbsLogger.info(tag, "Creating internal download folder $localFolderId")
-      localFolder = LocalFolder(localFolderId, "Internal App Storage", "", "", "", "internal", mediaType)
-      DeviceManager.dbManager.saveLocalFolder(localFolder)
-    }
-    return localFolder
-  }
+  const val STORAGE_UNAVAILABLE_MESSAGE = "SD card not available"
+  const val FOLDER_NOT_FOUND_MESSAGE = "Local Folder Not Found"
 
   fun startPodcastEpisodeDownload(context: Context, libraryItem: LibraryItem, episode: PodcastEpisode, callback: (String?) -> Unit) {
     if (libraryItem.mediaType != "podcast") {
       callback("Invalid library item not a podcast")
       return
     }
-    // Keep new episodes in the podcast's existing folder: a second local item there would hide them in the UI
-    val existingFolder = DeviceManager.dbManager.getLocalLibraryItemByLId(libraryItem.id)?.folderId?.let { DeviceManager.dbManager.getLocalFolder(it) }
-    val localFolder = existingFolder ?: getOrCreateLocalFolder("internal-podcast", "podcast")
-    if (localFolder == null) {
-      callback("Local Folder Not Found")
-      return
-    }
-    startLibraryItemDownload(context, libraryItem, localFolder, episode, callback)
+    startLibraryItemDownload(context, libraryItem, null, episode, callback)
   }
 
   // Item filenames could be the same if they are in sub-folders, this will make them unique
@@ -61,19 +49,55 @@ object LibraryItemDownloadStarter {
   fun startLibraryItemDownload(
           context: Context,
           libraryItem: LibraryItem,
-          localFolder: LocalFolder,
+          explicitFolderId: String?,
           episode: PodcastEpisode?,
           callback: (String?) -> Unit
   ) {
-    val isInternal = localFolder.id.startsWith("internal-")
+    DownloadServiceHost.enqueueResolved(context, "local_${libraryItem.id}", { buildDownloadItem(context, libraryItem, explicitFolderId, episode) }, callback)
+  }
 
-    val finalInternalFolderPath = "${context.filesDir}/downloads/${libraryItem.id}"
-    val tempFolderPath =
-            if (isInternal) {
-              "${context.filesDir}/download-staging/${libraryItem.id}"
-            } else {
-              "${context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir}/download-staging/${libraryItem.id}"
-            }
+  /** Runs under the item's lock, so the folder choice and the queued item see the same local item. */
+  private fun buildDownloadItem(
+          context: Context,
+          libraryItem: LibraryItem,
+          explicitFolderId: String?,
+          episode: PodcastEpisode?
+  ): Pair<DownloadItem?, String?> {
+    val existing = DeviceManager.dbManager.getLocalLibraryItemByLId(libraryItem.id)
+    val setting = DownloadStorageSetting.parse(DeviceManager.deviceData.deviceSettings?.downloadStorage)
+    val probe = AndroidVolumeProbe(context)
+    val resolution = DownloadFolderResolver.resolveFolder(libraryItem.mediaType, explicitFolderId, existing, setting, probe) {
+      DeviceManager.dbManager.getLocalFolder(it)
+    }
+    val localFolder = when (resolution) {
+      is FolderResolution.NotFound -> return null to FOLDER_NOT_FOUND_MESSAGE
+      is FolderResolution.Unavailable -> {
+        AbsLogger.info(tag, "Download of ${libraryItem.id} not started: download storage unavailable")
+        return null to STORAGE_UNAVAILABLE_MESSAGE
+      }
+      is FolderResolution.Create -> resolution.folder
+      is FolderResolution.Existing -> resolution.folder
+    }
+
+    val isAppStorage = AppStorage.isAppStorage(localFolder.id)
+    var appItemFolderPath = ""
+    val tempFolderPath: String
+    if (isAppStorage) {
+      val downloadsRoot = AppStorage.downloadsRoot(localFolder, probe)
+      val stagingRoot = AppStorage.stagingRoot(localFolder, probe)
+      if (downloadsRoot == null || stagingRoot == null) {
+        AbsLogger.info(tag, "Download of ${libraryItem.id} not started: ${localFolder.id} went away")
+        return null to STORAGE_UNAVAILABLE_MESSAGE
+      }
+      appItemFolderPath = File(downloadsRoot, libraryItem.id).path
+      tempFolderPath = File(stagingRoot, libraryItem.id).path
+      if (resolution is FolderResolution.Create) {
+        AbsLogger.info(tag, "Creating download folder ${localFolder.id}")
+        DeviceManager.dbManager.saveLocalFolder(localFolder)
+      }
+    } else {
+      tempFolderPath = "${context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir}/download-staging/${libraryItem.id}"
+    }
 
 
     if (libraryItem.mediaType == "book") {
@@ -83,7 +107,7 @@ object LibraryItemDownloadStarter {
       val tracks = libraryItem.media.getAudioTracks()
       AbsLogger.info(tag, "Queueing library item download with ${tracks.size} files")
       val itemSubfolder = "$bookAuthor/$bookTitle"
-      val itemFolderPath = if (isInternal) finalInternalFolderPath else "${localFolder.absolutePath}/$itemSubfolder"
+      val itemFolderPath = if (isAppStorage) appItemFolderPath else "${localFolder.absolutePath}/$itemSubfolder"
       val downloadItem = DownloadItem(libraryItem.id, libraryItem.id, null, libraryItem.userMediaProgress,DeviceManager.serverConnectionConfig?.id ?: "", DeviceManager.serverAddress, DeviceManager.serverUserId, libraryItem.mediaType, itemFolderPath, localFolder, bookTitle, itemSubfolder, libraryItem.media, mutableListOf(), libraryItem.ino)
 
       val book = libraryItem.media as Book
@@ -131,8 +155,9 @@ object LibraryItemDownloadStarter {
           downloadItem.downloadItemParts.add(downloadItemPart)
         }
 
-        DownloadServiceHost.enqueue(context, downloadItem, callback)
-      } else callback("No downloadable files found")
+        return downloadItem to null
+      }
+      return null to "No downloadable files found"
     } else {
       // Podcast episode download
       val podcastTitle = cleanStringForFileSystem(libraryItem.media.metadata.title)
@@ -142,7 +167,7 @@ object LibraryItemDownloadStarter {
       val fileSize = audioTrack?.metadata?.size ?: 0
 
       AbsLogger.info(tag, "Queueing podcast episode download")
-      val itemFolderPath = if (isInternal) finalInternalFolderPath else "${localFolder.absolutePath}/$podcastTitle"
+      val itemFolderPath = if (isAppStorage) appItemFolderPath else "${localFolder.absolutePath}/$podcastTitle"
       val downloadItemId = "${libraryItem.id}-${episode?.id}"
       val downloadItem = DownloadItem(downloadItemId, libraryItem.id, episode?.id, libraryItem.userMediaProgress, DeviceManager.serverConnectionConfig?.id ?: "", DeviceManager.serverAddress, DeviceManager.serverUserId, libraryItem.mediaType, itemFolderPath, localFolder, podcastTitle, podcastTitle, libraryItem.media, mutableListOf(), libraryItem.ino)
 
@@ -168,7 +193,7 @@ object LibraryItemDownloadStarter {
         downloadItem.downloadItemParts.add(downloadItemPart)
       }
 
-        DownloadServiceHost.enqueue(context, downloadItem, callback)
+      return downloadItem to null
     }
   }
 }
