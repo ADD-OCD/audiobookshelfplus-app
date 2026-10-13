@@ -363,6 +363,25 @@ class DownloadControlsTest {
     assertTrue(restoredFinished.moved)
   }
 
+  @Test
+  fun finishedDownloadWaitsForItsSdCard() {
+    val probe =
+            object : VolumeProbe {
+              override fun volumes() = listOf(AppVolume("79EC-9B33", File(root, "sd"), removable = true, mounted = false, writable = false))
+              override fun internalFilesDir(): File = context.filesDir
+            }
+    DeviceManager.dbManager.saveDownloadItem(item("fin", part("fin", "01.mp3", moved = true, sd = true), sd = true))
+    val manager = DownloadItemManager(FolderScanner(context), context, emitter, probe)
+    manager.restoreQueue()
+    manager.resumeWork()
+    // Finalization runs on a background coroutine; give a wrongly started one time to drop the item
+    val deadline = System.currentTimeMillis() + 2_000
+    while (System.currentTimeMillis() < deadline && "complete" !in events) Thread.sleep(50)
+    assertTrue("not finalized (and dropped) while the card is missing",manager.downloadItemQueue.any { it.id == "fin" })
+    assertTrue(DeviceManager.dbManager.getDownloadItems().any { it.id == "fin" })
+    assertTrue(manager.downloadItemQueue.single().downloadItemParts.single().moved)
+  }
+
   private companion object {
     const val SD_FOLDER_ID = "appsd-79EC-9B33-book"
   }

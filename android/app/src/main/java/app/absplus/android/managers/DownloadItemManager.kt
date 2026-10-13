@@ -46,6 +46,7 @@ class DownloadItemManager(
   private val reservations = mutableMapOf<String, Long>()
   private val lastPersistTime = mutableMapOf<String, Long>()
   private val finalizingItems = mutableSetOf<String>()
+  private val awaitingStorage = mutableSetOf<String>()
   private val refreshingServerIds = mutableSetOf<String>()
   // Lazy: only token refresh needs it, and building it opens the Android keystore
   private val apiHandler by lazy { ApiHandler(context) }
@@ -120,6 +121,7 @@ class DownloadItemManager(
       }
       if (item.isDownloadFinished && volumeMissing) {
         // Scanning now would find no files and drop the item, orphaning its files on the card
+        awaitingStorage.add(item.id)
         downloadItemQueue.add(item)
         clientEventEmitter.onDownloadItem(item)
         AbsLogger.info(tag, "Download ${item.id} is complete; finalizing waits for the SD card")
@@ -316,8 +318,11 @@ class DownloadItemManager(
   private fun checkUpdateDownloadQueue() {
     downloadItemQueue.toList().forEach { item ->
       // Picks up a finalization that waited for the SD card to come back
-      if (item.isDownloadFinished && item.id !in finalizingItems && !storageUnavailable(item)) {
-        checkDownloadItemFinished(item)
+      if (item.id in awaitingStorage) {
+        if (!storageUnavailable(item)) {
+          awaitingStorage.remove(item.id)
+          checkDownloadItemFinished(item)
+        }
         return@forEach
       }
       var slots = MAX_SIMULTANEOUS_DOWNLOADS - currentDownloadItemParts.size
