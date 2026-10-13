@@ -181,6 +181,7 @@ import { getAverageColorFromCoverUrl } from '@/utils/coverAverageColor'
 import coverPresentation from '@/theme/coverPresentation'
 import cellularPermissionHelpers from '@/mixins/cellularPermissionHelpers'
 import { downloadState, DownloadState } from '@/utils/downloadState'
+import { appStorageFolderFor, safFoldersFor } from '@/utils/appStorage'
 
 export default {
   async asyncData({ store, params, redirect, app, query }) {
@@ -685,22 +686,9 @@ export default {
       // Get the local folder to download to
       let localFolder = selectedLocalFolder
       if (!localFolder) {
-        const localFolders = (await this.$db.getLocalFolders()) || []
-        console.log('Local folders loaded', localFolders.length)
-        const foldersWithMediaType = localFolders.filter((lf) => {
-          console.log('Checking local folder', lf.mediaType)
-          return lf.mediaType == this.mediaType
-        })
-        console.log('Folders with media type', this.mediaType, foldersWithMediaType.length)
-        const internalStorageFolder = foldersWithMediaType.find((f) => f.id === `internal-${this.mediaType}`)
-        if (!foldersWithMediaType.length) {
-          localFolder = {
-            id: `internal-${this.mediaType}`,
-            name: this.$strings.LabelInternalAppStorage,
-            mediaType: this.mediaType
-          }
-        } else if (foldersWithMediaType.length === 1 && internalStorageFolder) {
-          localFolder = internalStorageFolder
+        const saf = safFoldersFor((await this.$db.getLocalFolders()) || [], this.mediaType)
+        if (!saf.length) {
+          localFolder = await appStorageFolderFor(this, this.mediaType)
         } else {
           this.$store.commit('globals/showSelectLocalFolderModal', {
             mediaType: this.mediaType,
@@ -712,7 +700,6 @@ export default {
         }
       }
 
-      console.log('Local folder', JSON.stringify(localFolder))
       let startDownloadMessage = `Start download for "${this.title}" with ${this.numTracks} audio track${this.numTracks == 1 ? '' : 's'} to folder ${localFolder.name}?`
       if (!this.isIos && this.showRead) {
         if (this.numTracks > 0) {
