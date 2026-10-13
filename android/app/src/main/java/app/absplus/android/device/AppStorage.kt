@@ -77,19 +77,21 @@ object AppStorage {
 
   private fun rootDir(folder: LocalFolder, probe: VolumeProbe, name: String): File? {
     if (folder.id.startsWith(INTERNAL_PREFIX)) return File(probe.internalFilesDir(), name)
-    val volume = mountedVolumeFor(folder, probe) ?: return null
+    val volume = mountedVolumeFor(folder.id, probe) ?: return null
     return File(volume.filesDir, name)
   }
 
-  private fun mountedVolumeFor(folder: LocalFolder, probe: VolumeProbe): AppVolume? {
-    val uuid = uuidOf(folder.id) ?: return null
+  private fun mountedVolumeFor(folderId: String, probe: VolumeProbe): AppVolume? {
+    val uuid = uuidOf(folderId) ?: return null
     return probe.volumes().firstOrNull { it.uuid == uuid && it.mounted }
   }
 
   /** SAF folders are judged by [FolderAccess], not here. */
-  fun isAvailable(folder: LocalFolder, probe: VolumeProbe): Boolean {
-    if (folder.id.startsWith(INTERNAL_PREFIX)) return true
-    return mountedVolumeFor(folder, probe)?.writable == true
+  fun isAvailable(folder: LocalFolder, probe: VolumeProbe): Boolean = isAvailable(folder.id, probe)
+
+  fun isAvailable(folderId: String, probe: VolumeProbe): Boolean {
+    if (folderId.startsWith(INTERNAL_PREFIX)) return true
+    return mountedVolumeFor(folderId, probe)?.writable == true
   }
 
   fun removableVolume(probe: VolumeProbe): AppVolume? = probe.volumes().firstOrNull { it.removable && it.mounted }

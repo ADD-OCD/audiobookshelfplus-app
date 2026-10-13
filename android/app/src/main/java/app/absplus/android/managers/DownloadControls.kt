@@ -14,7 +14,8 @@ import app.absplus.android.models.DownloadItemPart
  * files the download already placed in a device folder are kept there (a later download of the item
  * reuses them, and Rescan Folder can link them); finished files in app storage (internal or SD card)
  * are deleted, since nothing else can reach them. A file a saved local item uses, or one that existed
- * before this download, is never deleted.
+ * before this download, is never deleted. A download whose SD card is missing can't be retried until
+ * the card is back.
  */
 object DownloadControls {
   enum class Refusal {
@@ -62,4 +63,8 @@ object DownloadControls {
                   .filter { !hasAccess(it.localFolderUrl) }
                   .map { it.localFolderName }
                   .distinct()
+
+  /** Retry such a download only once its SD card is back. */
+  fun storageUnavailable(item: DownloadItem, volumeMissing: () -> Boolean): Boolean =
+          item.isAppStorage && item.downloadItemParts.any { !it.moved } && volumeMissing()
 }

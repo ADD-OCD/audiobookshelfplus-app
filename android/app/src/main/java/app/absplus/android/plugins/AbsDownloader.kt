@@ -105,6 +105,7 @@ class AbsDownloader : Plugin() {
                 DownloadServiceHost.ExistingDownloadResult.NOT_FOUND -> "notFound"
                 DownloadServiceHost.ExistingDownloadResult.ACTIVE -> "active"
                 DownloadServiceHost.ExistingDownloadResult.FOLDER_ACCESS -> "folderAccess"
+                DownloadServiceHost.ExistingDownloadResult.STORAGE_UNAVAILABLE -> "storageUnavailable"
                 DownloadServiceHost.ExistingDownloadResult.SERVICE_START_FAILED -> "service"
               }
       call.resolve(if (errorCode == null) JSObject() else JSObject().put("errorCode", errorCode))
@@ -160,6 +161,8 @@ class AbsDownloader : Plugin() {
                 call.resolve(JSObject().put("error", DownloadServiceHost.SERVICE_START_FAILED_MESSAGE))
         DownloadServiceHost.ExistingDownloadResult.FOLDER_ACCESS ->
                 call.resolve(JSObject().put("error", "Folder access lost: re-select the download folder to retry").put("errorCode", "folderAccess"))
+        DownloadServiceHost.ExistingDownloadResult.STORAGE_UNAVAILABLE ->
+                call.resolve(JSObject().put("error", LibraryItemDownloadStarter.STORAGE_UNAVAILABLE_MESSAGE).put("errorCode", "storageUnavailable"))
         DownloadServiceHost.ExistingDownloadResult.NOT_FOUND -> {
           apiHandler.getLibraryItemWithProgress(libraryItemId, episodeId) { libraryItem ->
             if (libraryItem == null) {

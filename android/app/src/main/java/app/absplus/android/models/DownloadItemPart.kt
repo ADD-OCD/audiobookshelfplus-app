@@ -31,6 +31,7 @@ data class DownloadItemPart(
   var failed:Boolean,
   var failureReason: String? = null,
   var permissionLost: Boolean = false,
+  var storageUnavailable: Boolean = false,
   @JsonIgnore val uri: Uri,
   @JsonIgnore val destinationUri: Uri,
   @JsonIgnore val finalDestinationUri: Uri,

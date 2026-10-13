@@ -262,6 +262,10 @@ object AutoDownloadManager {
               else -> Log.d(TAG, "Retry of $downloadId not applied: $result")
             }
           }
+          DownloadItemManager.QueuedState.STORAGE_UNAVAILABLE -> {
+            skipped++
+            AbsLogger.info(TAG, "Skipped $downloadId: SD card not available, waits for a manual Retry")
+          }
           DownloadItemManager.QueuedState.NOT_QUEUED -> {
             // The local snapshot is taken before network calls; a manual download may have finished since
             if (episode.id in downloadedEpisodeIds || episode.id in knownIds || isDownloadedLocally(id, episode.id)) {

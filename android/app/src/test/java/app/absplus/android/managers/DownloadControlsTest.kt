@@ -10,8 +10,10 @@ import app.absplus.android.data.LocalFolder
 import app.absplus.android.data.LocalLibraryItem
 import app.absplus.android.data.MediaType
 import app.absplus.android.data.MediaTypeMetadata
+import app.absplus.android.device.AppVolume
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.FolderScanner
+import app.absplus.android.device.VolumeProbe
 import app.absplus.android.models.DownloadItem
 import app.absplus.android.models.DownloadItemPart
 import com.getcapacitor.JSObject
@@ -315,6 +317,50 @@ class DownloadControlsTest {
     val lost = restored.getValue("l").downloadItemParts.single()
     assertTrue(lost.failed && lost.permissionLost)
     assertTrue(events.contains("item:l"))
+  }
+
+  @Test
+  fun storageUnavailableLifecycle() {
+    Paper.book("autoDownload").destroy()
+    val probe =
+            object : VolumeProbe {
+              var mounted = false
+              override fun volumes() = listOf(AppVolume("79EC-9B33", File(root, "sd"), removable = true, mounted = mounted, writable = mounted))
+              override fun internalFilesDir(): File = context.filesDir
+            }
+    val finished = part("sdi", "01.mp3", moved = true, sd = true)
+    val pending = part("sdi", "02.mp3", sd = true)
+    val sdItem = item("sdi", finished, pending, sd = true).copy(episodeId = "ep1")
+    AutoDownloadStore.addEpisodeId("server", "sdi", "ep1")
+
+    val manager = DownloadItemManager(FolderScanner(context), context, emitter, probe)
+    manager.addDownloadItem(sdItem)
+    manager.resumeWork()
+    assertTrue("a missing card fails the download as SD card not available", pending.failed && pending.storageUnavailable)
+    assertFalse("a missing card is not lost folder access", pending.permissionLost)
+    assertEquals(LibraryItemDownloadStarter.STORAGE_UNAVAILABLE_MESSAGE, pending.failureReason)
+    assertTrue("the episode is still counted as auto downloaded", "ep1" in AutoDownloadStore.get("server", "sdi").autoDownloadedEpisodeIds)
+    assertEquals(DownloadItemManager.QueuedState.STORAGE_UNAVAILABLE, manager.queuedState("sdi"))
+
+    val restarted = DownloadItemManager(FolderScanner(context), context, emitter, probe)
+    restarted.restoreQueue()
+    val restored = restarted.downloadItemQueue.single { it.id == "sdi" }
+    val restoredPending = restored.downloadItemParts.single { it.filename == "02.mp3" }
+    val restoredFinished = restored.downloadItemParts.single { it.filename == "01.mp3" }
+    assertTrue("the flag survives a restart", restoredPending.failed && restoredPending.storageUnavailable)
+    assertEquals(LibraryItemDownloadStarter.STORAGE_UNAVAILABLE_MESSAGE, restoredPending.failureReason)
+    assertTrue("moved part stays moved while its card is missing", restoredFinished.moved)
+
+    assertTrue(restarted.isStorageUnavailable("sdi"))
+    assertFalse("Retry while the card is missing is refused", restarted.retryDownloadItem("sdi"))
+    assertTrue(restoredPending.storageUnavailable)
+
+    probe.mounted = true
+    assertFalse(restarted.isStorageUnavailable("sdi"))
+    assertTrue("Retry once the card is back", restarted.retryDownloadItem("sdi"))
+    assertFalse(restoredPending.storageUnavailable)
+    assertNull(restoredPending.failureReason)
+    assertTrue(restoredFinished.moved)
   }
 
   private companion object {

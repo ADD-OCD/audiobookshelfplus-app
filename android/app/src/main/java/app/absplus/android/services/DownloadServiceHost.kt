@@ -24,7 +24,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 object DownloadServiceHost {
   const val SERVICE_START_FAILED_MESSAGE = "Unable to start the Android download service"
 
-  enum class ExistingDownloadResult { NOT_FOUND, ACTIVE, RETRIED, SERVICE_START_FAILED, FOLDER_ACCESS }
+  enum class ExistingDownloadResult { NOT_FOUND, ACTIVE, RETRIED, SERVICE_START_FAILED, FOLDER_ACCESS, STORAGE_UNAVAILABLE }
 
   data class NotificationStrings(
           val preparing: String,
@@ -144,6 +144,9 @@ object DownloadServiceHost {
       val missingFolders = if (existing == null) emptyList() else queue.foldersWithoutAccess(downloadItemId)
       if (existing == null) {
         callback(ExistingDownloadResult.NOT_FOUND)
+      } else if (queue.isStorageUnavailable(downloadItemId)) {
+        AbsLogger.info(TAG, "Retry of $downloadItemId refused: SD card not available")
+        callback(ExistingDownloadResult.STORAGE_UNAVAILABLE)
       } else if (missingFolders.isNotEmpty()) {
         // Retrying can only fail again until the user re-selects the folder, so the item stays as it is
         AbsLogger.info(TAG, "Retry of $downloadItemId refused: no access to ${missingFolders.joinToString()}")
