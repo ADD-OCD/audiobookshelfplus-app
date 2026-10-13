@@ -26,6 +26,7 @@ import app.absplus.android.plugins.AbsDownloader
 import app.absplus.android.plugins.AbsFileSystem
 import app.absplus.android.plugins.AbsLogger
 import app.absplus.android.plugins.AbsUpdater
+import app.absplus.android.services.DownloadServiceHost
 import app.absplus.android.services.StorageMoveService
 import com.getcapacitor.BridgeActivity
 
@@ -130,6 +131,7 @@ class MainActivity : BridgeActivity() {
     super.onResume()
     isForeground = true
     StorageMoveService.startIfNeeded(this)
+    DownloadServiceHost.resumeAwaitingStorage()
   }
 
   override fun onPause() {

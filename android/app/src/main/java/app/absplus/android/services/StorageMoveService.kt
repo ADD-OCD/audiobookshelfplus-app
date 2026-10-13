@@ -145,10 +145,12 @@ class StorageMoveService : Service() {
     // Called under the item lock; takes only the download manager's monitor, never the other way round
     override fun hasQueuedDownload(libraryItemId: String): Boolean = DownloadServiceHost.hasQueuedDownload(libraryItemId)
 
-    override fun dirOwned(dir: File): Boolean {
-      val target = norm(dir)
-      return DeviceManager.dbManager.getLocalLibraryItems().any { it.absolutePath.isNotEmpty() && norm(File(it.absolutePath)) == target } ||
-              DownloadServiceHost.queueSnapshot().any { it.itemFolderPath.isNotEmpty() && norm(File(it.itemFolderPath)) == target }
+    override fun dirOwned(dir: File): Boolean = AppStorage.normalizedPath(dir) in ownedDirs()
+
+    override fun ownedDirs(): Set<String> {
+      val paths = DeviceManager.dbManager.getLocalLibraryItems().map { it.absolutePath } +
+              DownloadServiceHost.queueSnapshot().map { it.itemFolderPath }
+      return paths.filter { it.isNotEmpty() }.mapTo(HashSet()) { AppStorage.normalizedPath(File(it)) }
     }
 
     // healLastSession edits the session, so it gets a copy, tracks included, not the live DeviceData object
@@ -167,8 +169,6 @@ class StorageMoveService : Service() {
         }
       }
     }
-
-    private fun norm(f: File) = f.absoluteFile.toPath().normalize()
   }
 
   companion object {
@@ -185,13 +185,11 @@ class StorageMoveService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mapper = jacksonObjectMapper()
 
-    /** Marks a pass as needed after something that may unblock a move ended (download, playback). */
+    /** Re-checks for moves after something that may unblock one ended (download, playback); in background, onResume does it. */
     fun requestReconcile(context: Context) {
       val app = context.applicationContext
       Handler(Looper.getMainLooper()).post {
         try {
-          DeviceManager.deviceData.reconcileNeeded = true
-          DeviceManager.dbManager.saveDeviceData(DeviceManager.deviceData)
           if (MainActivity.isForeground) startIfNeeded(app)
         } catch (e: Exception) {
           AbsLogger.error(TAG, "Could not request a storage move pass (${e.javaClass.simpleName}: ${e.message})")
@@ -254,7 +252,8 @@ class StorageMoveService : Service() {
       } else {
         result.put("sd", JSObject().apply {
           put("uuid", sdVolume.uuid ?: JSONObject.NULL)
-          put("mounted", sdVolume.mounted)
+          // The settings page offers the SD card only when this is true, and a read-only card cannot take downloads
+          put("mounted", sdVolume.mounted && sdVolume.writable)
           put("freeBytes", if (sdVolume.mounted) StatFs(sdVolume.filesDir.path).availableBytes else 0L)
         })
       }

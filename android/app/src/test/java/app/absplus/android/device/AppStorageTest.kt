@@ -79,9 +79,41 @@ class AppStorageTest {
   }
 
   @Test
+  fun pathNormalization() {
+    assertEquals("/a/b/c", AppStorage.normalizedPath(File("/a//b/./c/")))
+    assertEquals("/a/c", AppStorage.normalizedPath(File("/a/b/../c")))
+    assertEquals("above the root stays at the root", "/x", AppStorage.normalizedPath(File("/../../x")))
+    assertEquals("/", AppStorage.normalizedPath(File("/")))
+    assertEquals(AppStorage.normalizedPath(File("/a/b")), AppStorage.normalizedPath(File("/a/b/c/..")))
+    // Same results as java.nio on the JVM, which the device code cannot use below API 26
+    val samples = listOf("/a//b/./c/", "/a/b/../c", "/../../x", "/", "/data/files", "/data/files/../x", "/data/files2", "/data/./files//d/")
+    for (p in samples) {
+      assertEquals(p, File(p).absoluteFile.toPath().normalize().toString(), AppStorage.normalizedPath(File(p)))
+      for (r in samples) {
+        val nio = File(p).absoluteFile.toPath().normalize().startsWith(File(r).absoluteFile.toPath().normalize())
+        assertEquals("$p under $r", nio, AppStorage.isUnder(File(p), File(r)))
+      }
+    }
+
+    val files = File("/data/files")
+    assertTrue("a root is under itself", AppStorage.isUnder(File("/data/files"), files))
+    assertTrue(AppStorage.isUnder(File("/data//files/./downloads/"), File("/data/files/")))
+    assertTrue(AppStorage.isUnder(File("/data/files/downloads/x/../y"), files))
+    assertFalse("a sibling sharing the prefix is not under it", AppStorage.isUnder(File("/data/files2"), files))
+    assertFalse("..-escape is not under it", AppStorage.isUnder(File("/data/files/../x"), files))
+    assertFalse("the parent is not under it", AppStorage.isUnder(File("/data"), files))
+
+    assertEquals("", AppStorage.relativePath(File("/data/files/"), files))
+    assertEquals("d/a.mp3", AppStorage.relativePath(File("/data/files//d/./a.mp3"), files))
+    assertNull(AppStorage.relativePath(File("/data/files2/a.mp3"), files))
+  }
+
+  @Test
   fun removableVolumeAndFolders() {
     assertEquals(sd(), AppStorage.removableVolume(probe(primary(), sd(mounted = false), sd())))
     assertNull(AppStorage.removableVolume(probe(primary(), sd(mounted = false))))
+    assertNull("a read-only card is not a target", AppStorage.removableVolume(probe(primary(), sd(writable = false))))
+    assertEquals(sd(), AppStorage.removableVolume(probe(primary(), sd(writable = false), sd())))
     assertEquals("appsd-79EC-9B33-book", sdFolder.id)
     assertEquals("appsd", sdFolder.storageType)
     assertEquals("SD card", sdFolder.name)

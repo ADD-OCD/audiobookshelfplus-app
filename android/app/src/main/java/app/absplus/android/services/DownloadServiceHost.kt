@@ -93,6 +93,12 @@ object DownloadServiceHost {
     }
   }
 
+  /** Finalizes downloads that waited for an SD card that may be back now; no-op before the manager exists. */
+  fun resumeAwaitingStorage() {
+    val m = synchronized(this) { manager } ?: return
+    scope.launch { m.resumeAwaitingStorage() }
+  }
+
   @Synchronized
   fun detachBridge() {
     bridgeReady = false

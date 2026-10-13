@@ -96,11 +96,34 @@ object AppStorage {
     return mountedVolumeFor(folderId, probe)?.writable == true
   }
 
-  fun removableVolume(probe: VolumeProbe): AppVolume? = probe.volumes().firstOrNull { it.removable && it.mounted }
+  fun removableVolume(probe: VolumeProbe): AppVolume? =
+          probe.volumes().firstOrNull { it.removable && it.mounted && it.writable }
+
+  /** Absolute path with `.` and `..` resolved lexically (symlinks are not followed); java.nio Path needs API 26. */
+  fun normalizedPath(file: File): String = "/" + components(file).joinToString("/")
+
+  private fun components(file: File): List<String> {
+    val out = ArrayList<String>()
+    for (part in file.absolutePath.split(File.separatorChar)) {
+      when (part) {
+        "", "." -> {}
+        ".." -> if (out.isNotEmpty()) out.removeAt(out.size - 1)
+        else -> out.add(part)
+      }
+    }
+    return out
+  }
 
   /** Component-wise, so a sibling like `files2` is not under `files`. */
-  fun isUnder(file: File, root: File): Boolean =
-          file.absoluteFile.toPath().normalize().startsWith(root.absoluteFile.toPath().normalize())
+  fun isUnder(file: File, root: File): Boolean = relativePath(file, root) != null
+
+  /** [file]'s path below [root] without a leading separator ("" for [root] itself), or null when it is not under it. */
+  fun relativePath(file: File, root: File): String? {
+    val f = components(file)
+    val r = components(root)
+    if (f.size < r.size || f.subList(0, r.size) != r) return null
+    return f.subList(r.size, f.size).joinToString("/")
+  }
 
   /** Identifies the storage a file lives on, so space is reserved per volume. */
   fun storageKey(file: File, probe: VolumeProbe): String {

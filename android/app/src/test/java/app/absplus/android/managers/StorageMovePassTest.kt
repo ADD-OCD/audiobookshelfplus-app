@@ -37,18 +37,27 @@ class StorageMovePassTest {
   }
 
   @Test
-  fun persistentFailureStops() {
+  fun persistentFailureSkipsTheItem() {
     val planner = Planner(listOf(item("A"), item("B")))
-    var moves = 0
+    val calls = mutableMapOf<String, Int>()
     val movedEvents = mutableListOf<String>()
 
     val status =
-            StorageMovePass.run(planner::plan, { moves++; MoveResult.Failed("boom") }, { movedEvents += it }, {})
+            StorageMovePass.run(
+                    planner::plan,
+                    { i ->
+                      calls.merge(i.id, 1, Int::plus)
+                      if (i.id == "A") MoveResult.Failed("boom") else MoveResult.Moved.also { planner.moved += i.id }
+                    },
+                    { movedEvents += it },
+                    {})
 
-    assertEquals("a failure ends the pass", 1, moves)
+    assertEquals("a failed item is tried once per pass", 1, calls["A"])
+    assertEquals("the others still move", listOf("B"), movedEvents)
     assertEquals("boom", status.lastError)
+    assertEquals(mapOf(WaitReason.RETRY to 1), status.waiting)
+    assertEquals(1, status.done)
     assertFalse(status.running)
-    assertEquals(listOf<String>(), movedEvents)
   }
 
   @Test
@@ -114,7 +123,7 @@ class StorageMovePassTest {
             {},
             {})
 
-    assertEquals(listOf("flag=true", "heal", "clean", "plan", "flag=false"), calls)
+    assertEquals(listOf("flag=true", "heal", "clean", "plan", "plan", "flag=false"), calls)
     assertEquals(false, flags.last())
 
     val thrownFlags = mutableListOf<Boolean>()

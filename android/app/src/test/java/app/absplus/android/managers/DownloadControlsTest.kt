@@ -382,6 +382,65 @@ class DownloadControlsTest {
     assertTrue(manager.downloadItemQueue.single().downloadItemParts.single().moved)
   }
 
+  private fun awaitFinalized(manager: DownloadItemManager) {
+    // A finalization counts as work until its background scan is over
+    val deadline = System.currentTimeMillis() + 5_000
+    while (System.currentTimeMillis() < deadline && manager.hasWork()) Thread.sleep(20)
+    assertFalse("finalization did not end", manager.hasWork())
+  }
+
+  @Test
+  fun returningSdCardFinalizesAWaitingDownload() {
+    val probe =
+            object : VolumeProbe {
+              @Volatile var mounted = false
+              override fun volumes() = listOf(AppVolume("79EC-9B33", File(root, "sd"), removable = true, mounted = mounted, writable = mounted))
+              override fun internalFilesDir(): File = context.filesDir
+            }
+    DeviceManager.dbManager.saveDownloadItem(item("fin", part("fin", "01.mp3", moved = true, sd = true), sd = true))
+    val manager = DownloadItemManager(FolderScanner(context), context, emitter, probe)
+    manager.restoreQueue()
+
+    probe.mounted = true
+    manager.resumeAwaitingStorage()
+    awaitFinalized(manager)
+
+    assertTrue("finalized without any other download running", "complete" in events)
+    assertTrue(manager.downloadItemQueue.none { it.id == "fin" })
+    assertFalse(DeviceManager.dbManager.getDownloadItems().any { it.id == "fin" })
+  }
+
+  @Test
+  fun sdCardRemovedBeforeTheScanKeepsTheDownload() {
+    val probe =
+            object : VolumeProbe {
+              val calls = java.util.concurrent.atomic.AtomicInteger()
+              @Volatile var mountedAgain = false
+              // Mounted for the restore's availability check only, then gone until the card comes back
+              override fun volumes(): List<AppVolume> {
+                val mounted = calls.getAndIncrement() == 0 || mountedAgain
+                return listOf(AppVolume("79EC-9B33", File(root, "sd"), removable = true, mounted = mounted, writable = mounted))
+              }
+              override fun internalFilesDir(): File = context.filesDir
+            }
+    val finished = part("gone", "01.mp3", moved = true, sd = true)
+    touch(finished.finalDestinationPath)
+    DeviceManager.dbManager.saveDownloadItem(item("gone", finished, sd = true))
+    val manager = DownloadItemManager(FolderScanner(context), context, emitter, probe)
+    manager.restoreQueue()
+    awaitFinalized(manager)
+
+    assertFalse("not reported as complete", "complete" in events)
+    assertTrue("kept in the queue", manager.downloadItemQueue.any { it.id == "gone" })
+    assertTrue(DeviceManager.dbManager.getDownloadItems().any { it.id == "gone" })
+
+    probe.mountedAgain = true
+    manager.resumeAwaitingStorage()
+    awaitFinalized(manager)
+    assertTrue("finalized once the card is back", "complete" in events)
+    assertTrue(manager.downloadItemQueue.none { it.id == "gone" })
+  }
+
   private companion object {
     const val SD_FOLDER_ID = "appsd-79EC-9B33-book"
   }

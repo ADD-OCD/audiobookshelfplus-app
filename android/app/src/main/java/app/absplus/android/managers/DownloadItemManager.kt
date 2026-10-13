@@ -231,6 +231,12 @@ class DownloadItemManager(
     notifyQueueChanged()
   }
 
+  /** Finalizes downloads that waited for their SD card, which nothing else wakes when no other download runs. */
+  @Synchronized
+  fun resumeAwaitingStorage() {
+    if (awaitingStorage.isNotEmpty()) resumeWork()
+  }
+
   enum class RemoveResult { REMOVED, NOT_FOUND, FINISHING, MOVING }
 
   /**
@@ -726,10 +732,17 @@ class DownloadItemManager(
     if (!item.isDownloadFinished || !finalizingItems.add(item.id)) return
     IncompleteDownloadCleanup.cancel(context, item.id)
     scope.launch {
+      var waitForCard = false
       try {
         val scanLock = scanLocks.computeIfAbsent(scanDestinationKey(item)) { Any() }
         synchronized(scanLock) {
           folderScanner.scanDownloadItem(item) { scanResult ->
+            // The card went away before the scan: its files are not gone, so wait for it instead of dropping the download
+            if (scanResult?.localLibraryItem == null && storageUnavailable(item)) {
+              waitForCard = true
+              AbsLogger.info(tag, "Download ${item.id} is complete; finalizing waits for the SD card")
+              return@scanDownloadItem
+            }
             val event =
                     JSObject().apply {
                       put("libraryItemId", item.id)
@@ -755,6 +768,8 @@ class DownloadItemManager(
       } finally {
         synchronized(this@DownloadItemManager) {
           finalizingItems.remove(item.id)
+          // Together with leaving finalizingItems: a queue check in between would drop the wait and find it still finalizing
+          if (waitForCard) awaitingStorage.add(item.id)
           notifyQueueChanged()
         }
       }

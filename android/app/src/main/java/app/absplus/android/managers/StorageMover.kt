@@ -22,6 +22,8 @@ interface MoverDb {
   fun hasQueuedDownload(libraryItemId: String): Boolean
   /** True when any local library item's absolutePath or any download's itemFolderPath (in any state) is [dir]. */
   fun dirOwned(dir: File): Boolean
+  /** [AppStorage.normalizedPath]s of every directory [dirOwned] would accept, read as one snapshot. */
+  fun ownedDirs(): Set<String>
   fun lastSession(): PlaybackSession?
   fun saveLastSession(s: PlaybackSession)
 }
@@ -95,12 +97,9 @@ object StorageMover {
   }
 
   private fun movedFile(file: File, fromRoot: File, toRoot: File): File? {
-    if (!AppStorage.isUnder(file, fromRoot)) return null
-    val rel = norm(fromRoot).relativize(norm(file)).toString()
+    val rel = AppStorage.relativePath(file, fromRoot) ?: return null
     return if (rel.isEmpty()) toRoot else File(toRoot, rel)
   }
-
-  private fun norm(f: File) = f.absoluteFile.toPath().normalize()
 
   fun moveOne(
           id: String,
@@ -137,7 +136,7 @@ object StorageMover {
     if (fromRoot == null || !AppStorage.isAvailable(snapshot.folderId, probe)) return MoveResult.Discarded("unavailable")
 
     val src = File(snapshot.absolutePath)
-    if (snapshot.absolutePath.isEmpty() || src.parentFile?.let { norm(it) } != norm(fromRoot)) {
+    if (snapshot.absolutePath.isEmpty() || src.parentFile?.let { AppStorage.normalizedPath(it) } != AppStorage.normalizedPath(fromRoot)) {
       return failed("$id folder ${snapshot.absolutePath} is not directly in ${fromRoot.absolutePath}")
     }
     val name = src.name
@@ -224,15 +223,23 @@ object StorageMover {
    * concurrently with [moveOne], whose copy is not referenced by anything until it commits.
    */
   fun cleanOrphans(roots: List<File>, db: MoverDb) {
+    val owned = db.ownedDirs()
     for (root in roots) {
       if (!root.isDirectory) continue
       root.listFiles()?.filter { it.isDirectory }?.forEach { child ->
-        if (child.name.startsWith(TMP_PREFIX) || !db.dirOwned(child)) {
-          AbsLogger.info(TAG, "Deleting orphaned download folder ${child.absolutePath}")
-          if (!child.deleteRecursively()) AbsLogger.error(TAG, "Could not delete ${child.absolutePath}")
+        if (child.name.startsWith(TMP_PREFIX)) {
+          deleteOrphan(child)
+        } else if (AppStorage.normalizedPath(child) !in owned) {
+          // A download finishing between dirOwned's item and queue reads saves its item under this lock
+          LocalItemLocks.withItem("local_${child.name}") { if (!db.dirOwned(child)) deleteOrphan(child) }
         }
       }
     }
+  }
+
+  private fun deleteOrphan(dir: File) {
+    AbsLogger.info(TAG, "Deleting orphaned download folder ${dir.absolutePath}")
+    if (!dir.deleteRecursively()) AbsLogger.error(TAG, "Could not delete ${dir.absolutePath}")
   }
 
   fun copyDirVerified(src: File, dst: File) = copyDirVerified(src, dst) { s, d -> s.copyTo(d, overwrite = true) }
@@ -241,16 +248,21 @@ object StorageMover {
   fun copyDirVerified(src: File, dst: File, copyFile: (File, File) -> Unit) {
     if (!src.isDirectory) throw IOException("${src.absolutePath} is not a directory")
     if (!dst.isDirectory && !dst.mkdirs()) throw IOException("could not create ${dst.absolutePath}")
-    src.walkTopDown().forEach { f ->
+    // An unreadable directory would otherwise look empty, and an empty copy would pass the check below
+    val walk = src.walkTopDown().onFail { f, e -> throw IOException("could not list ${f.absolutePath}", e) }
+    val copied = mutableListOf<File>()
+    walk.forEach { f ->
       if (f == src) return@forEach
       val target = File(dst, f.relativeTo(src).path)
       if (f.isDirectory) {
         if (!target.isDirectory && !target.mkdirs()) throw IOException("could not create ${target.absolutePath}")
       } else {
         copyFile(f, target)
+        copied += f
       }
     }
-    src.walkTopDown().filter { it.isFile }.forEach { f ->
+    if (!src.isDirectory) throw IOException("${src.absolutePath} disappeared during the copy")
+    copied.forEach { f ->
       val target = File(dst, f.relativeTo(src).path)
       if (!target.isFile || target.length() != f.length()) {
         throw IOException("copy of ${f.absolutePath} is incomplete (${target.length()} of ${f.length()} bytes)")

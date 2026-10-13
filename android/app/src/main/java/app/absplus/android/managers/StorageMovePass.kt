@@ -32,6 +32,7 @@ object StorageMovePass {
     val retry = mutableSetOf<String>()
     var done = 0
     var bytesDone = 0L
+    var lastError: String? = null
 
     while (true) {
       val plan = planFn()
@@ -39,14 +40,14 @@ object StorageMovePass {
       val waiting = countWaiting(plan, retry)
 
       if (candidates.isEmpty()) {
-        val result = MoveStatus(done, done, bytesDone, bytesDone, waiting, running = false, lastError = null)
+        val result = MoveStatus(done, done, bytesDone, bytesDone, waiting, running = false, lastError = lastError)
         onStatus(result)
         return result
       }
 
       val total = done + candidates.size
       val bytesTotal = bytesDone + candidates.sumOf(::itemSize)
-      onStatus(MoveStatus(total, done, bytesTotal, bytesDone, waiting, running = true, lastError = null))
+      onStatus(MoveStatus(total, done, bytesTotal, bytesDone, waiting, running = true, lastError = lastError))
 
       val item = candidates.first()
       when (val r = move(item)) {
@@ -61,10 +62,9 @@ object StorageMovePass {
           if (n >= DISCARDS_BEFORE_RETRY) retry += item.id
         }
         is MoveResult.Failed -> {
-          // A failure is likely to repeat (disk error, foreign folder), so the pass stops instead of spinning
-          val result = MoveStatus(total, done, bytesTotal, bytesDone, waiting, running = false, lastError = r.message)
-          onStatus(result)
-          return result
+          // A failure is likely to repeat (disk error, foreign folder): skip the item for this pass, move the others
+          retry += item.id
+          lastError = r.message
         }
       }
     }

@@ -377,8 +377,13 @@ class AbsFileSystem : Plugin() {
 
     // App storage items are deleted with the File API
     if (AppStorage.isAppStorage(localLibraryItem.folderId)) {
+      val probe = AndroidVolumeProbe(context)
+      if (!AppStorage.isAvailable(localLibraryItem.folderId, probe)) {
+        AbsLogger.info(tag, "deleteItem: ${localLibraryItem.id} is on a missing SD card; its files stay on the missing card until orphan cleanup")
+        return true
+      }
       val file = File(absolutePath)
-      val roots = AppStorage.appOwnedRoots(AndroidVolumeProbe(context))
+      val roots = AppStorage.appOwnedRoots(probe)
       val inAppStorage =
               absolutePath.isNotEmpty() &&
                       roots.any { root -> AppStorage.isUnder(file, root) && !AppStorage.isUnder(root, file) }

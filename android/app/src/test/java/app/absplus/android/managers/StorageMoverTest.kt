@@ -22,6 +22,7 @@ import java.io.File
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.After
@@ -29,6 +30,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -68,7 +71,13 @@ class StorageMoverTest {
     val book = MapBook()
     val store = LocalItemStore(book)
     val queued: MutableSet<String> = ConcurrentHashMap.newKeySet()
-    val queueFolders = mutableListOf<String>()
+    val queueFolders = CopyOnWriteArrayList<String>()
+    val dirOwnedCalls = AtomicInteger()
+    val ownedDirsCalls = AtomicInteger()
+    /** Replaces [ownedDirs]' result when set. */
+    var ownedSnapshot: Set<String>? = null
+    /** Runs once inside dirOwned, between the item read and the queue read. */
+    var betweenReads: (() -> Unit)? = null
     var session: PlaybackSession? = null
     var sessionSaves = 0
     /** Runs once, after the read, inside the first getItem call. */
@@ -95,10 +104,22 @@ class StorageMoverTest {
 
     override fun hasQueuedDownload(libraryItemId: String) = libraryItemId in queued
 
+    private fun itemDirs() = book.data.keys.mapNotNull { book.read(it) }.map { it.absolutePath }.filter { it.isNotEmpty() }.map { norm(File(it)) }
+
     override fun dirOwned(dir: File): Boolean {
+      dirOwnedCalls.incrementAndGet()
       val d = norm(dir)
-      return book.data.keys.mapNotNull { book.read(it) }.any { it.absolutePath.isNotEmpty() && norm(File(it.absolutePath)) == d } ||
-              queueFolders.any { norm(File(it)) == d }
+      val inItems = d in itemDirs()
+      betweenReads?.let {
+        betweenReads = null
+        it()
+      }
+      return inItems || queueFolders.any { norm(File(it)) == d }
+    }
+
+    override fun ownedDirs(): Set<String> {
+      ownedDirsCalls.incrementAndGet()
+      return ownedSnapshot ?: (itemDirs() + queueFolders.map { norm(File(it)) }).toSet()
     }
 
     override fun lastSession() = session
@@ -129,7 +150,7 @@ class StorageMoverTest {
     LocalItemLocks.clearPlaybackPin()
   }
 
-  private fun norm(f: File) = f.absoluteFile.toPath().normalize()
+  private fun norm(f: File) = AppStorage.normalizedPath(f)
 
   private fun uniq() = "li_" + UUID.randomUUID().toString().take(8)
 
@@ -519,5 +540,95 @@ class StorageMoverTest {
     assertFalse("a folder nobody owns is deleted", nobody.exists())
     assertFalse("a move copy is deleted", moving.exists())
     assertTrue("files in the root stay", rootFile.isFile)
+  }
+
+  @Test
+  fun orphanCleanupReadsOwnershipOnce() {
+    val owned = List(3) { seed(bookItem()) }
+    val nobody = File(sdRoot, "li_nobody").apply { mkdirs() }
+
+    StorageMover.cleanOrphans(listOf(inRoot, sdRoot), db)
+
+    assertEquals("one ownership snapshot per cleanup", 1, db.ownedDirsCalls.get())
+    assertEquals("only the folder missing from the snapshot is rechecked", 1, db.dirOwnedCalls.get())
+    owned.forEach { assertTrue(File(it.absolutePath).isDirectory) }
+    assertFalse(nobody.exists())
+  }
+
+  @Test
+  fun orphanCleanupWaitsForAFinishingDownload() {
+    val libId = "li_race"
+    val dir = File(sdRoot, libId).apply { mkdirs() }
+    write(dir, "01.mp3", 10)
+    db.queueFolders.add(dir.absolutePath)
+    // A snapshot without the folder, so the decision falls to the locked recheck
+    db.ownedSnapshot = emptySet()
+    val finisher = AtomicReference<Thread>()
+    db.betweenReads = {
+      // Like a finishing download: save the item under its lock, then drop the queue entry
+      val t = Thread {
+        val media = Book(bookMeta(), null, listOf(), null, null, mutableListOf(), null, null, null, null)
+        LocalItemLocks.withItem("local_$libId") { db.saveItem(item(libId, dir, sdFolder("book").id, "book", media, listOf(), null)) }
+        db.queueFolders.remove(dir.absolutePath)
+      }
+      finisher.set(t)
+      t.start()
+      t.join(400)
+    }
+
+    StorageMover.cleanOrphans(listOf(inRoot, sdRoot), db)
+    finisher.get().join(5000)
+
+    assertFalse("the download finished", finisher.get().isAlive)
+    assertNotNull(db.getItem("local_$libId"))
+    assertTrue("a download finishing during cleanup keeps its folder", File(dir, "01.mp3").isFile)
+  }
+
+  private fun assertCopyFailsWhileUnreadable(src: File, unreadable: File) {
+    assertTrue(unreadable.setReadable(false))
+    try {
+      assumeTrue("this file system lists directories without read permission", unreadable.listFiles() == null)
+      try {
+        StorageMover.copyDirVerified(src, File(temp.root, "dst-" + uniq()))
+        fail("a copy that could not list ${unreadable.name} passed as complete")
+      } catch (e: IOException) {
+        assertTrue(e.message, e.message!!.contains("could not list"))
+      }
+    } finally {
+      unreadable.setReadable(true)
+    }
+  }
+
+  @Test
+  fun unreadableSourceFailsTheCopy() {
+    val src = File(temp.root, "src").apply { mkdirs() }
+    write(src, "a.mp3", 10)
+    val sub = File(src, "sub").apply { mkdirs() }
+    write(sub, "b.mp3", 10)
+
+    assertCopyFailsWhileUnreadable(src, src)
+    assertCopyFailsWhileUnreadable(src, sub)
+  }
+
+  @Test
+  fun unreadableSourceFailsTheMove() {
+    val item = seed(bookItem())
+    val src = File(item.absolutePath)
+    val before = db.json(item.id)
+    val tree = treeOf(src)
+    assertTrue(src.setReadable(false))
+    val result =
+            try {
+              assumeTrue("this file system lists directories without read permission", src.listFiles() == null)
+              StorageMover.moveOne(item.id, sdFolder("book"), probe, db)
+            } finally {
+              src.setReadable(true)
+            }
+
+    assertTrue("$result", result is MoveResult.Failed)
+    assertEquals(tree, treeOf(src))
+    assertEquals("the database still points at the source", before, db.json(item.id))
+    assertFalse(File(sdRoot, item.libraryItemId!!).exists())
+    noTmp()
   }
 }
