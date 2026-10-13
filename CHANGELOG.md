@@ -3,6 +3,15 @@
 Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and dates are recorded in
 `docs/release-process.md`, and the feature list in `readme.md` describes what the app contains.
 
+## Unreleased
+
+Merged into `plus`, not yet in a published release.
+
+- **Podcast library navigation:** every tab now shows both its icon and its label, selected or not: Home (house),
+  Latest (clock), Library (stacked books) and Add (plus). Library no longer uses the microphone and Add no longer
+  uses the broadcast symbol. Tabs keep equal widths, the labels name each destination for screen readers, and the
+  layout adapts to portrait, landscape and larger text. Audiobook libraries are unchanged.
+
 ## v0.18.2 — LLAMA landscape cover frame fix
 
 **Released 2026-10-13:** versionCode 136, versionName `0.14.2-beta` (upstream base unchanged), `PLUS_VERSION`
