@@ -11,7 +11,11 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toFile
 import app.absplus.android.BuildConfig
 import app.absplus.android.R
+import app.absplus.android.device.AndroidVolumeProbe
+import app.absplus.android.device.AppStorage
+import app.absplus.android.device.VolumeProbe
 import app.absplus.android.diagnostics.DLog
+import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 
@@ -30,6 +34,7 @@ internal object CoverArt {
   const val FAILURE_TTL_MS = 5 * 60 * 1000L
   private const val MAX_REMEMBERED = 32
   private const val TAG = "CoverArt"
+  private val STORAGE_ROOT = File("/storage")
 
   // Replaceable in tests; production decodes through the platform decoder
   internal var decoder: (Context, Uri) -> Bitmap? = ::platformDecode
@@ -64,16 +69,24 @@ internal object CoverArt {
   /**
    * Content URI for a local cover. A `file:` cover is served through the app's FileProvider; one the provider
    * can't serve (outside its paths, or not a valid file URI) gets the default artwork instead of throwing.
+   * The provider's root path exposes all of /storage, so a cover there is served only under the app's own roots.
    */
-  fun localCoverUri(ctx: Context, coverContentUrl: String): Uri {
+  fun localCoverUri(ctx: Context, coverContentUrl: String, probe: VolumeProbe = AndroidVolumeProbe(ctx)): Uri {
     if (!coverContentUrl.startsWith("file:")) return Uri.parse(coverContentUrl)
     return try {
-      FileProvider.getUriForFile(ctx, "${BuildConfig.APPLICATION_ID}.fileprovider", Uri.parse(coverContentUrl).toFile())
+      val file = Uri.parse(coverContentUrl).toFile()
+      if (AppStorage.isUnder(file, STORAGE_ROOT) && !isServableCoverPath(file, AppStorage.appOwnedRoots(probe))) {
+        record(coverContentUrl, Failure.INVALID, "cover uri")
+        return defaultUri()
+      }
+      FileProvider.getUriForFile(ctx, "${BuildConfig.APPLICATION_ID}.fileprovider", file)
     } catch (e: IllegalArgumentException) {
       record(coverContentUrl, Failure.INVALID, "cover uri")
       defaultUri()
     }
   }
+
+  internal fun isServableCoverPath(file: File, roots: List<File>): Boolean = roots.any { AppStorage.isUnder(file, it) }
 
   fun classify(e: Throwable): Failure? = when {
     e is FileNotFoundException -> Failure.MISSING
