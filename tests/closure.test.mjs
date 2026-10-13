@@ -123,5 +123,5 @@ test('Series toolbar: grows for a wrapped title (two lines at most); the shelf t
   assert.match(page, /\.main-content \{\n  flex: 1 1 0;\n  min-height: 0;\n  max-width: 100vw;\n\}/)
   assert.doesNotMatch(page, /calc\(100% - (72|36)px\)/)
   const nav = await read('../components/home/BookshelfNavBar.vue')
-  assert.match(nav, /<div class="w-full h-9 bg-bg relative">/, 'the navigation keeps its 36px')
+  assert.match(nav, /<div class="w-full bg-bg relative" :class="labeled \? 'labeled-nav' : 'h-9'">/, 'book libraries keep the 36px strip; labeled podcast tabs grow with the font scale')
 })

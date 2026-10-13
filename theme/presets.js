@@ -579,7 +579,7 @@ const BROWSE_NAV_CHASSIS = Object.freeze({
   'box-shadow': 'inset 0 1px 0 rgb(var(--color-edge-light) / 0.18), inset 0 -1px 0 rgb(var(--color-edge-dark))'
 })
 // Selected tab: a recessed dark key (the players' key language) pressed into the strip; it keeps the accent underline
-// and its text label (unselected tabs show an icon), so the state never reads by color alone
+// and its text label (in book libraries the unselected tabs show only an icon; podcast tabs show both), so the state never reads by color alone
 const BROWSE_NAV_SELECTED = Object.freeze({
   'background-color': 'rgb(var(--color-recessed))',
   'background-image': RECESSED_FACE,
@@ -1033,7 +1033,7 @@ const EQUIPMENT_RULES = [
   ['#bookshelf-navbar a', NAV_KEY],
   ['#bookshelf-navbar a.text-fg-muted', { color: 'rgb(var(--color-fg) / 0.92)' }],
   ['#bookshelf-navbar a.bg-primary', NAV_KEY_SELECTED],
-  ['#bookshelf-navbar a.bg-primary p', { 'font-family': CONDENSED_FACE, 'letter-spacing': '0.03em' }],
+  ['#bookshelf-navbar a p', { 'font-family': CONDENSED_FACE, 'letter-spacing': '0.03em' }],
   // Headings and counts are lit readouts: shelf headings and search groups in phosphor green, the toolbar count too
   ['.shelf-heading', LCD_TEXT],
   ['.search-section-label', LCD_TEXT],
