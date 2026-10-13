@@ -105,6 +105,12 @@ class StorageMoveService : Service() {
   }
 
   private fun finishPass() {
+    if (rerunRequested) {
+      rerunRequested = false
+      lastStatus = null
+      scope.launch { runPass() }
+      return
+    }
     running = false
     isRunning = false
     stopForeground(STOP_FOREGROUND_REMOVE)
@@ -173,6 +179,8 @@ class StorageMoveService : Service() {
     @Volatile var movedListener: ((LocalLibraryItem) -> Unit)? = null
     @Volatile var lastStatus: MoveStatus? = null
     @Volatile var isRunning = false
+    // Main-confined: a request during a pass may come after that pass's last plan, so finishPass runs another
+    private var rerunRequested = false
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mapper = jacksonObjectMapper()
@@ -191,8 +199,12 @@ class StorageMoveService : Service() {
       }
     }
 
+    /** Call on the main thread. */
     fun startIfNeeded(context: Context) {
-      if (isRunning) return
+      if (isRunning) {
+        rerunRequested = true
+        return
+      }
       val app = context.applicationContext
       scope.launch {
         try {
