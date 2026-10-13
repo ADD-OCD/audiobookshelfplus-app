@@ -46,10 +46,11 @@ class DownloadFolderResolverTest {
           existing: LocalLibraryItem?,
           setting: StorageTarget,
           probe: VolumeProbe,
-          folders: List<LocalFolder>
+          folders: List<LocalFolder>,
+          queued: String? = null
   ): FolderResolution {
     val byId = folders.associateBy { it.id }
-    return DownloadFolderResolver.resolveFolder(mediaType, explicit, existing, setting, probe) { byId[it] }
+    return DownloadFolderResolver.resolveFolder(mediaType, explicit, existing, queued, setting, probe) { byId[it] }
   }
 
   @Test
@@ -113,5 +114,17 @@ class DownloadFolderResolverTest {
     val existing = item(internal.id, "book")
     assertEquals(FolderResolution.Existing(folder), resolve("book", safId, existing, sd, probe(), listOf(folder, internal)))
     assertEquals(FolderResolution.NotFound, resolve("book", safId, existing, sd, probe(), listOf(internal)))
+  }
+
+  @Test
+  fun queuedDownloadFolderWins() {
+    val internal = AppStorage.folderFor(StorageTarget.Internal, "podcast")
+    assertEquals(FolderResolution.Existing(internal), resolve("podcast", null, null, sd, probe(), listOf(internal), queued = internal.id))
+
+    val sdPodcast = AppStorage.folderFor(sd, "podcast")
+    assertEquals(FolderResolution.Unavailable, resolve("podcast", null, null, StorageTarget.Internal, probe(sdMounted = false), listOf(sdPodcast), queued = sdPodcast.id))
+
+    val existingWins = resolve("podcast", null, item(internal.id, "podcast"), sd, probe(), listOf(internal, sdPodcast), queued = sdPodcast.id)
+    assertEquals(FolderResolution.Existing(internal), existingWins)
   }
 }

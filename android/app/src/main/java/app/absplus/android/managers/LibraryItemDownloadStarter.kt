@@ -64,9 +64,10 @@ object LibraryItemDownloadStarter {
           episode: PodcastEpisode?
   ): Pair<DownloadItem?, String?> {
     val existing = DeviceManager.dbManager.getLocalLibraryItemByLId(libraryItem.id)
+    val queuedFolderId = DownloadServiceHost.queuedFolderId(libraryItem.id)
     val setting = DownloadStorageSetting.parse(DeviceManager.deviceData.deviceSettings?.downloadStorage)
     val probe = AndroidVolumeProbe(context)
-    val resolution = DownloadFolderResolver.resolveFolder(libraryItem.mediaType, explicitFolderId, existing, setting, probe) {
+    val resolution = DownloadFolderResolver.resolveFolder(libraryItem.mediaType, explicitFolderId, existing, queuedFolderId, setting, probe) {
       DeviceManager.dbManager.getLocalFolder(it)
     }
     val localFolder = when (resolution) {

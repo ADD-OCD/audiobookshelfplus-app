@@ -128,6 +128,10 @@ object DownloadServiceHost {
     }
   }
 
+  /** The folder of any queued download of the item, so its later downloads stay on the same volume. */
+  fun queuedFolderId(libraryItemId: String): String? =
+          manager?.let { m -> synchronized(m) { m.downloadItemQueue.firstOrNull { it.libraryItemId == libraryItemId }?.localFolder?.id } }
+
   fun retryExisting(
           context: Context,
           downloadItemId: String,
