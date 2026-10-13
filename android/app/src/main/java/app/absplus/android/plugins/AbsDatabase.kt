@@ -2,10 +2,16 @@ package app.absplus.android.plugins
 
 import android.os.Handler
 import android.os.Looper
+import android.os.StatFs
 import android.util.Log
 import app.absplus.android.MainActivity
 import app.absplus.android.data.*
+import app.absplus.android.device.AndroidVolumeProbe
+import app.absplus.android.device.AppStorage
 import app.absplus.android.device.DeviceManager
+import app.absplus.android.device.DownloadStorageSetting
+import app.absplus.android.device.DownloadStorageSpace
+import app.absplus.android.device.StorageTarget
 import app.absplus.android.media.MediaEventManager
 import app.absplus.android.server.ApiHandler
 import app.absplus.android.server.RefreshResult
@@ -21,6 +27,7 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 @CapacitorPlugin(name = "AbsDatabase")
 class AbsDatabase : Plugin() {
@@ -618,6 +625,8 @@ class AbsDatabase : Plugin() {
     val newDeviceSettings = jacksonMapper.readValue<DeviceSettings>(call.data.toString())
 
     Handler(Looper.getMainLooper()).post {
+      // Written only by setDownloadStorage; otherwise any settings save from JS would reset it
+      newDeviceSettings.downloadStorage = DeviceManager.deviceData.deviceSettings?.downloadStorage ?: "internal"
       DeviceManager.deviceData.deviceSettings = newDeviceSettings
       DeviceManager.dbManager.saveDeviceData(DeviceManager.deviceData)
 
@@ -635,6 +644,96 @@ class AbsDatabase : Plugin() {
       }
 
       call.resolve(JSObject(jacksonMapper.writeValueAsString(DeviceManager.deviceData)))
+    }
+  }
+
+  /** [target] is "internal" or "sd"; refuses with errorCode noSdCard / noSpace when the downloads would not fit. */
+  @PluginMethod
+  fun setDownloadStorage(call:PluginCall) {
+    val requested = call.getString("target")
+    if (requested != "internal" && requested != "sd") {
+      call.reject("Invalid download storage target")
+      return
+    }
+
+    GlobalScope.launch(Dispatchers.IO) {
+      try {
+        val target: StorageTarget
+        val freeBytes: Long
+        if (requested == "internal") {
+          target = StorageTarget.Internal
+          freeBytes = StatFs(context.filesDir.path).availableBytes
+        } else {
+          val volume = AppStorage.removableVolume(AndroidVolumeProbe(context))
+          val uuid = volume?.uuid
+          if (volume == null || uuid == null) {
+            call.resolve(downloadStorageRefusal("SD card not available", "noSdCard", 0L, 0L))
+            return@launch
+          }
+          target = StorageTarget.Sd(uuid)
+          freeBytes = StatFs(volume.filesDir.path).availableBytes
+        }
+
+        val requiredBytes =
+                DownloadStorageSpace.bytesToMove(DeviceManager.dbManager.getLocalLibraryItems(), target) +
+                        DownloadStorageSpace.MOVE_SPACE_MARGIN_BYTES
+        if (requiredBytes > freeBytes) {
+          call.resolve(downloadStorageRefusal("Not enough space", "noSpace", requiredBytes, freeBytes))
+          return@launch
+        }
+
+        val setting = DownloadStorageSetting.format(target)
+        // Same thread as updateDeviceSettings, so the two never overwrite each other's device data
+        Handler(Looper.getMainLooper()).post {
+          try {
+            val deviceData = DeviceManager.deviceData
+            val settings = deviceData.deviceSettings ?: DeviceSettings.default().also { deviceData.deviceSettings = it }
+            settings.downloadStorage = setting
+            deviceData.reconcileNeeded = true
+            DeviceManager.dbManager.saveDeviceData(deviceData)
+            call.resolve(JSObject().apply { put("downloadStorage", setting) })
+          } catch (e: Exception) {
+            Log.e(tag, "setDownloadStorage: failed to save setting", e)
+            call.reject(e.message ?: "Failed to save download storage")
+          }
+        }
+      } catch (e: Exception) {
+        Log.e(tag, "setDownloadStorage: failed for target $requested", e)
+        call.reject(e.message ?: "Failed to set download storage")
+      }
+    }
+  }
+
+  private fun downloadStorageRefusal(error: String, errorCode: String, requiredBytes: Long, freeBytes: Long) =
+          JSObject().apply {
+            put("error", error)
+            put("errorCode", errorCode)
+            put("requiredBytes", requiredBytes)
+            put("freeBytes", freeBytes)
+          }
+
+  @PluginMethod
+  fun getDownloadStorageStatus(call:PluginCall) {
+    GlobalScope.launch(Dispatchers.IO) {
+      try {
+        val sdVolume = AndroidVolumeProbe(context).volumes().firstOrNull { it.removable }
+        val result = JSObject()
+        result.put("downloadStorage", DeviceManager.deviceData.deviceSettings?.downloadStorage ?: "internal")
+        result.put("internalFreeBytes", StatFs(context.filesDir.path).availableBytes)
+        if (sdVolume == null) {
+          result.put("sd", JSONObject.NULL)
+        } else {
+          result.put("sd", JSObject().apply {
+            put("uuid", sdVolume.uuid ?: JSONObject.NULL)
+            put("mounted", sdVolume.mounted)
+            put("freeBytes", if (sdVolume.mounted) StatFs(sdVolume.filesDir.path).availableBytes else 0L)
+          })
+        }
+        call.resolve(result)
+      } catch (e: Exception) {
+        Log.e(tag, "getDownloadStorageStatus failed", e)
+        call.reject(e.message ?: "Failed to read download storage status")
+      }
     }
   }
 

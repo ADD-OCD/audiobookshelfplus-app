@@ -180,7 +180,8 @@ data class DeviceSettings(
         var autoDownloadKeepCount: Int = 3,
         var autoDownloadWifiOnly: Boolean = true,
         var autoDownloadChargingOnly: Boolean = false,
-        var autoDownloadIntervalHours: Int = 6
+        var autoDownloadIntervalHours: Int = 6,
+        var downloadStorage: String = "internal"
 ) {
   companion object {
     // Static method to get default device settings
@@ -216,7 +217,8 @@ data class DeviceSettings(
               autoDownloadKeepCount = 3,
               autoDownloadWifiOnly = true,
               autoDownloadChargingOnly = false,
-              autoDownloadIntervalHours = 6
+              autoDownloadIntervalHours = 6,
+              downloadStorage = "internal"
       )
     }
   }
@@ -258,7 +260,9 @@ data class DeviceData(
         var serverConnectionConfigs: MutableList<ServerConnectionConfig>,
         var lastServerConnectionConfigId: String?,
         var deviceSettings: DeviceSettings?,
-        var lastPlaybackSession: PlaybackSession?
+        var lastPlaybackSession: PlaybackSession?,
+        // Downloads may sit on a storage other than the chosen one until a reconcile pass moves them
+        var reconcileNeeded: Boolean = false
 ) {
   @JsonIgnore
   fun getLastServerConnectionConfig(): ServerConnectionConfig? {
