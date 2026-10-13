@@ -24,6 +24,7 @@ import app.absplus.android.device.RescanOutcome
 import app.absplus.android.device.RescanPhase
 import app.absplus.android.device.RescanProgress
 import app.absplus.android.device.loadRescanCatalog
+import app.absplus.android.managers.ItemUpdate
 import app.absplus.android.server.ApiHandler
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -411,21 +412,23 @@ class AbsFileSystem : Plugin() {
     val contentUrl = call.data.getString("trackContentUrl", "").toString()
     Log.d(tag, "deleteTrackFromItem $contentUrl")
 
-    val localLibraryItem = DeviceManager.dbManager.getLocalLibraryItem(localLibraryItemId)
-    if (localLibraryItem == null) {
-      Log.e(tag, "deleteTrackFromItem: LLI does not exist $localLibraryItemId")
-      return call.resolve(JSObject("{\"success\":false}"))
+    val result = DeviceManager.dbManager.updateLocalLibraryItem(localLibraryItemId) { localLibraryItem ->
+      val docfile = DocumentFileCompat.fromUri(mainActivity, Uri.parse(contentUrl))
+      if (docfile?.delete() == true) {
+        localLibraryItem.media.removeAudioTrack(trackLocalFileId)
+        localLibraryItem.removeLocalFile(trackLocalFileId)
+        ItemUpdate.Save(localLibraryItem)
+      } else {
+        ItemUpdate.Keep
+      }
     }
-
-    val docfile = DocumentFileCompat.fromUri(mainActivity, Uri.parse(contentUrl))
-    val success = docfile?.delete() == true
-    if (success) {
-      localLibraryItem.media.removeAudioTrack(trackLocalFileId)
-      localLibraryItem.removeLocalFile(trackLocalFileId)
-      DeviceManager.dbManager.saveLocalLibraryItem(localLibraryItem)
-      call.resolve(JSObject(jacksonMapper.writeValueAsString(localLibraryItem)))
-    } else {
-      call.resolve(JSObject("{\"success\":false}"))
+    when (result) {
+      null -> {
+        Log.e(tag, "deleteTrackFromItem: LLI does not exist $localLibraryItemId")
+        call.resolve(JSObject("{\"success\":false}"))
+      }
+      is ItemUpdate.Save -> call.resolve(JSObject(jacksonMapper.writeValueAsString(result.item)))
+      else -> call.resolve(JSObject("{\"success\":false}"))
     }
   }
 

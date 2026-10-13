@@ -9,6 +9,7 @@ import app.absplus.android.device.DeviceManager
 import app.absplus.android.media.MediaEventManager
 import app.absplus.android.server.ApiHandler
 import app.absplus.android.server.RefreshResult
+import app.absplus.android.managers.ItemUpdate
 import app.absplus.android.managers.SecureStorage
 import app.absplus.android.widget.WidgetRenderer
 import app.absplus.android.managers.AutoDownloadScheduler
@@ -572,40 +573,41 @@ class AbsDatabase : Plugin() {
   @PluginMethod
   fun updateLocalTrackOrder(call:PluginCall) {
     val localLibraryItemId = call.getString("localLibraryItemId", "") ?: ""
-    val localLibraryItem = DeviceManager.dbManager.getLocalLibraryItem(localLibraryItemId)
-    if (localLibraryItem == null) {
-      call.resolve()
-      return
-    }
-
-    val audioTracks = localLibraryItem.media.getAudioTracks() as MutableList
-
     val tracks:JSArray = call.getArray("tracks") ?: JSArray()
     Log.d(tag, "updateLocalTrackOrder $tracks")
 
-    var index = 1
-    var hasUpdates = false
-    for (i in 0 until tracks.length()) {
-      val track = tracks.getJSONObject(i)
-      val localFileId = track.getString("localFileId")
+    val result = DeviceManager.dbManager.updateLocalLibraryItem(localLibraryItemId) { localLibraryItem ->
+      val audioTracks = localLibraryItem.media.getAudioTracks() as MutableList
 
-      val existingTrack = audioTracks.find{ it.localFileId == localFileId }
-      if (existingTrack != null) {
-        Log.d(tag, "Found existing track ${existingTrack.localFileId} that has index ${existingTrack.index} should be index $index")
-        if (existingTrack.index != index) hasUpdates = true
-        existingTrack.index = index++
+      var index = 1
+      var hasUpdates = false
+      for (i in 0 until tracks.length()) {
+        val track = tracks.getJSONObject(i)
+        val localFileId = track.getString("localFileId")
+
+        val existingTrack = audioTracks.find{ it.localFileId == localFileId }
+        if (existingTrack != null) {
+          Log.d(tag, "Found existing track ${existingTrack.localFileId} that has index ${existingTrack.index} should be index $index")
+          if (existingTrack.index != index) hasUpdates = true
+          existingTrack.index = index++
+        } else {
+          Log.e(tag, "Audio track with local file id not found")
+        }
+      }
+
+      if (hasUpdates) {
+        Log.d(tag, "Save library item track orders")
+        localLibraryItem.media.setAudioTracks(audioTracks)
+        ItemUpdate.Save(localLibraryItem)
       } else {
-        Log.e(tag, "Audio track with local file id not found")
+        Log.d(tag, "No tracks need to be updated")
+        ItemUpdate.Keep
       }
     }
 
-    if (hasUpdates) {
-      Log.d(tag, "Save library item track orders")
-      localLibraryItem.media.setAudioTracks(audioTracks)
-      DeviceManager.dbManager.saveLocalLibraryItem(localLibraryItem)
-      call.resolve(JSObject(jacksonMapper.writeValueAsString(localLibraryItem)))
+    if (result is ItemUpdate.Save) {
+      call.resolve(JSObject(jacksonMapper.writeValueAsString(result.item)))
     } else {
-      Log.d(tag, "No tracks need to be updated")
       call.resolve()
     }
   }
