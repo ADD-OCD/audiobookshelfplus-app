@@ -26,3 +26,14 @@ export async function appStorageFolderFor(ctx, mediaType) {
   }
   return appStorageDownloadFolder(mediaType, appStorageLabel(ctx.$strings, status?.downloadStorage))
 }
+
+export function appStorageFolderIds(downloadStorage) {
+  const value = String(downloadStorage || '')
+  const uuid = value.startsWith('sd:') ? value.slice(3) : ''
+  return uuid ? [`appsd-${uuid}-book`, `appsd-${uuid}-podcast`] : ['internal-book', 'internal-podcast']
+}
+
+// An app storage folder that is neither the current download storage nor holds items is just leftover from a past setting.
+export function visibleFolders(folders, itemsCountByFolder, currentAppFolderIds) {
+  return (folders || []).filter((f) => !isAppStorageFolderId(f.id) || currentAppFolderIds.includes(f.id) || ((itemsCountByFolder || {})[f.id] || 0) > 0)
+}

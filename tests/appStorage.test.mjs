@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { appStorageDownloadFolder, appStorageLabel, isAppStorageFolderId, safFoldersFor } from '../utils/appStorage.js'
+import { appStorageDownloadFolder, appStorageFolderIds, appStorageLabel, isAppStorageFolderId, safFoldersFor, visibleFolders } from '../utils/appStorage.js'
 
 test('isAppStorageFolderId', () => {
   assert.equal(isAppStorageFolderId('internal-book'), true)
@@ -28,4 +28,26 @@ test('appStorageFolderHasEmptyId', () => {
   assert.equal(appStorageLabel(strings, 'internal'), 'App storage · Internal')
   assert.equal(appStorageLabel(strings, 'sd:79EC-9B33'), 'App storage · SD card')
   assert.equal(appStorageLabel(strings, undefined), 'App storage · Internal')
+})
+
+test('appStorageFolderIds', () => {
+  assert.deepEqual(appStorageFolderIds('internal'), ['internal-book', 'internal-podcast'])
+  assert.deepEqual(appStorageFolderIds('sd:79EC-9B33'), ['appsd-79EC-9B33-book', 'appsd-79EC-9B33-podcast'])
+  assert.deepEqual(appStorageFolderIds(undefined), ['internal-book', 'internal-podcast'])
+  assert.deepEqual(appStorageFolderIds('sd:'), ['internal-book', 'internal-podcast'])
+})
+
+test('visibleFolders', () => {
+  const saf = { id: 'cHJpbWFyeTpBdWRpb2Jvb2tzL0FCU1RFU1Q=', mediaType: 'book' }
+  const internalBook = { id: 'internal-book', mediaType: 'book' }
+  const internalPodcast = { id: 'internal-podcast', mediaType: 'podcast' }
+  const sdBook = { id: 'appsd-79EC-9B33-book', mediaType: 'book' }
+  const folders = [internalBook, internalPodcast, sdBook, saf]
+  const current = appStorageFolderIds('sd:79EC-9B33')
+  assert.ok(!visibleFolders(folders, {}, current).includes(internalBook), 'empty internal folder is hidden while storage is the SD card')
+  assert.ok(visibleFolders(folders, { 'internal-book': 2 }, current).includes(internalBook), 'internal folder with items is shown')
+  assert.ok(visibleFolders(folders, {}, current).includes(sdBook), 'current folder is shown even when empty')
+  assert.ok(visibleFolders(folders, {}, current).includes(saf), 'user-picked folder is always shown')
+  assert.deepEqual(visibleFolders(folders, { 'appsd-79EC-9B33-book': 0 }, appStorageFolderIds('internal')), [internalBook, internalPodcast, saf])
+  assert.deepEqual(visibleFolders(null, {}, current), [])
 })
