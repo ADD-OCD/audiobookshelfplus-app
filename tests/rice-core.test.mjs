@@ -217,7 +217,7 @@ test('starter catalog: ten pinned, attributable, contrast-passing adaptations ke
     S.STARTER_IDS
   )
   assert.equal(STARTERS.length, 10)
-  assert.equal(engine.THEMES.length, 4, 'starters are not built-in themes')
+  for (const s of STARTERS) assert.ok(!engine.THEMES.some((t) => t.id === s.id), `${s.id}: starters are not built-in themes`)
   for (const s of STARTERS) {
     assert.ok(S.validateSnapshot(s.snapshot).ok, s.id)
     assert.ok(evaluateContrast(s.snapshot).ok, s.id)
