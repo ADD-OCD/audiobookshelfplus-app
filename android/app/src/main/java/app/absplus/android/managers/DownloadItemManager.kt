@@ -17,6 +17,7 @@ import app.absplus.android.models.DownloadItemPart
 import app.absplus.android.plugins.AbsLogger
 import app.absplus.android.server.ApiHandler
 import app.absplus.android.server.RefreshResult
+import app.absplus.android.services.StorageMoveService
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.getcapacitor.JSObject
@@ -745,6 +746,7 @@ class DownloadItemManager(
               downloadItemQueue.remove(item)
               DeviceManager.dbManager.removeDownloadItem(item.id)
             }
+            StorageMoveService.requestReconcile(context)
           }
         }
       } catch (e: Exception) {

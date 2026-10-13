@@ -28,6 +28,7 @@ import app.absplus.android.device.loadRescanCatalog
 import app.absplus.android.managers.ItemUpdate
 import app.absplus.android.managers.LocalItemLocks
 import app.absplus.android.server.ApiHandler
+import app.absplus.android.services.StorageMoveService
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.getcapacitor.*
@@ -51,6 +52,9 @@ class AbsFileSystem : Plugin() {
     mainActivity = (activity as MainActivity)
     apiHandler = ApiHandler(mainActivity)
     folderScanner = FolderScanner(context)
+    StorageMoveService.movedListener = {
+      notifyListeners("onLocalLibraryItemMoved", JSObject(jacksonMapper.writeValueAsString(it)))
+    }
 
     mainActivity.storage.storageAccessCallback =
             object : StorageAccessCallback {

@@ -79,7 +79,9 @@ class AbsDownloader : Plugin() {
             call.getString("downloadingFile") ?: "Downloading {0}",
             call.getString("waitingForStorage") ?: "Waiting for available storage",
             call.getString("downloads") ?: "Downloads",
-            call.getString("cancel") ?: "Cancel")
+            call.getString("cancel") ?: "Cancel",
+            call.getString("moveToSd") ?: DownloadServiceHost.DEFAULT_MOVE_TO_SD,
+            call.getString("moveToInternal") ?: DownloadServiceHost.DEFAULT_MOVE_TO_INTERNAL)
     call.resolve()
   }
 

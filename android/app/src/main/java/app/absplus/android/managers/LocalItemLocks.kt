@@ -34,8 +34,12 @@ object LocalItemLocks {
     withItem(id) { pinned = id }
   }
 
-  fun clearPlaybackPin() {
+  /** True when an item was pinned. */
+  @Synchronized
+  fun clearPlaybackPin(): Boolean {
+    val had = pinned != null
     pinned = null
+    return had
   }
 
   fun isPinned(id: String): Boolean = pinned == id

@@ -26,6 +26,7 @@ import app.absplus.android.plugins.AbsDownloader
 import app.absplus.android.plugins.AbsFileSystem
 import app.absplus.android.plugins.AbsLogger
 import app.absplus.android.plugins.AbsUpdater
+import app.absplus.android.services.StorageMoveService
 import com.getcapacitor.BridgeActivity
 
 
@@ -125,6 +126,17 @@ class MainActivity : BridgeActivity() {
     }
   }
 
+  override fun onResume() {
+    super.onResume()
+    isForeground = true
+    StorageMoveService.startIfNeeded(this)
+  }
+
+  override fun onPause() {
+    isForeground = false
+    super.onPause()
+  }
+
   override fun onDestroy() {
     DLog.marker("App UI closed (Activity destroyed, finishing=$isFinishing)")
     super.onDestroy()
@@ -195,5 +207,10 @@ class MainActivity : BridgeActivity() {
     grantResults.forEach { DLog.d(tag, "GRANTREUSLTS $it") }
     // Mandatory for Activity, but not for Fragment & ComponentActivity
     storageHelper.onRequestPermissionsResult(requestCode, permissions, grantResults)
+  }
+
+  companion object {
+    // Foreground services may only be started while the app is visible (Android 12+)
+    @Volatile var isForeground = false
   }
 }

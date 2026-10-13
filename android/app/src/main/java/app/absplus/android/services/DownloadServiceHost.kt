@@ -31,7 +31,9 @@ object DownloadServiceHost {
           val downloadingFile: String,
           val waitingForStorage: String,
           val downloads: String,
-          val cancel: String
+          val cancel: String,
+          val moveToSd: String,
+          val moveToInternal: String
   )
 
   private var manager: DownloadItemManager? = null
@@ -132,6 +134,17 @@ object DownloadServiceHost {
   fun queuedFolderId(libraryItemId: String): String? =
           manager?.let { m -> synchronized(m) { m.downloadItemQueue.firstOrNull { it.libraryItemId == libraryItemId }?.localFolder?.id } }
 
+  suspend fun awaitRestored(context: Context) {
+    ensure(context)
+    restoreJob?.join()
+  }
+
+  /** The queue in every state; empty before the manager exists. */
+  fun queueSnapshot(): List<DownloadItem> = manager?.let { m -> synchronized(m) { m.downloadItemQueue.toList() } } ?: emptyList()
+
+  fun hasQueuedDownload(libraryItemId: String): Boolean =
+          manager?.let { m -> synchronized(m) { m.downloadItemQueue.any { it.libraryItemId == libraryItemId } } } ?: false
+
   fun retryExisting(
           context: Context,
           downloadItemId: String,
@@ -224,7 +237,9 @@ object DownloadServiceHost {
           downloadingFile: String,
           waitingForStorage: String,
           downloads: String,
-          cancel: String
+          cancel: String,
+          moveToSd: String,
+          moveToInternal: String
   ) {
     context.getSharedPreferences(NOTIFICATION_PREFERENCES, Context.MODE_PRIVATE)
             .edit()
@@ -233,6 +248,8 @@ object DownloadServiceHost {
             .putString(KEY_WAITING_FOR_STORAGE, waitingForStorage)
             .putString(KEY_DOWNLOADS, downloads)
             .putString(KEY_CANCEL, cancel)
+            .putString(KEY_MOVE_TO_SD, moveToSd)
+            .putString(KEY_MOVE_TO_INTERNAL, moveToInternal)
             .apply()
   }
 
@@ -245,7 +262,9 @@ object DownloadServiceHost {
             preferences.getString(KEY_WAITING_FOR_STORAGE, DEFAULT_WAITING_FOR_STORAGE)
                     ?: DEFAULT_WAITING_FOR_STORAGE,
             preferences.getString(KEY_DOWNLOADS, DEFAULT_DOWNLOADS) ?: DEFAULT_DOWNLOADS,
-            preferences.getString(KEY_CANCEL, DEFAULT_CANCEL) ?: DEFAULT_CANCEL)
+            preferences.getString(KEY_CANCEL, DEFAULT_CANCEL) ?: DEFAULT_CANCEL,
+            preferences.getString(KEY_MOVE_TO_SD, DEFAULT_MOVE_TO_SD) ?: DEFAULT_MOVE_TO_SD,
+            preferences.getString(KEY_MOVE_TO_INTERNAL, DEFAULT_MOVE_TO_INTERNAL) ?: DEFAULT_MOVE_TO_INTERNAL)
   }
 
   fun attachService(downloadService: DownloadService) {
@@ -313,6 +332,10 @@ object DownloadServiceHost {
   private const val KEY_WAITING_FOR_STORAGE = "waiting_for_storage"
   private const val KEY_DOWNLOADS = "downloads"
   private const val KEY_CANCEL = "cancel"
+  private const val KEY_MOVE_TO_SD = "move_to_sd"
+  private const val KEY_MOVE_TO_INTERNAL = "move_to_internal"
+  const val DEFAULT_MOVE_TO_SD = "Moving downloads to SD card"
+  const val DEFAULT_MOVE_TO_INTERNAL = "Moving downloads to internal storage"
   private const val DEFAULT_PREPARING = "Preparing downloads"
   private const val DEFAULT_DOWNLOADING_FILE = "Downloading {0}"
   private const val DEFAULT_WAITING_FOR_STORAGE = "Waiting for available storage"

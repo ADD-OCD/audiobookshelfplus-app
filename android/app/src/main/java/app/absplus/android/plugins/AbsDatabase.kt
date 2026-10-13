@@ -19,6 +19,7 @@ import app.absplus.android.managers.ItemUpdate
 import app.absplus.android.managers.SecureStorage
 import app.absplus.android.widget.WidgetRenderer
 import app.absplus.android.managers.AutoDownloadScheduler
+import app.absplus.android.services.StorageMoveService
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
@@ -27,7 +28,6 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
 @CapacitorPlugin(name = "AbsDatabase")
 class AbsDatabase : Plugin() {
@@ -47,6 +47,7 @@ class AbsDatabase : Plugin() {
     mainActivity = (activity as MainActivity)
     apiHandler = ApiHandler(mainActivity)
     ApiHandler.absDatabaseNotifyListeners = ::notifyListeners
+    StorageMoveService.statusListener = { notifyListeners("onDownloadStorageStatus", it) }
 
     secureStorage = SecureStorage(mainActivity)
 
@@ -691,6 +692,7 @@ class AbsDatabase : Plugin() {
             settings.downloadStorage = setting
             deviceData.reconcileNeeded = true
             DeviceManager.dbManager.saveDeviceData(deviceData)
+            StorageMoveService.startIfNeeded(context)
             call.resolve(JSObject().apply { put("downloadStorage", setting) })
           } catch (e: Exception) {
             Log.e(tag, "setDownloadStorage: failed to save setting", e)
@@ -716,20 +718,7 @@ class AbsDatabase : Plugin() {
   fun getDownloadStorageStatus(call:PluginCall) {
     GlobalScope.launch(Dispatchers.IO) {
       try {
-        val sdVolume = AndroidVolumeProbe(context).volumes().firstOrNull { it.removable }
-        val result = JSObject()
-        result.put("downloadStorage", DeviceManager.deviceData.deviceSettings?.downloadStorage ?: "internal")
-        result.put("internalFreeBytes", StatFs(context.filesDir.path).availableBytes)
-        if (sdVolume == null) {
-          result.put("sd", JSONObject.NULL)
-        } else {
-          result.put("sd", JSObject().apply {
-            put("uuid", sdVolume.uuid ?: JSONObject.NULL)
-            put("mounted", sdVolume.mounted)
-            put("freeBytes", if (sdVolume.mounted) StatFs(sdVolume.filesDir.path).availableBytes else 0L)
-          })
-        }
-        call.resolve(result)
+        call.resolve(StorageMoveService.statusJson(context, StorageMoveService.currentMoveStatus(context)))
       } catch (e: Exception) {
         Log.e(tag, "getDownloadStorageStatus failed", e)
         call.reject(e.message ?: "Failed to read download storage status")

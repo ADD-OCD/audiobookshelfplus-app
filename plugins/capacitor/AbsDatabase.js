@@ -305,7 +305,12 @@ class AbsDatabaseWeb extends WebPlugin {
 
   async getDownloadStorageStatus() {
     const deviceData = await this.getDeviceData()
-    return { downloadStorage: deviceData.deviceSettings?.downloadStorage || 'internal', internalFreeBytes: 0, sd: null }
+    return {
+      downloadStorage: deviceData.deviceSettings?.downloadStorage || 'internal',
+      internalFreeBytes: 0,
+      sd: null,
+      move: { total: 0, done: 0, bytesTotal: 0, bytesDone: 0, waiting: {}, running: false, lastError: null }
+    }
   }
 
   async refreshWidgets() {

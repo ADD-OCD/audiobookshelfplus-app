@@ -50,6 +50,7 @@ import app.absplus.android.media.getUriToAbsIconDrawable
 import app.absplus.android.media.getUriToDrawable
 import app.absplus.android.plugins.AbsLogger
 import app.absplus.android.server.ApiHandler
+import app.absplus.android.services.StorageMoveService
 import com.google.android.exoplayer2.*
 import com.google.android.exoplayer2.audio.AudioAttributes
 import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector
@@ -698,7 +699,9 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
       if (!keepPlaybackPin) LocalItemLocks.clearPlaybackPin()
       return
     }
-    if (playbackSession.localLibraryItem == null && !keepPlaybackPin) LocalItemLocks.clearPlaybackPin()
+    if (playbackSession.localLibraryItem == null && !keepPlaybackPin && LocalItemLocks.clearPlaybackPin()) {
+      StorageMoveService.requestReconcile(this)
+    }
 
     PlaybackRestoreStore.setResumable(this, true)
     // PlayerNotificationManager posts its notification under the same id, replacing any placeholder
@@ -1528,7 +1531,7 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   fun closePlayback(calledOnError: Boolean? = false) {
     playlistQueue = emptyList()
     playlistQueueIndex = -1
-    LocalItemLocks.clearPlaybackPin()
+    if (LocalItemLocks.clearPlaybackPin()) StorageMoveService.requestReconcile(this)
     DLog.d(tag, "closePlayback")
     val config = DeviceManager.serverConnectionConfig
 
