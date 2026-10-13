@@ -126,7 +126,9 @@ Milestones on `plus` that weren't distributed builds, so they have no `versionCo
 
 **Deferred for v0.17.0:** v0.17.0 introduced the in-app updater and was published without an Announcement. The updater
 announcement waits until a later release has updated an existing production-signed installation through Settings →
-Updates on a test phone. Post it with that release, describing the verified result.
+Updates on a test phone. Post it with that release, describing the verified result. **Done:** the S22's production
+v0.17.0 updated itself to v0.18.1 on 2026-10-12, and [Discussion #26](https://github.com/ADD-OCD/audiobookshelfplus-app/discussions/26)
+announced the updater together with v0.18.0 and v0.18.1.
 
 Audiobookshelf+ has no in-app "what's new"/announcements screen (checked during the v0.14.0
 release — there isn't one to reuse). The [GitHub Discussions "Announcements" category](https://github.com/ADD-OCD/audiobookshelfplus-app/discussions/categories/announcements)
