@@ -622,6 +622,9 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
       }
     }
 
+    // Before the finished-item reset below: this is the position the server gave the session
+    mediaProgressSyncer.noteServerSessionStart(playbackSession)
+
     // TODO: When an item isFinished the currentTime should be reset to 0
     //        will reset the time if currentTime is within 5s of duration (for android auto)
     DLog.d(

@@ -14,7 +14,7 @@ import { AbsAudioPlayer, AbsLogger } from '@/plugins/capacitor'
 import { Dialog } from '@capacitor/dialog'
 import CellularPermissionHelpers from '@/mixins/cellularPermissionHelpers'
 import { nativeQueueItems, resolvePlaybackQueue, resolveQueueSourceAppendItems, sessionToQueueItem } from '@/utils/playbackQueue'
-import { refocusDisplayTime, refocusServerAction } from '@/utils/livePosition'
+import { refocusDisplayTime, refocusServerAction, readRefocusHandled, writeRefocusHandled } from '@/utils/livePosition'
 
 export default {
   data() {
@@ -42,7 +42,9 @@ export default {
       sleepInterval: null,
       currentEndOfChapterTime: 0,
       serverLibraryItemId: null,
-      serverEpisodeId: null
+      serverEpisodeId: null,
+      // The streamed session's server progress the refocus check already dealt with (refocusServerAction)
+      refocusServerHandled: null
     }
   },
   mixins: [CellularPermissionHelpers],
@@ -602,10 +604,15 @@ export default {
         const data = await this.getServerMediaProgressForCurrentSession()
         if (!data) return
         if (!this.$refs.audioPlayer?.isPlaying) {
-          // Another device's newer progress is applied as before; a position the native player moved to while paused
-          // (not yet synced) stands and is displayed instead of being sought back to the older server position
-          const decision = refocusServerAction(this.currentPlaybackSession, await this.getNativePlaybackState(), data, this.currentTime)
-          console.log('[AudioPlayerContainer] device visibility: got server media progress', data.currentTime, 'last time in player is', this.currentTime, 'decision', decision.action)
+          // Another device's newer progress is applied as before; the server position this phone wrote itself is not, so
+          // a position the native player moved to while paused (not yet synced) stands and is displayed
+          if (!this.refocusServerHandled) this.refocusServerHandled = readRefocusHandled(globalThis.localStorage)
+          const decision = refocusServerAction(this.currentPlaybackSession, await this.getNativePlaybackState(), data, this.currentTime, this.refocusServerHandled)
+          if (decision.handled) {
+            this.refocusServerHandled = decision.handled
+            writeRefocusHandled(globalThis.localStorage, decision.handled)
+          }
+          console.log('[AudioPlayerContainer] device visibility: got server media progress', data.currentTime, 'last time in player is', this.currentTime, 'decision', decision.action, decision.origin || '')
           if (decision.action === 'seek') {
             // Use seek() so the native audio player's current session is updated
             this.$refs.audioPlayer.seek(decision.time)

@@ -245,6 +245,9 @@
           </span>
         </ui-btn>
       </div>
+
+      <!-- In-app updates from the official GitHub releases (Android) -->
+      <settings-updates />
     </template>
 
     <div v-show="loading" class="w-full h-full absolute top-0 left-0 flex items-center justify-center z-10">

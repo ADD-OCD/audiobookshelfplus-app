@@ -63,10 +63,12 @@ published (release, prerelease, or test build):
 | 129 | Playback & Diagnostics release-package physical-device test build from `feature/in-app-diagnostic-logging` (app code as of `e1e8704b`; built from the commit that set `versionCode 129`, tagged `playback-diagnostics-device-test-v129`) — adds diagnostics privacy/sanitization fixes, fail-closed logging, old-log rescrubbing, interrupted-write recovery, Log Actions UI and Save Log; distributed as a temporary prerelease; **PASSED** physical-device testing (Samsung Galaxy S26 Ultra, SM-S948U, Android 16), installed in place over 128: app started normally after the upgrade and existing diagnostic logs were re-sanitized once with the current rules; playing session survived swiping the UI away and reopening reattached to it; paused session survived swiping away and widget Play rebuilt and resumed it; downloaded book resumed from the widget offline (Airplane Mode) after a paused swipe; position, playback speed and queue/session restored correctly; Diagnostics View, Mark, Save (Android system file picker; saved TXT retrieved and inspected), Share and Clear all worked; the v129 export confirmed versionCode 129, release package `app.absplus.android`, DEBUG diagnostics and the successful one-time re-sanitization; no regression requiring another test build. Approved and merged into `plus`. |
 | 130 | **Audiobookshelf+ v0.15.0** (upstream v0.14.2-beta), versionName `0.14.2-beta`: the normal release, built from `plus` at `b6f139c0` and tagged `v0.14.2-beta-plus-v0.15.0`. It is published as the Latest GitHub release with the asset `audiobookshelf-plus-v0.15.0-release.apk` (SHA-256 `7b1ad3e91ab6e0083308aa6347d0ec7222ce55fbeb2867ce986e0c52619d4519`), and announced in Discussions #16. It includes playback restoration and diagnostics (129), the LLAMA theme and widget layouts, download Retry/Cancel/Clear, the device-folder access fixes, Rescan Folder across libraries and library page retry. Physical-device release validation was pending at publication. |
 | 131 | **Audiobookshelf+ v0.15.1** (upstream v0.14.2-beta), versionName `0.14.2-beta`: hotfix release, built from `plus` at `d2795e4c` and tagged `v0.14.2-beta-plus-v0.15.1`. It is published as the Latest GitHub release with the asset `audiobookshelf-plus-v0.15.1-release.apk` (SHA-256 `1c391c9367e4e9f6d5204d6d08924b4d27633e8c789dfda5e2cff80a9e02db1d`), and announced in Discussions #17. It fixes the series bookshelf that showed only its first one or two books (`defb3cf8`; physical S26 debug validation passed before release). |
+| 132 | **Audiobookshelf+ v0.16.0** (upstream v0.14.2-beta), versionName `0.14.2-beta`: "LLAMA visual refresh and stability fixes", built from `plus` at `10db9077` and tagged `v0.14.2-beta-plus-v0.16.0`. Published 2026-10-11 as the Latest GitHub release with the assets `audiobookshelf-plus-v0.16.0-release.apk` (SHA-256 `5db2ed02ecabbd3a119094e12cb2b944aa97981d83b0bda77adcd35886dde5a8`) and its `.sha256` checksum file, and announced in Discussions #21. Physical S22 release validation passed, including an in-place update from v0.15.1. An earlier candidate built from `6505177b` was superseded before publication and never distributed. |
+| 133 | **Audiobookshelf+ v0.17.0** (upstream v0.14.2-beta), versionName `0.14.2-beta`, `PLUS_VERSION` `0.17.0`: "In-app GitHub updates", built from `plus` at `a9084e19` and tagged `v0.14.2-beta-plus-v0.17.0`. Published 2026-10-11 as the Latest GitHub release with the assets `audiobookshelf-plus-v0.17.0-release.apk` (15,052,980 bytes, SHA-256 `e11b9bbc353e7fea30b1e32c94c556b4c3758ce8d0aa6ab1c887331528396415`, signed with the release certificate above) and its `.sha256` checksum file. CI on the build commit: Build APK 38195849700, i18n 38195849703 (both success). The S22 updated a signed v0.16.0 install in place, kept login, library and theme, streamed, and the new updater reported it up to date. **No Announcement was posted:** the announcement is deferred until a later release has been installed over a production v0.17.0 through the in-app updater. |
 
-**Next distributed versionCode: 132,** assigned to the Audiobookshelf+ v0.16.0 candidate (built from `plus` at `6505177b`); its row is added here when it is published. The temporary GitHub prereleases/tags for 124–126 were
+**Next distributed versionCode: 134.** The temporary GitHub prereleases/tags for 124–126 were
 deleted after approval; these ledger rows are the permanent record, and those numbers (and 127,
-128, 129, 130, 131) must never be reused.
+128, 129, 130, 131, 132, 133) must never be reused.
 
 Before building anything intended for distribution — including a one-off test/RC build — bump
 `versionCode` to the next integer above the value in this table, build, distribute, then update
@@ -114,6 +116,10 @@ Milestones on `plus` that weren't distributed builds, so they have no `versionCo
 
 ## Announcements
 
+**Deferred for v0.17.0:** v0.17.0 introduced the in-app updater and was published without an Announcement. The updater
+announcement waits until a later release has updated an existing production-signed installation through Settings →
+Updates on a test phone. Post it with that release, describing the verified result.
+
 Audiobookshelf+ has no in-app "what's new"/announcements screen (checked during the v0.14.0
 release — there isn't one to reuse). The [GitHub Discussions "Announcements" category](https://github.com/ADD-OCD/audiobookshelfplus-app/discussions/categories/announcements)
 on this repo is the established, preferred place for users to read about completed Audiobookshelf+
@@ -148,9 +154,26 @@ finalize docs), not before.
 
 ## Summary checklist for any new distributed APK
 
-1. Check the `versionCode` table above; use `last + 1`.
+1. Check the `versionCode` table above; use `last + 1`. Set `PLUS_VERSION` in `android/app/build.gradle` to the
+   release's public version (`X.Y.Z`, the tag's `-plus-vX.Y.Z`) in the same commit (in-app updater, once merged).
 2. Build the **release** variant (`app.absplus.android`), not debug.
 3. Confirm it's signed with the fingerprint above (`apksigner verify --verbose --print-certs`).
 4. For a normal release (not a test/RC build): write/post the Announcements entry for it first,
    and make sure every completed feature/fix it includes is documented in the README.
 5. Publish it, then update the `versionCode` table in this document.
+
+## What the in-app updater expects of a release
+
+Once the updater (docs/in-app-updates.md) ships, installed apps rely on these. Changing them stops updates for those
+copies.
+- **Release type:** a normal published release (not a draft or prerelease), marked Latest, with a tag of the form
+  `v<upstream>-plus-vX.Y.Z`.
+- **APK:** exactly one asset named `audiobookshelf-plus-vX.Y.Z-release.apk` (same `X.Y.Z` as the tag), between 1 MB and
+  200 MB. GitHub's asset digest is used; the `.sha256` file is checked too when attached (keep it to one line,
+  `<hex>  <apk name>`).
+- **Signing:** signed with the permanent release key above. A future key rotation must use APK Signature Scheme v3
+  rotation (lineage) from this key, or installed apps reject the update.
+- **Version code:** higher than the previous release's, as always. The updater refuses same-version and older APKs.
+- **Public version:** `PLUS_VERSION` set to `X.Y.Z`, or the next check reports the release as newer than the app that
+  contains it. `tests/updater.test.mjs` enforces this against the ledger: while `versionCode` equals the last
+  released row, `PLUS_VERSION` must be that release's version; once `versionCode` is higher, it must be a newer version.

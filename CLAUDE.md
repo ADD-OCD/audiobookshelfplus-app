@@ -42,7 +42,7 @@ Use the glob form for the JS suite: `node --test tests/` fails on Node 22+.
 
 ### Custom Capacitor Plugins
 
-The bridge between JS and native is five custom Capacitor plugins. Each has a JS counterpart in `plugins/capacitor/` and a Kotlin implementation in `android/.../plugins/`:
+The bridge between JS and native is six custom Capacitor plugins. Each has a JS counterpart in `plugins/capacitor/` and a Kotlin implementation in `android/.../plugins/`:
 
 | Plugin | Purpose |
 |---|---|
@@ -51,6 +51,7 @@ The bridge between JS and native is five custom Capacitor plugins. Each has a JS
 | `AbsDownloader` | File download management |
 | `AbsFileSystem` | File system access, folder scanning |
 | `AbsLogger` | Native log capture |
+| `AbsUpdater` | Settings → Updates: GitHub release check, verified download, Android installer (`updater/`, docs/in-app-updates.md) |
 
 **JS → Native**: Call plugin methods directly, e.g. `AbsAudioPlayer.prepareLibraryItem({...})`.
 **Native → JS**: Use Capacitor's `notifyListeners()` on the native side and `addListener()` on the JS side.
@@ -96,6 +97,7 @@ Playlist playback uses a two-layer approach so advancement works even when the s
 
 - **Server REST API**: `$axios` (configured in `plugins/axios.js`); base URL is the connected server address.
 - **Real-time updates**: socket.io via `$socket`; socket must be authenticated with `auth` event after connection.
+- **Expired access token (401)**: `$nativeHttp`, `$axios` and native `ApiHandler` share one renewal per saved server (`$authRenewal` → `AbsDatabase.refreshAccessToken` → `server/TokenRefresher.kt`); never refresh directly. See `docs/authentication.md`.
 - **Playback events**: flow from `PlayerNotificationService` → `AbsAudioPlayer.kt` (via `ClientEventEmitter`) → `notifyListeners()` → JS `addListener()` handlers → Vuex mutations.
 
 ### i18n
