@@ -53,6 +53,8 @@ test('fresh install: nothing persisted, RICE off, the legacy built-in is the sel
   assert.deepEqual(prefs.writes, [])
   const odd = await new PresetStore(fakePrefs({ theme: '<script>' })).load()
   assert.equal(odd.envelope.lastBuiltin, 'dark', 'unknown legacy values resolve to Dark')
+  const eink = await new PresetStore(fakePrefs({ theme: 'eink' })).load()
+  assert.deepEqual(eink.envelope.selection, { kind: 'builtin', id: 'eink' }, 'every built-in is a valid legacy value')
 })
 
 test('commit writes the inactive slot, verifies it, then the head; slots alternate and the legacy mirror follows', async () => {
