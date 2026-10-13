@@ -14,6 +14,7 @@ import com.anggrayudi.storage.file.*
 import app.absplus.android.MainActivity
 import app.absplus.android.data.LocalFolder
 import app.absplus.android.data.LocalLibraryItem
+import app.absplus.android.device.AndroidVolumeProbe
 import app.absplus.android.device.AppStorage
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.FolderAccess
@@ -25,6 +26,7 @@ import app.absplus.android.device.RescanPhase
 import app.absplus.android.device.RescanProgress
 import app.absplus.android.device.loadRescanCatalog
 import app.absplus.android.managers.ItemUpdate
+import app.absplus.android.managers.LocalItemLocks
 import app.absplus.android.server.ApiHandler
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -343,78 +345,102 @@ class AbsFileSystem : Plugin() {
   @PluginMethod
   fun deleteItem(call: PluginCall) {
     val localLibraryItemId = call.data.getString("id", "").toString()
-    val absolutePath = call.data.getString("absolutePath", "").toString()
-    val contentUrl = call.data.getString("contentUrl", "").toString()
-    Log.d(tag, "deleteItem $absolutePath | $contentUrl")
+    Log.d(tag, "deleteItem $localLibraryItemId")
 
-    // Check if should delete subfolder
-    val localLibraryItem = DeviceManager.dbManager.getLocalLibraryItem(localLibraryItemId)
+    // Paths come from the database under the item lock: what the page sent may predate a move to another storage
+    val success =
+            LocalItemLocks.withItem(localLibraryItemId) {
+              val localLibraryItem = DeviceManager.dbManager.getLocalLibraryItem(localLibraryItemId)
+              if (localLibraryItem == null) {
+                // Already gone (deleted elsewhere); its app-storage folder, if any, is left to orphan cleanup
+                AbsLogger.info(tag, "deleteItem: local item $localLibraryItemId does not exist")
+                return@withItem true
+              }
+              val deleted =
+                      try {
+                        deleteItemFiles(localLibraryItem)
+                      } finally {
+                        LocalItemLocks.bump(localLibraryItemId)
+                      }
+              if (deleted) DeviceManager.dbManager.removeLocalLibraryItem(localLibraryItemId)
+              deleted
+            }
+    call.resolve(JSObject("{\"success\":$success}"))
+  }
 
-    val success: Boolean
+  private fun deleteItemFiles(localLibraryItem: LocalLibraryItem): Boolean {
+    val absolutePath = localLibraryItem.absolutePath
 
     // App storage items are deleted with the File API
-    if (AppStorage.isAppStorage(localLibraryItem?.folderId ?: "")) {
-      Log.d(tag, "Deleting app storage library item at absolutePath $absolutePath")
+    if (AppStorage.isAppStorage(localLibraryItem.folderId)) {
       val file = File(absolutePath)
-      success =
-              if (file.exists()) {
-                file.deleteRecursively()
-              } else {
-                true
-              }
+      val roots = AppStorage.appOwnedRoots(AndroidVolumeProbe(context))
+      val inAppStorage =
+              absolutePath.isNotEmpty() &&
+                      roots.any { root -> AppStorage.isUnder(file, root) && !AppStorage.isUnder(root, file) }
+      if (!inAppStorage) {
+        AbsLogger.error(tag, "deleteItem: ${localLibraryItem.id} path $absolutePath is outside app storage; not deleting")
+        return false
+      }
+      Log.d(tag, "Deleting app storage library item at absolutePath $absolutePath")
+      return if (file.exists()) file.deleteRecursively() else true
+    }
+
+    val contentUrl = localLibraryItem.contentUrl
+    var subfolderPathToDelete = ""
+    val folder = DeviceManager.dbManager.getLocalFolder(localLibraryItem.folderId)
+    folder?.absolutePath?.let { folderPath ->
+      val splitAbsolutePath = absolutePath.split("/")
+      val fullSubDir = splitAbsolutePath.subList(0, splitAbsolutePath.size - 1).joinToString("/")
+      if (fullSubDir != folderPath) {
+        val subdirHasAnItem =
+                DeviceManager.dbManager.getLocalLibraryItems().any { _localLibraryItem ->
+                  if (_localLibraryItem.id == localLibraryItem.id) {
+                    false
+                  } else {
+                    _localLibraryItem.absolutePath.startsWith(fullSubDir)
+                  }
+                }
+        subfolderPathToDelete = if (subdirHasAnItem) "" else fullSubDir
+      }
+    }
+
+    val success: Boolean
+    val docfile = DocumentFileCompat.fromUri(mainActivity, Uri.parse(contentUrl))
+    if (docfile?.exists() == true) {
+      success = docfile.delete() == true
     } else {
-      var subfolderPathToDelete = ""
-      localLibraryItem?.folderId?.let { folderId ->
-        val folder = DeviceManager.dbManager.getLocalFolder(folderId)
-        folder?.absolutePath?.let { folderPath ->
-          val splitAbsolutePath = absolutePath.split("/")
-          val fullSubDir =
-                  splitAbsolutePath.subList(0, splitAbsolutePath.size - 1).joinToString("/")
-          if (fullSubDir != folderPath) {
-            val subdirHasAnItem =
-                    DeviceManager.dbManager.getLocalLibraryItems().any { _localLibraryItem ->
-                      if (_localLibraryItem.id == localLibraryItemId) {
-                        false
-                      } else {
-                        _localLibraryItem.absolutePath.startsWith(fullSubDir)
-                      }
-                    }
-            subfolderPathToDelete = if (subdirHasAnItem) "" else fullSubDir
-          }
-        }
-      }
-
-      val docfile = DocumentFileCompat.fromUri(mainActivity, Uri.parse(contentUrl))
-      if (docfile?.exists() == true) {
-        success = docfile.delete() == true
-      } else {
-        Log.d(tag, "Folder $contentUrl doesn't exist")
-        success = true
-      }
-
-      if (subfolderPathToDelete != "") {
-        Log.d(tag, "Deleting empty subfolder at $subfolderPathToDelete")
-        val docfilesub = DocumentFileCompat.fromFullPath(mainActivity, subfolderPathToDelete)
-        docfilesub?.delete()
-      }
+      Log.d(tag, "Folder $contentUrl doesn't exist")
+      success = true
     }
 
-    if (success) {
-      DeviceManager.dbManager.removeLocalLibraryItem(localLibraryItemId)
+    if (subfolderPathToDelete != "") {
+      Log.d(tag, "Deleting empty subfolder at $subfolderPathToDelete")
+      val docfilesub = DocumentFileCompat.fromFullPath(mainActivity, subfolderPathToDelete)
+      docfilesub?.delete()
     }
-    call.resolve(JSObject("{\"success\":$success}"))
+    return success
   }
 
   @PluginMethod
   fun deleteTrackFromItem(call: PluginCall) {
     val localLibraryItemId = call.data.getString("id", "").toString()
     val trackLocalFileId = call.data.getString("trackLocalFileId", "").toString()
-    val contentUrl = call.data.getString("trackContentUrl", "").toString()
-    Log.d(tag, "deleteTrackFromItem $contentUrl")
+    Log.d(tag, "deleteTrackFromItem $localLibraryItemId $trackLocalFileId")
 
     val result = DeviceManager.dbManager.updateLocalLibraryItem(localLibraryItemId) { localLibraryItem ->
-      val docfile = DocumentFileCompat.fromUri(mainActivity, Uri.parse(contentUrl))
-      if (docfile?.delete() == true) {
+      val localFile = localLibraryItem.localFiles.find { it.id == trackLocalFileId }
+      if (localFile == null) {
+        Log.e(tag, "deleteTrackFromItem: $localLibraryItemId has no local file $trackLocalFileId")
+        return@updateLocalLibraryItem ItemUpdate.Keep
+      }
+      val deleted =
+              if (AppStorage.isAppStorage(localLibraryItem.folderId)) {
+                File(localFile.absolutePath).delete()
+              } else {
+                DocumentFileCompat.fromUri(mainActivity, Uri.parse(localFile.contentUrl))?.delete() == true
+              }
+      if (deleted) {
         localLibraryItem.media.removeAudioTrack(trackLocalFileId)
         localLibraryItem.removeLocalFile(trackLocalFileId)
         ItemUpdate.Save(localLibraryItem)
