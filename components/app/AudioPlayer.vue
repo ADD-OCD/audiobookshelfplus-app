@@ -175,6 +175,8 @@ export default {
     return {
       windowHeight: 0,
       windowWidth: 0,
+      safeAreaInsets: null,
+      coverImageRatio: 0,
       playbackSession: null,
       showChapterModal: false,
       showFullscreen: false,
@@ -214,6 +216,9 @@ export default {
     }
   },
   watch: {
+    coverIdentity() {
+      this.coverImageRatio = 0
+    },
     showFullscreen(val) {
       this.updateScreenSize()
       this.$store.commit('setPlayerFullscreen', !!val)
@@ -335,7 +340,9 @@ export default {
         width: this.windowWidth,
         height: this.windowHeight,
         aspectRatio: this.bookCoverAspectRatio,
-        twoRail: !!(this.playerSettings.useChapterTrack && this.playerSettings.useTotalTrack)
+        twoRail: !!(this.playerSettings.useChapterTrack && this.playerSettings.useTotalTrack),
+        imageRatio: this.coverImageRatio,
+        insets: this.safeAreaInsets
       })
     },
     fullscreenBookCoverWidth() {
@@ -384,6 +391,10 @@ export default {
       var localItemCover = this.localLibraryItem?.coverContentUrl || null
       if (localItemCover) return Capacitor.convertFileSrc(localItemCover)
       return null
+    },
+    // Which artwork the player shows: its loaded aspect ratio is forgotten only when this changes
+    coverIdentity() {
+      return `${this.libraryItem?.id || ''}|${this.localLibraryItemCoverSrc || ''}`
     },
     playMethod() {
       return this.playbackSession?.playMethod || 0
@@ -497,6 +508,9 @@ export default {
     },
     async coverImageLoaded(fullCoverUrl) {
       if (!fullCoverUrl) return
+      // The artwork's own aspect ratio sizes the landscape artwork frame (theme/playerLayout.js landscapeArtwork)
+      const img = this.$refs.cover?.$refs.cover
+      if (img?.naturalWidth && img.naturalHeight) this.coverImageRatio = img.naturalHeight / img.naturalWidth
       const avg = await getAverageColorFromCoverUrl(this, fullCoverUrl)
       if (!avg) {
         this.coverRgb = 'rgb(55, 56, 56)'
@@ -1072,6 +1086,16 @@ export default {
         this.measureAndUpdateTrackWidth()
       })
     },
+    // The window's safe-area insets (CSS px): a hidden probe padded by env(safe-area-inset-*), since script cannot read env()
+    readSafeAreaInsets() {
+      const probe = document.createElement('div')
+      probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)'
+      document.body.appendChild(probe)
+      const style = getComputedStyle(probe)
+      const insets = { top: parseFloat(style.paddingTop) || 0, right: parseFloat(style.paddingRight) || 0, bottom: parseFloat(style.paddingBottom) || 0, left: parseFloat(style.paddingLeft) || 0 }
+      probe.remove()
+      return insets
+    },
     updateScreenSize() {
       setTimeout(() => {
         if (this.titleMarquee) this.titleMarquee.init(this.title)
@@ -1079,6 +1103,7 @@ export default {
 
       this.windowHeight = window.innerHeight
       this.windowWidth = window.innerWidth
+      this.safeAreaInsets = this.readSafeAreaInsets()
       const coverHeight = this.fullscreenBookCoverWidth * this.bookCoverAspectRatio
       const coverImageWidthCollapsed = 46 / this.bookCoverAspectRatio
       const titleAuthorLeftOffsetCollapsed = 30 + coverImageWidthCollapsed
@@ -1423,6 +1448,26 @@ export default {
   min-width: 0 !important;
   max-width: 100% !important;
   max-height: 100% !important;
+}
+/* Landscape artwork (theme/playerLayout.js landscapeArtwork; equipment finish only): the box is the artwork's own size,
+   so its frame hugs the cover; bottom-anchored on the player's bottom edge and centered in the left column. Replaces the
+   previous fixed half-screen box (top 50px), whose frame enclosed letterbox space and crossed the top chrome */
+#streamContainer.fullscreen.faceplate-landscape .cover-wrapper {
+  top: auto;
+  left: var(--landscape-art-left) !important;
+  bottom: var(--landscape-art-bottom);
+  width: var(--landscape-art-width) !important;
+  height: var(--landscape-art-height) !important;
+}
+#streamContainer.fullscreen.faceplate-landscape .cover-wrapper > div > div {
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
+#streamContainer.fullscreen.faceplate-landscape .cover-wrapper img {
+  object-fit: contain;
 }
 /* Metadata band: a fixed height that holds the title and author at font scale 1.3, text centered in it */
 #streamContainer.fullscreen.faceplate .title-author-texts {
