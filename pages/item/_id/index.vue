@@ -220,6 +220,7 @@ export default {
   data() {
     return {
       processing: false,
+      itemMovedListener: null,
       showSelectLocalFolder: false,
       showMoreMenu: false,
       showFullscreenCover: false,
@@ -737,6 +738,14 @@ export default {
         this.$set(this.libraryItem, 'localLibraryItem', item)
       }
     },
+    onLocalLibraryItemMoved(item) {
+      if (!this.libraryItem) return
+      if (this.isLocal && item.id === this.libraryItem.id) {
+        this.libraryItem = item
+      } else if (this.libraryItem.localLibraryItem?.id === item.id) {
+        this.$set(this.libraryItem, 'localLibraryItem', item)
+      }
+    },
     libraryChanged(libraryId) {
       if (this.libraryItem.libraryId !== libraryId) {
         this.$router.replace('/bookshelf')
@@ -823,8 +832,16 @@ export default {
       await this.loadServerLibraryItem()
     }
     this.init()
+    const listener = await AbsFileSystem.addListener('onLocalLibraryItemMoved', this.onLocalLibraryItemMoved)
+    // Left the page before the listener was registered
+    if (this._isDestroyed) {
+      listener?.remove()
+      return
+    }
+    this.itemMovedListener = listener
   },
   beforeDestroy() {
+    this.itemMovedListener?.remove()
     window.removeEventListener('resize', this.windowResized)
     this.$eventBus.$off('library-changed', this.libraryChanged)
     this.$eventBus.$off('new-local-library-item', this.newLocalLibraryItem)

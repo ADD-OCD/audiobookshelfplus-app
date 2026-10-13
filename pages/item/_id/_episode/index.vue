@@ -114,7 +114,8 @@ export default {
       showMoreMenu: false,
       processing: false,
       resettingProgress: false,
-      startingDownload: false
+      startingDownload: false,
+      itemMovedListener: null
     }
   },
   mixins: [cellularPermissionHelpers],
@@ -592,13 +593,34 @@ export default {
           this.$set(this.episode, 'localEpisode', episode)
         }
       }
+    },
+    onLocalLibraryItemMoved(item) {
+      if (this.isLocal && item.id === this.libraryItem.id) {
+        const episode = item.media?.episodes?.find((ep) => ep.id === this.episode.id)
+        this.libraryItem = item
+        if (episode) this.episode = episode
+      } else if (!this.isLocal && this.libraryItem.localLibraryItem?.id === item.id) {
+        this.$set(this.libraryItem, 'localLibraryItem', item)
+        if (this.episode.localEpisode) {
+          const localEpisode = item.media?.episodes?.find((ep) => ep.serverEpisodeId === this.episode.id)
+          if (localEpisode) this.$set(this.episode, 'localEpisode', localEpisode)
+        }
+      }
     }
   },
-  mounted() {
+  async mounted() {
     this.$eventBus.$on('new-local-library-item', this.newLocalLibraryItem)
     this.bindTimeMarkerEvents()
+    const listener = await AbsFileSystem.addListener('onLocalLibraryItemMoved', this.onLocalLibraryItemMoved)
+    // Left the page before the listener was registered
+    if (this._isDestroyed) {
+      listener?.remove()
+      return
+    }
+    this.itemMovedListener = listener
   },
   beforeDestroy() {
+    this.itemMovedListener?.remove()
     this.$eventBus.$off('new-local-library-item', this.newLocalLibraryItem)
     document.querySelectorAll('.time-marker').forEach((marker) => {
       marker.removeEventListener('click', this.clickPlaybackTime)

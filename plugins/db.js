@@ -128,7 +128,7 @@ class DbService {
     return AbsDatabase.setDownloadStorage({ target })
   }
 
-  // returns { downloadStorage, internalFreeBytes, sd: { uuid, mounted, freeBytes } | null }
+  // returns { downloadStorage, internalFreeBytes, sd: { uuid, mounted, freeBytes } | null, move: { total, done, bytesTotal, bytesDone, waiting, running, lastError } }
   getDownloadStorageStatus() {
     return AbsDatabase.getDownloadStorageStatus()
   }

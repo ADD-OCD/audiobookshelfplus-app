@@ -163,7 +163,8 @@ export default {
       showDialog: false,
       selectedAudioTrack: null,
       selectedEpisode: null,
-      orderChanged: false
+      orderChanged: false,
+      itemMovedListener: null
     }
   },
   computed: {
@@ -438,10 +439,34 @@ export default {
 
       this.folderId = this.localLibraryItem.folderId
       this.folder = await this.$db.getLocalFolder(this.folderId)
+    },
+    async onLocalLibraryItemMoved(item) {
+      if (!this.localLibraryItem || item.id !== this.localLibraryItem.id) return
+      this.localLibraryItem = item
+      if (!this.orderChanged) {
+        this.audioTracksCopy = this.audioTracks.map((at) => ({ ...at }))
+      } else {
+        // Keep the unsaved order, only swap in the tracks' new paths
+        this.audioTracksCopy = this.audioTracksCopy.map((copy) => ({ ...(this.audioTracks.find((at) => at.localFileId === copy.localFileId) || copy) }))
+      }
+      if (this.selectedAudioTrack) this.selectedAudioTrack = this.audioTracksCopy.find((at) => at.localFileId === this.selectedAudioTrack.localFileId) || null
+      if (this.selectedEpisode) this.selectedEpisode = this.episodes.find((ep) => ep.id === this.selectedEpisode.id) || null
+      this.folderId = item.folderId
+      this.folder = await this.$db.getLocalFolder(this.folderId)
     }
   },
-  mounted() {
+  async mounted() {
     this.init()
+    const listener = await AbsFileSystem.addListener('onLocalLibraryItemMoved', this.onLocalLibraryItemMoved)
+    // Left the page before the listener was registered
+    if (this._isDestroyed) {
+      listener?.remove()
+      return
+    }
+    this.itemMovedListener = listener
+  },
+  beforeDestroy() {
+    this.itemMovedListener?.remove()
   }
 }
 </script>
