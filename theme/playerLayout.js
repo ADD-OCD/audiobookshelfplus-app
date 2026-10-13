@@ -13,7 +13,8 @@
  * - 'compat'    equipment, portrait, two rails (Chapter Track on with Total Track): the previous geometry with the
  *               B+ presentation only, because the second rail would otherwise cost the artwork 21-35% of its area.
  *               Also used where the faceplate would shrink the artwork below MIN_ARTWORK_RATIO of its previous width.
- * - 'landscape' equipment, landscape: the previous two-column geometry with the B+ presentation only.
+ * - 'landscape' equipment, landscape: the previous two-column geometry with the B+ presentation only, except the
+ *               artwork, whose frame hugs it in the left column (landscapeArtwork; 'faceplate-landscape').
  * With two rails, both previous-geometry paths present the chapter and book rails as one dual-track instrument
  * ('faceplate-dual'); with one rail they keep the console plate around the whole previous deck ('faceplate-flat').
  *
@@ -45,6 +46,14 @@ const FACEPLATE = Object.freeze({
   // not move); above it a seam, the plate, then two equal sections (chapter below, book above), each sized for font
   // scale 1.3 (16px times + 2px + a 6px rail)
   dual: Object.freeze({ console: 153.5, seam: 6, plate: 6, section: 30 })
+})
+// Landscape artwork (equipment finish): the cover and its frame are one assembly in the left column (the controls own the
+// right half from 50%). The frame (theme/presets.js ARTWORK_FRAME, artFrame(3, 1)) is drawn outside the artwork, so the
+// assembly reserves it on every side.
+const LANDSCAPE = Object.freeze({
+  topBand: 72, // the top chrome band: the chrome keys sit at 20-64px, the band ends where the portrait top plate does
+  side: 16, // the frame's minimum distance from the column's edges (the collapse key's own inset)
+  frame: 4 // the artwork frame's outer ring (artFrame(3, 1): 3px band + 1px ring)
 })
 // Below this fraction of its previous width the faceplate is not worth the artwork: use the compat geometry. 0.93
 // keeps the cost within about 13.5% of the artwork's area, which covers the approved 412x734 cost (about 12%)
@@ -116,12 +125,35 @@ function faceplateCover(tier, { width, height, aspectRatio }) {
 }
 
 /**
+ * The landscape artwork assembly: the artwork at its own aspect ratio, as large as fits between the top chrome band and
+ * the bottom of the player and inside the left column, with its frame flush with the player's bottom edge and centered
+ * in the column. Its box is the artwork's, so the frame hugs it (no letterbox inside the frame, no crop, no stretch).
+ * Positions are in the player container's coordinates (it starts below the top safe-area inset and spans the width).
+ * @param {{ width: number, height: number, imageRatio: number, insets?: { top?: number, right?: number, bottom?: number, left?: number } }} viewport
+ *        the window size (CSS px), the artwork's height / width, and the safe-area insets
+ * @returns {{ width: number, height: number, left: number, bottom: number }} the artwork box (the frame adds LANDSCAPE.frame outside it)
+ */
+function landscapeArtwork({ width, height, imageRatio, insets }) {
+  const inset = { top: 0, right: 0, bottom: 0, left: 0, ...insets }
+  const { topBand, side, frame } = LANDSCAPE
+  const columnLeft = inset.left
+  const columnWidth = width / 2 - columnLeft
+  const maxWidth = Math.max(0, columnWidth - 2 * (side + frame))
+  // The container is the window minus the top inset; the frame sits on its bottom edge (above any bottom inset)
+  const maxHeight = Math.max(0, height - inset.top - inset.bottom - topBand - 2 * frame)
+  const artWidth = Math.min(maxWidth, maxHeight / imageRatio)
+  const artHeight = artWidth * imageRatio
+  return { width: artWidth, height: artHeight, left: columnLeft + (columnWidth - artWidth) / 2, bottom: inset.bottom + frame }
+}
+
+/**
  * @param {{ tokens: object }|null} theme a validated theme (engine.getTheme)
- * @param {{ width: number, height: number, aspectRatio: number, twoRail: boolean }} viewport the player's viewport
- *        and whether the Chapter Track + Total Track pair renders the second rail
+ * @param {{ width: number, height: number, aspectRatio: number, twoRail: boolean, imageRatio?: number, insets?: object }} viewport
+ *        the player's viewport and whether the Chapter Track + Total Track pair renders the second rail; landscape also
+ *        uses the loaded artwork's own height / width (imageRatio, else the library's aspectRatio) and the safe-area insets
  * @returns {{ path: string, coverWidth: number, classes: string[], vars: object, plates: { top: boolean, console: boolean, seek: boolean } }}
  */
-function fullscreenLayout(theme, { width, height, aspectRatio, twoRail }) {
+function fullscreenLayout(theme, { width, height, aspectRatio, twoRail, imageRatio, insets }) {
   const legacy = legacyCoverWidth({ width, height, aspectRatio })
   const none = { top: false, console: false, seek: false }
   if (!isEquipment(theme)) return { path: 'standard', coverWidth: legacy, classes: [], vars: {}, plates: none }
@@ -142,7 +174,23 @@ function fullscreenLayout(theme, { width, height, aspectRatio, twoRail }) {
     vars: { '--faceplate-times': px(FACEPLATE.flatTimes), '--faceplate-plate-height': px(TIERS.regular.plateBottom - FACEPLATE.plateTop), ...(dual ? dualVars() : {}) },
     plates: { top: topPlate, console: true, seek: dual }
   })
-  if (width >= height) return flat('landscape', false, twoRail)
+  if (width >= height) {
+    // The previous geometry for the right column; the artwork assembly replaces the fixed half-screen artwork box. The
+    // cover width (its readout offsets) stays the previous one, so the right column does not move
+    const base = flat('landscape', false, twoRail)
+    const art = landscapeArtwork({ width, height, imageRatio: imageRatio > 0 ? imageRatio : aspectRatio, insets })
+    return {
+      ...base,
+      classes: [...base.classes, 'faceplate-landscape'],
+      vars: {
+        ...base.vars,
+        '--landscape-art-width': px(art.width),
+        '--landscape-art-height': px(art.height),
+        '--landscape-art-left': px(art.left),
+        '--landscape-art-bottom': px(art.bottom)
+      }
+    }
+  }
 
   // Previous portrait geometry: the artwork's top edge (its 2px frame included) decides whether the top plate fits
   const compat = (dual) => {
@@ -181,4 +229,4 @@ function fullscreenLayout(theme, { width, height, aspectRatio, twoRail }) {
   }
 }
 
-module.exports = { fullscreenLayout, miniLayout, legacyCoverWidth, budget, TIERS, FACEPLATE, MINI, MIN_ARTWORK_RATIO }
+module.exports = { fullscreenLayout, miniLayout, legacyCoverWidth, landscapeArtwork, budget, TIERS, FACEPLATE, LANDSCAPE, MINI, MIN_ARTWORK_RATIO }

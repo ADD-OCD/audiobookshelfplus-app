@@ -168,12 +168,128 @@ test('Landscape keeps the previous two-column geometry with the safe presentatio
     for (const twoRail of [false, true]) {
       const r = at(llama(), vp, 1, twoRail)
       assert.equal(r.path, 'landscape')
+      // The previous cover width still drives the right column's readout offsets
       assert.equal(r.coverWidth, previousCoverWidth(vp[0], vp[1], 1))
-      assert.deepEqual(r.classes, ['faceplate-type', twoRail ? 'faceplate-dual' : 'faceplate-flat'])
+      assert.deepEqual(r.classes, ['faceplate-type', twoRail ? 'faceplate-dual' : 'faceplate-flat', 'faceplate-landscape'])
       assert.deepEqual(r.plates, { top: false, console: true, seek: twoRail })
       assert.equal(r.vars['--faceplate-times'], '16px')
     }
   }
+})
+
+// --- Landscape artwork frame (LLAMA): the frame hugs the artwork, bottom-anchored, centered in the left column ---
+// S26 Ultra (891x381 at 2.625), S22 Ultra (775x354 at 2.8125), small phones, a tablet, and enlarged display scaling
+const LANDSCAPE_ART_VIEWPORTS = [
+  [891, 381],
+  [775, 354],
+  [640, 360],
+  [732, 412],
+  [915, 364],
+  [842, 412],
+  [1280, 800],
+  [693, 300]
+]
+// Square, the library's 1.6, tall portrait art, a 2:3 cover, landscape art and a very wide banner (height / width)
+const ART_RATIOS = [1, 1.6, 2, 1.5, 0.75, 0.4]
+const INSETS = [undefined, { top: 24 }, { bottom: 48 }, { left: 32, right: 32 }, { top: 24, bottom: 16, left: 20 }]
+
+test('Landscape artwork: aspect ratio kept, frame flush with the bottom, below the top chrome band, centered in the left column', () => {
+  const { topBand, side, frame } = layout.LANDSCAPE
+  for (const [width, height] of LANDSCAPE_ART_VIEWPORTS) {
+    for (const imageRatio of ART_RATIOS) {
+      for (const insets of INSETS) {
+        const id = `${width}x${height} r${imageRatio} ${JSON.stringify(insets)}`
+        const ins = { top: 0, right: 0, bottom: 0, left: 0, ...insets }
+        const art = layout.landscapeArtwork({ width, height, imageRatio, insets })
+        const containerHeight = height - ins.top
+        // Natural aspect ratio: no stretch (and the box is the artwork's, so object-fit has nothing to letterbox)
+        assert.ok(Math.abs(art.height / art.width - imageRatio) < 1e-9, id)
+        // The frame (outside the artwork) touches the bottom of the usable player: no gap, no overflow
+        assert.equal(art.bottom - frame, ins.bottom, id)
+        // ...and never reaches into the top chrome band (collapse/menu keys at 20-64px, the playback-method label)
+        const frameTop = containerHeight - art.bottom - art.height - frame
+        assert.ok(frameTop >= topBand - 1e-9, id)
+        // Horizontally centered in the left column, the frame inside it with the side margin, never into the controls
+        const columnLeft = ins.left
+        const columnRight = width / 2
+        assert.ok(Math.abs(art.left + art.width / 2 - (columnLeft + columnRight) / 2) < 1e-9, id)
+        assert.ok(art.left - frame >= columnLeft + side - 1e-9, id)
+        assert.ok(art.left + art.width + frame <= columnRight - side + 1e-9, id)
+        // As large as fits: it reaches the top band or the column's side margins (no fixed window around it)
+        const heightLimited = Math.abs(frameTop - topBand) < 1e-6
+        const widthLimited = Math.abs(art.left - frame - (columnLeft + side)) < 1e-6
+        assert.ok(heightLimited || widthLimited, id)
+      }
+    }
+  }
+})
+
+test('Landscape artwork: square art gets a square frame; the S26 and S22 sizes; the library ratio until the art loads', () => {
+  const { frame } = layout.LANDSCAPE
+  // S26 Ultra landscape (891x381): square art 301x301 with its frame from 72px down to the bottom edge
+  const s26 = layout.landscapeArtwork({ width: 891, height: 381, imageRatio: 1 })
+  assert.equal(s26.width, s26.height)
+  assert.equal(s26.height, 381 - 72 - 2 * frame)
+  assert.equal(s26.left, (891 / 2 - s26.width) / 2)
+  // S22 Ultra landscape (775x354): 274x274
+  const s22 = layout.landscapeArtwork({ width: 775, height: 354, imageRatio: 1 })
+  assert.deepEqual([s22.width, s22.height, s22.bottom], [274, 274, frame])
+  // In the projection: the loaded art's own ratio wins over the library setting; without it, the library ratio
+  const r = layout.fullscreenLayout(llama(), { width: 891, height: 381, aspectRatio: 1, twoRail: true, imageRatio: 1.6 })
+  assert.equal(r.vars['--landscape-art-height'], '301px')
+  assert.equal(r.vars['--landscape-art-width'], `${Math.round((301 / 1.6) * 100) / 100}px`)
+  assert.equal(r.vars['--landscape-art-bottom'], `${frame}px`)
+  for (const imageRatio of [0, undefined, NaN]) {
+    const f = layout.fullscreenLayout(llama(), { width: 891, height: 381, aspectRatio: 1.6, twoRail: false, imageRatio })
+    assert.equal(f.vars['--landscape-art-height'], '301px', String(imageRatio))
+  }
+})
+
+test('Landscape artwork changes nothing else: portrait paths and the other themes ignore the image ratio and insets', () => {
+  const extra = { imageRatio: 0.5, insets: { top: 24, bottom: 30, left: 12, right: 12 } }
+  for (const vp of PORTRAIT) {
+    for (const ar of ASPECTS) {
+      for (const twoRail of [false, true]) {
+        const base = { width: vp[0], height: vp[1], aspectRatio: ar, twoRail }
+        assert.deepEqual(layout.fullscreenLayout(llama(), { ...base, ...extra }), layout.fullscreenLayout(llama(), base), `${vp} ${ar} ${twoRail}`)
+      }
+    }
+  }
+  for (const id of LEGACY_THEMES) {
+    for (const vp of [...PORTRAIT, ...LANDSCAPE, ...LANDSCAPE_ART_VIEWPORTS]) {
+      const r = layout.fullscreenLayout(engine.getTheme(id), { width: vp[0], height: vp[1], aspectRatio: 1, twoRail: true, ...extra })
+      assert.equal(r.path, 'standard')
+      assert.deepEqual([r.classes, r.vars], [[], {}])
+    }
+  }
+})
+
+test('Landscape artwork: the reserved frame is the frame LLAMA paints, and the stylesheet sizes the box from the projection only', async () => {
+  // The fullscreen artwork frame's outermost zero-offset ring equals LANDSCAPE.frame
+  const root = engine.themeSelector('llama')
+  const rules = presets.presentationRules([llama()])
+  const shadow = rules[`${root} .fullscreen .cover-wrapper`]['box-shadow']
+  const rings = [...shadow.matchAll(/(?:^|, )(-?\d+)(?:px)? (-?\d+)(?:px)? 0 (\d+)px/g)].filter((m) => m[1] === '0' && m[2] === '0').map((m) => +m[3])
+  assert.equal(Math.max(...rings), layout.LANDSCAPE.frame)
+  // No faceplate bay overrides the frame in landscape (the bay hooks are portrait-only)
+  assert.ok(!layout.fullscreenLayout(llama(), { width: 891, height: 381, aspectRatio: 1, twoRail: true }).classes.some((c) => c === 'faceplate' || c === 'faceplate-compact'))
+
+  const player = await read('../components/app/AudioPlayer.vue')
+  const box = player.match(/#streamContainer\.fullscreen\.faceplate-landscape \.cover-wrapper \{([^}]*)\}/)
+  assert.ok(box, 'landscape artwork rule')
+  for (const decl of ['top: auto', 'left: var(--landscape-art-left) !important', 'bottom: var(--landscape-art-bottom)', 'width: var(--landscape-art-width) !important', 'height: var(--landscape-art-height) !important']) {
+    assert.ok(box[1].includes(decl), decl)
+  }
+  // The cover component fills that box and cannot be held wider by its own min-width (no crop); the image is contained
+  const fill = player.match(/#streamContainer\.fullscreen\.faceplate-landscape \.cover-wrapper > div > div \{([^}]*)\}/)
+  for (const decl of ['width: 100% !important', 'height: 100% !important', 'min-width: 0 !important']) assert.ok(fill[1].includes(decl), decl)
+  assert.match(player, /#streamContainer\.fullscreen\.faceplate-landscape \.cover-wrapper img \{\s*object-fit: contain;/)
+  // The player feeds the loaded artwork's ratio and the safe-area insets into the projection, and forgets the ratio
+  // only when the artwork changes
+  assert.match(player, /imageRatio: this\.coverImageRatio,\s*insets: this\.safeAreaInsets/)
+  assert.match(player, /this\.coverImageRatio = img\.naturalHeight \/ img\.naturalWidth/)
+  assert.match(player, /coverIdentity\(\) \{\s*this\.coverImageRatio = 0\s*\}/)
+  assert.match(player, /this\.safeAreaInsets = this\.readSafeAreaInsets\(\)/)
 })
 
 test('Artwork never exceeds its bay and never falls below the floor: past it the compatibility geometry is used', () => {
@@ -227,7 +343,7 @@ test('Faceplate stylesheet: geometry only behind the hook classes, and never on 
   const rules = [...block.matchAll(/([^{}]+)\{[^}]*\}/g)].map((m) => m[1].replace(/\/\*[\s\S]*?\*\//g, '').trim())
   for (const selector of rules) {
     for (const s of selector.split(',').map((x) => x.trim())) {
-      assert.match(s, /^(\.player-plate|\.faceplate-|#streamContainer\.fullscreen\.faceplate(-dual)? )/, s)
+      assert.match(s, /^(\.player-plate|\.faceplate-|#streamContainer\.fullscreen\.faceplate(-dual|-landscape)? )/, s)
       // Controls, keys, the seek channel and its touch target are frozen
       assert.doesNotMatch(s, /playerControls|play-btn|player-key|utility|trackCursor|chrome-key|\.relative \.|rounded-full/, s)
     }
