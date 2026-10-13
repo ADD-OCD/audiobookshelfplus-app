@@ -3,6 +3,16 @@
 Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and dates are recorded in
 `docs/release-process.md`, and the feature list in `readme.md` describes what the app contains.
 
+## v0.18.2 — LLAMA landscape cover frame fix
+
+**Released 2026-10-13:** versionCode 136, versionName `0.14.2-beta` (upstream base unchanged), `PLUS_VERSION`
+`0.18.2`, tag `v0.14.2-beta-plus-v0.18.2`. Maintenance release; changes since v0.18.1 (`76abcf09`).
+
+- **LLAMA full player in landscape:** the cover's frame now fits the cover itself, with no empty space beside it,
+  sits on the bottom edge of the screen, stays below the top buttons and is centered in the left half. Square, tall
+  and wide covers keep their shape and are never cropped. Portrait and the Dark, Black and Light themes are
+  unchanged.
+
 ## v0.18.1 — Up Next restoration fix
 
 **Released 2026-10-12:** versionCode 135, versionName `0.14.2-beta` (upstream base unchanged), `PLUS_VERSION`
