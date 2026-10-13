@@ -14,6 +14,7 @@ import com.anggrayudi.storage.file.*
 import app.absplus.android.MainActivity
 import app.absplus.android.data.LocalFolder
 import app.absplus.android.data.LocalLibraryItem
+import app.absplus.android.device.AppStorage
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.FolderAccess
 import app.absplus.android.device.FolderScanner
@@ -350,9 +351,9 @@ class AbsFileSystem : Plugin() {
 
     val success: Boolean
 
-    // If internal library item use File to delete
-    if (localLibraryItem?.folderId?.startsWith("internal-") == true) {
-      Log.d(tag, "Deleting internal library item at absolutePath $absolutePath")
+    // App storage items are deleted with the File API
+    if (AppStorage.isAppStorage(localLibraryItem?.folderId ?: "")) {
+      Log.d(tag, "Deleting app storage library item at absolutePath $absolutePath")
       val file = File(absolutePath)
       success =
               if (file.exists()) {

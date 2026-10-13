@@ -6,6 +6,7 @@ import app.absplus.android.data.AudioTrack
 import app.absplus.android.data.EBookFile
 import app.absplus.android.data.LocalFolder
 import app.absplus.android.data.PodcastEpisode
+import app.absplus.android.device.AppStorage
 import app.absplus.android.device.DeviceManager
 import com.fasterxml.jackson.annotation.JsonIgnore
 import java.io.File
@@ -85,6 +86,6 @@ data class DownloadItemPart(
   }
 
   @get:JsonIgnore
-  val isInternalStorage get() = localFolderId.startsWith("internal-")
+  val isAppStorage get() = AppStorage.isAppStorage(localFolderId)
 
 }

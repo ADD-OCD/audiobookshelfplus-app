@@ -26,7 +26,7 @@ class FolderScanner(private val ctx: Context) {
           part: DownloadItemPart,
           externalFile: DocumentFile? = null
   ): LocalFile? {
-    if (part.isInternalStorage) {
+    if (part.isAppStorage) {
       val file = File(part.finalDestinationPath)
       if (!file.exists()) return null
       return LocalFile(
@@ -124,7 +124,7 @@ class FolderScanner(private val ctx: Context) {
 
     item.downloadItemParts.forEach { part ->
       val externalFile =
-              if (part.isInternalStorage) {
+              if (part.isAppStorage) {
                 null
               } else {
                 part.completedDestinationUri?.let { DocumentFileCompat.fromUri(ctx, Uri.parse(it)) }
@@ -535,7 +535,7 @@ class FolderScanner(private val ctx: Context) {
   }
 
   fun scanDownloadItem(item: DownloadItem, callback: (DownloadItemScanResult?) -> Unit) {
-    if (item.isInternalStorage) {
+    if (item.isAppStorage) {
       val id = "local_${item.libraryItemId}"
       val localItem =
               DeviceManager.dbManager.getLocalLibraryItem(id)

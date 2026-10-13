@@ -6,6 +6,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import app.absplus.android.device.AndroidVolumeProbe
+import app.absplus.android.device.AppStorage
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.models.DownloadItem
 import app.absplus.android.plugins.AbsLogger
@@ -54,8 +56,9 @@ object IncompleteDownloadCleanup {
   }
 
   private fun deleteItem(context: Context, item: DownloadItem) {
+    val appRoots = AppStorage.appOwnedRoots(AndroidVolumeProbe(context))
     item.downloadItemParts.forEach { part ->
-      deleteAppOwnedFile(context, File(part.destinationPath))
+      deleteAppOwnedFile(File(part.destinationPath), appRoots)
       if (!part.moved) {
         part.bytesDownloaded = 0L
         part.completed = false
@@ -67,11 +70,9 @@ object IncompleteDownloadCleanup {
     AbsLogger.info(tag, "Deleted staging files for terminally failed download item ${item.id}")
   }
 
-  private fun deleteAppOwnedFile(context: Context, file: File) {
+  private fun deleteAppOwnedFile(file: File, appRoots: List<File>) {
     val path = file.absolutePath
-    val internal = context.filesDir.absolutePath
-    val external = context.getExternalFilesDir(null)?.absolutePath
-    if (path.startsWith(internal) || (external != null && path.startsWith(external))) {
+    if (appRoots.any { AppStorage.isUnder(file, it) }) {
       if (file.exists() && !file.delete()) AbsLogger.error(tag, "Could not delete expired staging file $path")
       file.parentFile?.takeIf { it.isDirectory && it.list()?.isEmpty() == true }?.delete()
     } else {

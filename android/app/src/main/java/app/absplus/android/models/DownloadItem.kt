@@ -3,6 +3,7 @@ package app.absplus.android.models
 import app.absplus.android.data.LocalFolder
 import app.absplus.android.data.MediaProgress
 import app.absplus.android.data.MediaType
+import app.absplus.android.device.AppStorage
 import com.fasterxml.jackson.annotation.JsonIgnore
 
 data class DownloadItem(
@@ -25,8 +26,8 @@ data class DownloadItem(
         @JsonIgnore var stagingCleanupAt: Long? = null
 ) {
   @get:JsonIgnore
-  val isInternalStorage
-    get() = localFolder.id.startsWith("internal-")
+  val isAppStorage
+    get() = AppStorage.isAppStorage(localFolder.id)
 
   @get:JsonIgnore
   val isDownloadFinished

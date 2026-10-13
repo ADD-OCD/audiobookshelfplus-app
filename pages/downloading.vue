@@ -10,7 +10,7 @@
         <div class="flex items-center mt-1 text-sm" role="status">
           <span class="material-symbols text-lg mr-1" :class="stateIconClass(item)" aria-hidden="true">{{ stateIcon(item) }}</span>
           <span class="text-fg">{{ stateText(item) }}</span>
-          <span v-if="item.localFolder && !isInternal(item)" class="text-fg-muted truncate ml-2">· {{ item.localFolder.name }}</span>
+          <span v-if="item.localFolder && !isAppStorage(item)" class="text-fg-muted truncate ml-2">· {{ item.localFolder.name }}</span>
         </div>
         <p v-if="stateOf(item) === 'folderAccess'" class="text-xs text-fg-muted mt-1">{{ $getString('MessageDownloadChooseFolder', [lostFolderName(item)]) }}</p>
         <p v-else-if="stateOf(item) === 'failed'" class="text-xs text-fg-muted mt-1">{{ $strings.MessageDownloadRetryRestarts }}</p>
@@ -42,6 +42,7 @@
 <script>
 import { AbsDownloader, AbsFileSystem } from '@/plugins/capacitor'
 import { downloadState, downloadActions, downloadProgress, lostFolder, DownloadAction, DownloadState } from '@/utils/downloadState'
+import { isAppStorageFolderId } from '@/utils/appStorage'
 
 export default {
   data() {
@@ -61,8 +62,8 @@ export default {
     actionsOf(item) {
       return downloadActions(this.stateOf(item))
     },
-    isInternal(item) {
-      return item.localFolder?.id?.startsWith('internal-')
+    isAppStorage(item) {
+      return isAppStorageFolderId(item.localFolder?.id)
     },
     lostFolderName(item) {
       return lostFolder(item)?.name || item.localFolder?.name || ''

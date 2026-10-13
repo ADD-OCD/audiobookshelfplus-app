@@ -12,8 +12,8 @@ import app.absplus.android.models.DownloadItemPart
  * retries after a transfer error.) Cancel and Clear both remove the download: they stop its
  * transfers, drop it from the queue and delete the app's own partial (staging) files. Finished
  * files the download already placed in a device folder are kept there (a later download of the item
- * reuses them, and Rescan Folder can link them); finished files in internal app storage are
- * deleted, since nothing else can reach them. A file a saved local item uses, or one that existed
+ * reuses them, and Rescan Folder can link them); finished files in app storage (internal or SD card)
+ * are deleted, since nothing else can reach them. A file a saved local item uses, or one that existed
  * before this download, is never deleted.
  */
 object DownloadControls {
@@ -42,7 +42,7 @@ object DownloadControls {
       // The staging file lives in app storage and is never anything but this download's partial data
       delete.add(part.destinationPath)
       if (!part.moved) return@forEach
-      val keep = part.reusedExistingFile || isUsedByLocalItem(part) || !part.isInternalStorage
+      val keep = part.reusedExistingFile || isUsedByLocalItem(part) || !part.isAppStorage
       if (keep) kept.add(part.filename) else delete.add(part.finalDestinationPath)
     }
     return RemovalPlan(delete, kept)
@@ -58,7 +58,7 @@ object DownloadControls {
    */
   fun foldersWithoutAccess(item: DownloadItem, hasAccess: (folderUrl: String) -> Boolean): List<String> =
           item.downloadItemParts
-                  .filter { !it.moved && !it.isInternalStorage }
+                  .filter { !it.moved && !it.isAppStorage }
                   .filter { !hasAccess(it.localFolderUrl) }
                   .map { it.localFolderName }
                   .distinct()

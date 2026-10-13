@@ -5,7 +5,9 @@ import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.WorkManager
+import app.absplus.android.data.LocalFile
 import app.absplus.android.data.LocalFolder
+import app.absplus.android.data.LocalLibraryItem
 import app.absplus.android.data.MediaType
 import app.absplus.android.data.MediaTypeMetadata
 import app.absplus.android.device.DeviceManager
@@ -28,7 +30,7 @@ import org.robolectric.annotation.Config
 /**
  * The user's download controls: Retry restarts unfinished files from byte 0 and keeps finished ones;
  * Cancel and Clear remove the download, deleting only app-owned partial data (and unreachable
- * internal files), never a file a saved local item uses or one that existed before.
+ * app storage files), never a file a saved local item uses or one that existed before.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -67,7 +69,8 @@ class DownloadControlsTest {
           moved: Boolean = false,
           failed: Boolean = false,
           isMoving: Boolean = false,
-          bytes: Long = 0
+          bytes: Long = 0,
+          sd: Boolean = false
   ) =
           DownloadItemPart(
                   id = "part-$itemId-$name",
@@ -77,9 +80,9 @@ class DownloadControlsTest {
                   destinationPath = File(root, "staging/$itemId/$name.part").path,
                   finalDestinationPath = File(root, "final/$itemId/$name").path,
                   serverPath = "/api/items/$itemId/file/$name",
-                  localFolderName = if (internal) "Internal App Storage" else "ABSTEST",
-                  localFolderUrl = if (internal) "" else "content://com.android.externalstorage.documents/tree/primary%3AABSTEST",
-                  localFolderId = if (internal) "internal-book" else "saf-abstest",
+                  localFolderName = if (sd) "SD card" else if (internal) "Internal App Storage" else "ABSTEST",
+                  localFolderUrl = if (sd || internal) "" else "content://com.android.externalstorage.documents/tree/primary%3AABSTEST",
+                  localFolderId = if (sd) SD_FOLDER_ID else if (internal) "internal-book" else "saf-abstest",
                   ebookFile = null,
                   audioTrack = null,
                   episode = null,
@@ -98,7 +101,7 @@ class DownloadControlsTest {
                   bytesDownloaded = bytes
           )
 
-  private fun item(id: String, vararg parts: DownloadItemPart, internal: Boolean = true) =
+  private fun item(id: String, vararg parts: DownloadItemPart, internal: Boolean = true, sd: Boolean = false) =
           DownloadItem(
                   id = id,
                   libraryItemId = id,
@@ -110,7 +113,8 @@ class DownloadControlsTest {
                   mediaType = "book",
                   itemFolderPath = File(root, "final/$id").path,
                   localFolder =
-                          if (internal) LocalFolder("internal-book", "Internal App Storage", "", "", "", "internal", "book")
+                          if (sd) LocalFolder(SD_FOLDER_ID, "SD card", "", "", "", "appsd", "book")
+                          else if (internal) LocalFolder("internal-book", "Internal App Storage", "", "", "", "internal", "book")
                           else LocalFolder("saf-abstest", "ABSTEST", "content://tree/ABSTEST", "", "", "external", "book"),
                   itemTitle = "Title $id",
                   itemSubfolder = "Author/Book",
@@ -121,6 +125,15 @@ class DownloadControlsTest {
   private fun touch(path: String, size: Int = 10) = File(path).apply { parentFile?.mkdirs(); writeBytes(ByteArray(size)) }
 
   private fun manager() = DownloadItemManager(FolderScanner(context), context, emitter)
+
+  private fun saveLocalItemUsing(path: String) =
+          DeviceManager.dbManager.saveLocalLibraryItem(
+                  LocalLibraryItem(
+                          "local_sd", SD_FOLDER_ID, "", "", "", false, "book", MediaType(MediaTypeMetadata("Book", false), null),
+                          mutableListOf(LocalFile("file_sd", File(path).name, "", "", path, "audio/mpeg", 10)),
+                          null, null, true, null, null, null, "sd"
+                  )
+          )
 
   // --- Pure decisions ---
 
@@ -183,6 +196,33 @@ class DownloadControlsTest {
     // Files already written and internal storage need no folder access
     val written = item("w", part("w", "01.mp3", internal = false, moved = true), part("w", "02.mp3"), internal = false)
     assertTrue(DownloadControls.foldersWithoutAccess(written) { false }.isEmpty())
+  }
+
+  @Test
+  fun appsdPartsAreAppOwned() {
+    val loose = part("s", "01.mp3", moved = true, sd = true)
+    val used = part("s", "02.mp3", moved = true, sd = true)
+    val pending = part("s", "03.mp3", sd = true, bytes = 4)
+    val plan = DownloadControls.removalPlan(item("s", loose, used, pending, sd = true)) { it === used }
+    assertEquals(listOf(loose.destinationPath, used.destinationPath, pending.destinationPath), plan.delete.filter { it.endsWith(".part") })
+    assertTrue(loose.finalDestinationPath in plan.delete)
+    assertFalse(used.finalDestinationPath in plan.delete)
+    assertEquals(listOf("02.mp3"), plan.keptFinishedFiles)
+
+    val looseFile = touch(loose.finalDestinationPath)
+    val usedFile = touch(used.finalDestinationPath)
+    val staging = touch(pending.destinationPath, 4)
+    saveLocalItemUsing(used.finalDestinationPath)
+    val manager = manager()
+    manager.addDownloadItem(item("s", loose, used, pending, sd = true))
+    assertEquals(DownloadItemManager.RemoveResult.REMOVED, manager.removeDownloadItem("s", "Clear"))
+    assertFalse(looseFile.exists())
+    assertFalse(staging.exists())
+    assertTrue(usedFile.exists())
+
+    // An SD card can't be re-selected like a device folder
+    val unavailable = item("u", part("u", "01.mp3", sd = true, failed = true), sd = true)
+    assertTrue(DownloadControls.foldersWithoutAccess(unavailable) { false }.isEmpty())
   }
 
   // --- DownloadItemManager applying them ---
@@ -275,5 +315,9 @@ class DownloadControlsTest {
     val lost = restored.getValue("l").downloadItemParts.single()
     assertTrue(lost.failed && lost.permissionLost)
     assertTrue(events.contains("item:l"))
+  }
+
+  private companion object {
+    const val SD_FOLDER_ID = "appsd-79EC-9B33-book"
   }
 }

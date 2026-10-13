@@ -134,6 +134,7 @@ import draggable from 'vuedraggable'
 import { Capacitor } from '@capacitor/core'
 import { Dialog } from '@capacitor/dialog'
 import { AbsFileSystem } from '@/plugins/capacitor'
+import { isAppStorageFolderId } from '@/utils/appStorage'
 
 export default {
   components: {
@@ -191,8 +192,8 @@ export default {
     folderName() {
       return this.folder?.name
     },
-    isInternalStorage() {
-      return this.folderId?.startsWith('internal-')
+    isAppStorage() {
+      return isAppStorageFolderId(this.folderId)
     },
     mediaType() {
       return this.localLibraryItem?.mediaType

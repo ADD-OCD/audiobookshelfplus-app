@@ -6,9 +6,12 @@ import android.os.StatFs
 import androidx.documentfile.provider.DocumentFile
 import com.anggrayudi.storage.SimpleStorage
 import com.anggrayudi.storage.file.fullName
+import app.absplus.android.device.AndroidVolumeProbe
+import app.absplus.android.device.AppStorage
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.FolderAccess
 import app.absplus.android.device.FolderScanner
+import app.absplus.android.device.VolumeProbe
 import app.absplus.android.models.DownloadItem
 import app.absplus.android.models.DownloadItemPart
 import app.absplus.android.plugins.AbsLogger
@@ -32,7 +35,8 @@ import kotlinx.coroutines.launch
 class DownloadItemManager(
         private val folderScanner: FolderScanner,
         private val context: Context,
-        private var clientEventEmitter: DownloadEventEmitter
+        private var clientEventEmitter: DownloadEventEmitter,
+        private val volumes: VolumeProbe = AndroidVolumeProbe(context)
 ) {
   private val tag = "DownloadItemManager"
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -219,6 +223,7 @@ class DownloadItemManager(
       reservations.remove(part.destinationPath)
     }
     val plan = DownloadControls.removalPlan(item, ::isUsedByLocalItem)
+    val appRoots = AppStorage.appOwnedRoots(volumes)
     var deleted = 0
     plan.delete.forEach { path ->
       val file = File(path)
@@ -226,8 +231,10 @@ class DownloadItemManager(
         if (file.delete()) deleted++ else AbsLogger.error(tag, "Could not delete ${file.name} of removed download ${item.id}")
       }
       // Its now-empty item folder in app storage goes too (never a folder outside the app's own files)
-      file.parentFile?.takeIf {
-        it.path.startsWith(context.filesDir.path) && it != context.filesDir && it.list()?.isEmpty() == true
+      file.parentFile?.takeIf { dir ->
+        appRoots.any { AppStorage.isUnder(dir, it) } &&
+                appRoots.none { it.absoluteFile == dir.absoluteFile } &&
+                dir.list()?.isEmpty() == true
       }?.delete()
     }
     IncompleteDownloadCleanup.cancel(context, item.id)
@@ -255,7 +262,7 @@ class DownloadItemManager(
    * Local Folders permission check).
    */
   private fun hasFolderAccess(item: DownloadItem): Boolean =
-          item.isInternalStorage || FolderAccess.canWrite(context, item.localFolder)
+          FolderAccess.canWrite(context, item.localFolder, volumes)
 
   /** Whether a saved local item already uses this part's finished file. */
   private fun isUsedByLocalItem(part: DownloadItemPart): Boolean =
@@ -310,7 +317,7 @@ class DownloadItemManager(
           return@forEach
         }
         if (completeFromExistingInternalCover(item, part)) return@forEach
-        if (!part.isInternalStorage && !hasFolderAccess(item)) {
+        if (!hasFolderAccess(item)) {
           failPermissionLost(item, part)
           return@forEach
         }
@@ -444,7 +451,7 @@ class DownloadItemManager(
       failOrRetry(item, part, "Transfer failed")
       return
     }
-    if (part.isInternalStorage) finalizeInternalFile(item, part) else moveDownloadedFile(item, part)
+    if (part.isAppStorage) finalizeInternalFile(item, part) else moveDownloadedFile(item, part)
   }
 
   @Synchronized
@@ -706,11 +713,11 @@ class DownloadItemManager(
     val expectedSize = if (part.fileSize > 0L) part.fileSize else UNKNOWN_PART_RESERVATION_BYTES
     val remaining =
             (expectedSize - (staging.takeIf(File::exists)?.length() ?: 0L)).coerceAtLeast(0L)
-    val required = if (part.isInternalStorage) remaining else remaining + expectedSize
-    val key = storageKey(staging)
+    val required = if (part.isAppStorage) remaining else remaining + expectedSize
+    val key = AppStorage.storageKey(staging, volumes)
     val fs = statFsFor(staging)
     val headroom = max(MIN_FREE_SPACE_BYTES, fs.totalBytes / 20L)
-    val alreadyReserved = reservations.filterKeys { storageKey(File(it)) == key }.values.sum()
+    val alreadyReserved = reservations.filterKeys { AppStorage.storageKey(File(it), volumes) == key }.values.sum()
     if (fs.availableBytes - alreadyReserved < required + headroom) return false
     reservations[part.destinationPath] = required
     return true
@@ -728,10 +735,6 @@ class DownloadItemManager(
     while (!directory.exists()) directory = directory.parentFile ?: context.filesDir
     return StatFs(directory.absolutePath)
   }
-
-  private fun storageKey(file: File): String =
-          if (file.absolutePath.startsWith(context.filesDir.absolutePath)) "internal"
-          else "external"
 
   @Synchronized
   private fun removeActivePart(part: DownloadItemPart) {
@@ -766,7 +769,7 @@ class DownloadItemManager(
   }
 
   private fun findSharedStorageFile(part: DownloadItemPart): DocumentFile? {
-    if (part.isInternalStorage) return null
+    if (part.isAppStorage) return null
     val root = DocumentFile.fromTreeUri(context, Uri.parse(part.localFolderUrl)) ?: return null
     var folder = root
     part.finalDestinationSubfolder.split('/').filter { it.isNotBlank() }.forEach { segment ->
@@ -784,7 +787,7 @@ class DownloadItemManager(
           item: DownloadItem,
           part: DownloadItemPart
   ): Boolean {
-    if (!part.isInternalStorage || !part.serverPath.endsWith("/cover")) return false
+    if (!part.isAppStorage || !part.serverPath.endsWith("/cover")) return false
     val file = File(part.finalDestinationPath)
     if (!file.isFile || file.length() <= 0L) return false
     if (part.fileSize > 0L && file.length() != part.fileSize) return false
@@ -817,7 +820,7 @@ class DownloadItemManager(
           "${item.localFolder.id}:${item.itemFolderPath}"
 
   private fun finalizedFileExists(part: DownloadItemPart): Boolean {
-    if (part.isInternalStorage) {
+    if (part.isAppStorage) {
       val file = File(part.finalDestinationPath)
       return file.isFile &&
               if (part.fileSize > 0L) file.length() == part.fileSize else file.length() > 0L
