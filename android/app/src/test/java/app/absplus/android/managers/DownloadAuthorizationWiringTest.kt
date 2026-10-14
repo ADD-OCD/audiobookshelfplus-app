@@ -35,8 +35,8 @@ import org.robolectric.shadows.ShadowStatFs
  * Promoted from Claude’s H04 integration review (2026-10-14): drives the real DownloadItemManager entry points that
  * Codex's DownloadControlsTest does not reach (resumeWork -> checkUpdateDownloadQueue -> startDownload,
  * a held item surviving persistence and a second restore, reconnect-then-retry, token rotation, re-added
- * server under a new config id). Synthetic configs only; the owner address is 127.0.0.1:1 so a transfer
- * that does start is refused locally.
+ * server under a new config id). Every network destination is a loopback socket owned by the test,
+ * including requests started by deliberately broken security mutations.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -45,7 +45,10 @@ class DownloadAuthorizationWiringTest {
   private lateinit var root: File
   private lateinit var previousServers: MutableList<ServerConnectionConfig>
   private var previousActive: ServerConnectionConfig? = null
-  private val owner = "http://127.0.0.1:1"
+  private lateinit var owner: String
+  private lateinit var ownerSocket: ServerSocket
+  private lateinit var otherSocket: ServerSocket
+  private val otherAddress get() = "http://127.0.0.1:${otherSocket.localPort}"
   private val hold = "Download authorization changed: reconnect the original server before retrying"
   private val managers = mutableListOf<DownloadItemManager>()
 
@@ -67,6 +70,9 @@ class DownloadAuthorizationWiringTest {
     Paper.book("localLibraryItems").destroy()
     previousServers = DeviceManager.deviceData.serverConnectionConfigs
     previousActive = DeviceManager.serverConnectionConfig
+    ownerSocket = ServerSocket(0, 4, InetAddress.getByName("127.0.0.1"))
+    otherSocket = ServerSocket(0, 4, InetAddress.getByName("127.0.0.1"))
+    owner = "http://127.0.0.1:${ownerSocket.localPort}"
     try {
       WorkManager.initialize(context, Configuration.Builder().setExecutor { it.run() }.build())
     } catch (e: IllegalStateException) {
@@ -83,6 +89,8 @@ class DownloadAuthorizationWiringTest {
     }
     DeviceManager.deviceData.serverConnectionConfigs = previousServers
     DeviceManager.serverConnectionConfig = previousActive
+    if (::ownerSocket.isInitialized) ownerSocket.close()
+    if (::otherSocket.isInitialized) otherSocket.close()
   }
 
   private fun part(itemId: String, name: String, bytes: Long = 0) = DownloadItemPart(
@@ -119,7 +127,7 @@ class DownloadAuthorizationWiringTest {
   /** A fresh download queued for A must not start with the active server B's token (the original H04 leak). */
   @Test
   fun newQueuedDownloadIsHeldWhenOnlyAnotherServerIsAvailable() {
-    val b = config(id = "B", address = "http://127.0.0.1:2", user = "bob", token = "synthetic-B")
+    val b = config(id = "B", address = otherAddress, user = "bob", token = "synthetic-B")
     DeviceManager.deviceData.serverConnectionConfigs = mutableListOf(b)
     DeviceManager.serverConnectionConfig = b
     val p = part("q", "01.mp3").also { room(it) }
@@ -214,7 +222,7 @@ class DownloadAuthorizationWiringTest {
       server.soTimeout = 5000
       val address = "http://127.0.0.1:${server.localPort}"
       val a = config(address = address, token = "synthetic-A-before-renewal")
-      val b = config(id = "B", address = "http://127.0.0.1:2", user = "bob", token = "synthetic-B")
+      val b = config(id = "B", address = otherAddress, user = "bob", token = "synthetic-B")
       DeviceManager.deviceData.serverConnectionConfigs = mutableListOf(a, b)
       DeviceManager.serverConnectionConfig = b
       val p = part("switch", "01.mp3").also { room(it) }
