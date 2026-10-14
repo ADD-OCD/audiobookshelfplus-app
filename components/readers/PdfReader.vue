@@ -28,6 +28,7 @@
 
 <script>
 import pdf from '@teckel/vue-pdf'
+import { pdfDocumentParams } from '@/utils/pdfDocumentParams'
 
 export default {
   components: {
@@ -189,12 +190,7 @@ export default {
       this.renewedToken = newAccessToken
 
       // Force Vue to re-render the PDF component by creating a new object
-      this.pdfDocInitParams = {
-        url: this.ebookUrl,
-        httpHeaders: {
-          Authorization: `Bearer ${newAccessToken}`
-        }
-      }
+      this.pdfDocInitParams = pdfDocumentParams(this.ebookUrl, newAccessToken)
     },
     async error(err) {
       if (err && err.status === 401) {
@@ -209,12 +205,7 @@ export default {
       this.windowHeight = window.innerHeight
     },
     init() {
-      this.pdfDocInitParams = {
-        url: this.ebookUrl,
-        httpHeaders: {
-          Authorization: `Bearer ${this.userToken}`
-        }
-      }
+      this.pdfDocInitParams = pdfDocumentParams(this.ebookUrl, this.userToken)
     }
   },
   mounted() {
