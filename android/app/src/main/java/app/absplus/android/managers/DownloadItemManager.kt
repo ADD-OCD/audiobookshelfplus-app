@@ -103,6 +103,14 @@ class DownloadItemManager(
         checkDownloadItemFinished(item)
         return@forEach
       }
+      // A missing finalized file above can make a previously moved part unfinished. Recheck
+      // before resetting its retained staging copy; the initial guard only saw moved parts.
+      if (item.downloadItemParts.any { !it.moved && downloadToken(it, item) == null }) {
+        holdForDownloadAuthorization(item)
+        downloadItemQueue.add(item)
+        clientEventEmitter.onDownloadItem(item)
+        return@forEach
+      }
       var resetFailed = false
       // A terminal failure keeps its reason after a restart (e.g. lost folder access), so the
       // Downloads screen still offers the right recovery instead of a generic failure

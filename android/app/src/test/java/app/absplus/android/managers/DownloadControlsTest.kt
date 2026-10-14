@@ -332,6 +332,22 @@ class DownloadControlsTest {
   }
 
   @Test
+  fun missingFinalizedFileDoesNotDiscardRetainedCopyWhenOwnerIsGone() {
+    val part = part("missing-final", "01.mp3", moved = true, bytes = 7)
+    touch(part.destinationPath, 7)
+    assertFalse(File(part.finalDestinationPath).exists())
+    DeviceManager.dbManager.saveDownloadItem(item("missing-final", part))
+    DeviceManager.deviceData.serverConnectionConfigs.clear()
+
+    val manager = manager()
+    manager.restoreQueue()
+    val held = manager.downloadItemQueue.single().downloadItemParts.single()
+    assertTrue(held.failed)
+    assertEquals(7L, held.bytesDownloaded)
+    assertEquals(7L, File(part.destinationPath).length())
+  }
+
+  @Test
   fun expiredCleanupBeforeRestorePreservesMissingOwnersPartialData() {
     val partial = part("expired-held", "01.mp3", failed = true, bytes = 7).copy(
             destinationPath = File(context.filesDir, "authorization-expiry-fixture/01.mp3.part").path)
