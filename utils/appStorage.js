@@ -12,8 +12,11 @@ export function appStorageDownloadFolder(mediaType, label) {
   return { id: '', name: label, mediaType }
 }
 
-export function appStorageLabel(strings, downloadStorage) {
-  const location = String(downloadStorage || '').startsWith('sd:') ? strings.LabelDownloadStorageSdCard : strings.LabelDownloadStorageInternal
+// sd is the status' SD card; downloads to a configured card that isn't mounted can't start.
+export function appStorageLabel(strings, downloadStorage, sd) {
+  const value = String(downloadStorage || '')
+  let location = strings.LabelDownloadStorageInternal
+  if (value.startsWith('sd:')) location = sd?.mounted === true && sd.uuid === value.slice(3) ? strings.LabelDownloadStorageSdCard : strings.LabelDownloadStorageUnavailable
   return strings.LabelAppStorageLocation.replace('{0}', location)
 }
 
@@ -24,7 +27,7 @@ export async function appStorageFolderFor(ctx, mediaType) {
   } catch (error) {
     console.error('[appStorage] Failed to read download storage status', error)
   }
-  return appStorageDownloadFolder(mediaType, appStorageLabel(ctx.$strings, status?.downloadStorage))
+  return appStorageDownloadFolder(mediaType, appStorageLabel(ctx.$strings, status?.downloadStorage, status?.sd))
 }
 
 export function appStorageFolderIds(downloadStorage) {

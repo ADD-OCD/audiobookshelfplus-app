@@ -99,6 +99,18 @@ object AppStorage {
   fun removableVolume(probe: VolumeProbe): AppVolume? =
           probe.volumes().firstOrNull { it.removable && it.mounted && it.writable }
 
+  /**
+   * The SD card the settings page describes: the configured card, else any inserted one (choosing it makes it the
+   * new target). A configured card that is missing is reported as an unmounted volume with no files dir.
+   */
+  fun settingsSdCard(volumes: List<AppVolume>, target: StorageTarget): AppVolume? {
+    val removable = volumes.filter { it.removable }
+    val configuredUuid = (target as? StorageTarget.Sd)?.uuid
+    return removable.firstOrNull { it.uuid == configuredUuid }
+            ?: removable.firstOrNull()
+            ?: configuredUuid?.let { AppVolume(it, File(""), removable = true, mounted = false, writable = false) }
+  }
+
   /** Absolute path with `.` and `..` resolved lexically (symlinks are not followed); java.nio Path needs API 26. */
   fun normalizedPath(file: File): String = "/" + components(file).joinToString("/")
 

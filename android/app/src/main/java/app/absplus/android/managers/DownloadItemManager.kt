@@ -133,6 +133,26 @@ class DownloadItemManager(
         checkDownloadItemFinished(item)
         return@forEach
       }
+      if (volumeMissing && item.downloadItemParts.any { !it.moved }) {
+        // Staging on a missing card can't be reset; the card comes back, so keep the auto-download record
+        item.downloadItemParts.filter { !it.moved }.forEach { part ->
+          part.failed = true
+          part.storageUnavailable = true
+          part.permissionLost = false
+          part.failureReason = LibraryItemDownloadStarter.STORAGE_UNAVAILABLE_MESSAGE
+          part.completed = false
+          part.isMoving = false
+          part.downloadId = null
+        }
+        item.terminalFailureAt = item.terminalFailureAt ?: System.currentTimeMillis()
+        item.stagingCleanupAt = null
+        persist(item, force = true)
+        downloadItemQueue.add(item)
+        IncompleteDownloadCleanup.schedule(context, item)
+        clientEventEmitter.onDownloadItem(item)
+        AbsLogger.info(tag, "Download ${item.id} is unfinished; waiting for the SD card")
+        return@forEach
+      }
       var resetFailed = false
       // A terminal failure keeps its reason after a restart (e.g. lost folder access), so the
       // Downloads screen still offers the right recovery instead of a generic failure

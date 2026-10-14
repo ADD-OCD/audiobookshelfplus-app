@@ -75,6 +75,18 @@ class StorageMovePlannerTest {
   }
 
   @Test
+  fun itemOnEjectedTargetCardWaits() {
+    val ejected = FakeProbe(internalDir, sdDir, sdMounted = false)
+    val plan = StorageMovePlanner.plan(listOf(item("onsd", sdBook)), listOf(), StorageTarget.Sd(sdUuid), ejected, { false }, plenty)
+    assertEquals("an item on the ejected target card waits", mapOf("onsd" to WaitReason.UNAVAILABLE), plan.waiting)
+    assertEquals(listOf<LocalLibraryItem>(), plan.toMove)
+
+    val mounted = StorageMovePlanner.plan(listOf(item("onsd", sdBook)), listOf(), StorageTarget.Sd(sdUuid), FakeProbe(internalDir, sdDir), { false }, plenty)
+    assertEquals(mapOf<String, WaitReason>(), mounted.waiting)
+    assertEquals(listOf<LocalLibraryItem>(), mounted.toMove)
+  }
+
+  @Test
   fun noSpaceFromFirstThatDoesNotFit() {
     val probe = FakeProbe(internalDir, sdDir)
     val margin = DownloadStorageSpace.MOVE_SPACE_MARGIN_BYTES

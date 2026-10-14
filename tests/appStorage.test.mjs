@@ -24,9 +24,14 @@ test('noModalWithoutSaf', () => {
 
 test('appStorageFolderHasEmptyId', () => {
   assert.deepEqual(appStorageDownloadFolder('book', 'X'), { id: '', name: 'X', mediaType: 'book' })
-  const strings = { LabelAppStorageLocation: 'App storage · {0}', LabelDownloadStorageInternal: 'Internal', LabelDownloadStorageSdCard: 'SD card' }
+  const strings = { LabelAppStorageLocation: 'App storage · {0}', LabelDownloadStorageInternal: 'Internal', LabelDownloadStorageSdCard: 'SD card', LabelDownloadStorageUnavailable: 'SD card not available' }
+  const card = { uuid: '79EC-9B33', mounted: true, freeBytes: 1 }
   assert.equal(appStorageLabel(strings, 'internal'), 'App storage · Internal')
-  assert.equal(appStorageLabel(strings, 'sd:79EC-9B33'), 'App storage · SD card')
+  assert.equal(appStorageLabel(strings, 'internal', { ...card, mounted: false }), 'App storage · Internal')
+  assert.equal(appStorageLabel(strings, 'sd:79EC-9B33', card), 'App storage · SD card')
+  assert.equal(appStorageLabel(strings, 'sd:79EC-9B33', { ...card, mounted: false }), 'App storage · SD card not available')
+  assert.equal(appStorageLabel(strings, 'sd:79EC-9B33', null), 'App storage · SD card not available')
+  assert.equal(appStorageLabel(strings, 'sd:79EC-9B33', { ...card, uuid: '1111-2222' }), 'App storage · SD card not available', 'another card is not the configured one')
   assert.equal(appStorageLabel(strings, undefined), 'App storage · Internal')
 })
 

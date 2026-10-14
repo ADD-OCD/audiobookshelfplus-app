@@ -364,6 +364,46 @@ class DownloadControlsTest {
   }
 
   @Test
+  fun sdCardRemovedMidDownloadIsUnavailableAfterRestart() {
+    Paper.book("autoDownload").destroy()
+    val probe =
+            object : VolumeProbe {
+              var mounted = false
+              override fun volumes() = listOf(AppVolume("79EC-9B33", File(root, "sd"), removable = true, mounted = mounted, writable = mounted))
+              override fun internalFilesDir(): File = context.filesDir
+            }
+    val finished = part("mid", "01.mp3", moved = true, sd = true)
+    val inFlight = part("mid", "02.mp3", sd = true, bytes = 5)
+    DeviceManager.dbManager.saveDownloadItem(item("mid", finished, inFlight, sd = true).copy(episodeId = "ep1"))
+    AutoDownloadStore.addEpisodeId("server", "mid", "ep1")
+    // A non-empty directory can't be deleted, like staging on a removed card
+    val staging = File(inFlight.destinationPath).apply { mkdirs() }
+    File(staging, "blocker").writeBytes(ByteArray(1))
+
+    val manager = DownloadItemManager(FolderScanner(context), context, emitter, probe)
+    manager.restoreQueue()
+    val restored = manager.downloadItemQueue.single { it.id == "mid" }
+    val restoredInFlight = restored.downloadItemParts.single { it.filename == "02.mp3" }
+    assertTrue("an unfinished part on a missing card is SD card not available", restoredInFlight.failed && restoredInFlight.storageUnavailable)
+    assertEquals(LibraryItemDownloadStarter.STORAGE_UNAVAILABLE_MESSAGE, restoredInFlight.failureReason)
+    assertFalse(restoredInFlight.permissionLost)
+    assertTrue("the episode is still counted as auto downloaded", "ep1" in AutoDownloadStore.get("server", "mid").autoDownloadedEpisodeIds)
+    assertTrue("staging on the missing card is left alone", staging.exists())
+    assertTrue(restored.downloadItemParts.single { it.filename == "01.mp3" }.moved)
+    assertEquals(DownloadItemManager.QueuedState.STORAGE_UNAVAILABLE, manager.queuedState("mid"))
+    assertTrue(
+            "the state is persisted",
+            DeviceManager.dbManager.getDownloadItems().single { it.id == "mid" }.downloadItemParts.single { it.filename == "02.mp3" }.storageUnavailable
+    )
+
+    probe.mounted = true
+    staging.deleteRecursively()
+    assertTrue("Retry once the card is back", manager.retryDownloadItem("mid"))
+    assertFalse(restoredInFlight.storageUnavailable)
+    assertFalse(restoredInFlight.failed)
+  }
+
+  @Test
   fun finishedDownloadWaitsForItsSdCard() {
     val probe =
             object : VolumeProbe {

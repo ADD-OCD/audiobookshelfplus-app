@@ -26,6 +26,9 @@ export function storageStatusView(status, strings, bytesPretty) {
   const lines = []
   const sd = status.sd
   const sdSelectable = sd?.mounted === true
+  const setting = String(status.downloadStorage || '')
+  // A different inserted card is shown below as selectable, but the configured one is still missing
+  if (sd && setting.startsWith('sd:') && (sd.mounted === false || sd.uuid !== setting.slice(3))) lines.push(strings.LabelDownloadStorageUnavailable)
   if (sdSelectable) lines.push(supplant(strings.MessageDownloadStorageVolume, [sd.uuid || '', bytesPretty(sd.freeBytes)]))
 
   const move = status.move
@@ -51,6 +54,7 @@ export function storageStatusView(status, strings, bytesPretty) {
 }
 
 export const DOWNLOAD_STORAGE_VIEW_KEYS = [
+  'LabelDownloadStorageUnavailable',
   'MessageDownloadStorageVolume',
   'MessageDownloadStorageMoving',
   'MessageDownloadStorageMovingOne',

@@ -24,6 +24,24 @@ test('missing or unmounted SD card is not selectable', () => {
   assert.ok(!unmounted.lines.some((l) => l.startsWith('SD card ')), 'no volume line for an unmounted card')
 })
 
+test('unavailable configured SD card is reported', () => {
+  const v = view({ downloadStorage: 'sd:79EC-9B33', sd: { uuid: '79EC-9B33', mounted: false, freeBytes: 0 } })
+  assert.equal(v.lines[0], 'SD card not available')
+  assert.equal(v.sdSelectable, false)
+  assert.ok(!v.lines.some((l) => l.startsWith('SD card 79EC')), 'no volume line')
+  const internal = view({ downloadStorage: 'internal', sd: { uuid: '79EC-9B33', mounted: false, freeBytes: 0 } })
+  assert.ok(!internal.lines.includes('SD card not available'), 'not with internal storage set')
+})
+
+test('a different inserted card still reports the configured one as unavailable', () => {
+  const v = view({ downloadStorage: 'sd:79EC-9B33', sd: { uuid: '1234-ABCD', mounted: true, freeBytes: 1e9 } })
+  assert.equal(v.lines[0], 'SD card not available')
+  assert.ok(v.lines.some((l) => l.startsWith('SD card 1234-ABCD')), 'the other card is shown')
+  assert.equal(v.sdSelectable, true)
+  const same = view({ downloadStorage: 'sd:79EC-9B33', sd: { uuid: '79EC-9B33', mounted: true, freeBytes: 1e9 } })
+  assert.ok(!same.lines.includes('SD card not available'), 'not when the configured card is inserted')
+})
+
 test('running move shows the current item and bytes', () => {
   assert.deepEqual(view({}, { running: true, done: 2, total: 7, bytesDone: 1.2e9, bytesTotal: 2.9e9 }).lines, ['Moving 3 of 7 items · 1.2 GB / 2.9 GB'])
   assert.deepEqual(view({}, { running: true, done: 7, total: 7, bytesDone: 2.9e9, bytesTotal: 2.9e9 }).lines, ['Moving 7 of 7 items · 2.9 GB / 2.9 GB'], 'never past the total')
@@ -70,6 +88,6 @@ test('nothing to say without an SD card, move or status', () => {
 })
 
 test('every string the view uses exists', () => {
-  assert.equal(DOWNLOAD_STORAGE_VIEW_KEYS.length, 14)
+  assert.equal(DOWNLOAD_STORAGE_VIEW_KEYS.length, 15)
   for (const key of DOWNLOAD_STORAGE_VIEW_KEYS) assert.equal(typeof strings[key], 'string', key)
 })

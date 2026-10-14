@@ -243,9 +243,10 @@ class StorageMoveService : Service() {
     }
 
     fun statusJson(context: Context, move: MoveStatus): JSObject {
-      val sdVolume = AndroidVolumeProbe(context).volumes().firstOrNull { it.removable }
+      val downloadStorage = DeviceManager.deviceData.deviceSettings?.downloadStorage ?: "internal"
+      val sdVolume = AppStorage.settingsSdCard(AndroidVolumeProbe(context).volumes(), DownloadStorageSetting.parse(downloadStorage))
       val result = JSObject()
-      result.put("downloadStorage", DeviceManager.deviceData.deviceSettings?.downloadStorage ?: "internal")
+      result.put("downloadStorage", downloadStorage)
       result.put("internalFreeBytes", StatFs(context.filesDir.path).availableBytes)
       if (sdVolume == null) {
         result.put("sd", JSONObject.NULL)

@@ -31,6 +31,19 @@ class AppStorageTest {
   private val internalFolder = AppStorage.folderFor(StorageTarget.Internal, "book")
 
   @Test
+  fun settingsSdCard() {
+    val configured = StorageTarget.Sd("79EC-9B33")
+    val other = sd(uuid = "1111-2222")
+    assertEquals(sd(), AppStorage.settingsSdCard(listOf(primary(), other, sd()), configured))
+    assertEquals("another inserted card is offered", other, AppStorage.settingsSdCard(listOf(primary(), other), configured))
+    val missing = AppStorage.settingsSdCard(listOf(primary()), configured)
+    assertEquals("79EC-9B33", missing?.uuid)
+    assertFalse("a missing configured card is reported unmounted", missing!!.mounted)
+    assertNull(AppStorage.settingsSdCard(listOf(primary()), StorageTarget.Internal))
+    assertEquals(other, AppStorage.settingsSdCard(listOf(primary(), other), StorageTarget.Internal))
+  }
+
+  @Test
   fun ownershipCoversInternalAndSd() {
     assertTrue(AppStorage.isAppStorage("internal-podcast"))
     assertTrue(AppStorage.isAppStorage("appsd-79EC-9B33-book"))

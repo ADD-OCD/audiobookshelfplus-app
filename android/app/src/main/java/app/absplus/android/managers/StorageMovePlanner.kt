@@ -50,7 +50,11 @@ object StorageMovePlanner {
     for (item in items) {
       if (!AppStorage.isAppStorage(item.folderId)) continue
       val targetFolder = AppStorage.folderFor(target, item.mediaType)
-      if (item.folderId == targetFolder.id) continue
+      if (item.folderId == targetFolder.id) {
+        // Already on the target, but a missing card still has to be reported
+        if (!AppStorage.isAvailable(item.folderId, probe)) waiting[item.id] = WaitReason.UNAVAILABLE
+        continue
+      }
 
       val reason =
               when {
