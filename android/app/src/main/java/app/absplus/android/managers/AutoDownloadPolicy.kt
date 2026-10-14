@@ -6,9 +6,26 @@ import app.absplus.android.data.PodcastAutoDownloadEntry
 
 /** Pure decisions of podcast auto download, kept apart from Android and network code for tests. */
 object AutoDownloadPolicy {
+  /** Automatic attempts per episode; after that only a manual download (or Retry) tries again. */
+  const val MAX_AUTO_ATTEMPTS = 3
+
   // Auto download has no UI to ask in, so anything but "Always" for cellular means unmetered only
   fun requiresUnmeteredNetwork(settings: DeviceSettings): Boolean =
           settings.autoDownloadWifiOnly || settings.downloadUsingCellular != DownloadUsingCellularSetting.ALWAYS
+
+  /** Network/power state the transfer gate decides on. */
+  data class Conditions(val connected: Boolean, val unmetered: Boolean, val charging: Boolean)
+
+  /**
+   * Whether auto-owned transfers may run now: never offline, never on a metered network while unmetered-only applies,
+   * never off the charger while charging-only is set. Manual downloads are not subject to this.
+   */
+  fun transfersAllowed(settings: DeviceSettings, conditions: Conditions): Boolean {
+    if (!conditions.connected) return false
+    if (requiresUnmeteredNetwork(settings) && !conditions.unmetered) return false
+    if (settings.autoDownloadChargingOnly && !conditions.charging) return false
+    return true
+  }
 
   fun isEnabledFor(entry: PodcastAutoDownloadEntry, settings: DeviceSettings): Boolean =
           entry.enabled == PodcastAutoDownloadEntry.ENABLED_ON ||
@@ -22,4 +39,58 @@ object AutoDownloadPolicy {
     if (keepCount <= 0) return emptyList()
     return items.filter(isCandidate).sortedWith(compareByDescending(nullsFirst<Long>(), publishedAt)).take(keepCount)
   }
+
+  /** What an auto check does with one episode of the newest window. */
+  enum class WindowAction { ENQUEUE, RETRY, SKIP }
+
+  /**
+   * Decision for an episode inside the window. Only auto-owned work is ever retried, and only below
+   * [MAX_AUTO_ATTEMPTS]; manual claims and episodes already on the device are left alone.
+   *
+   * @param queued the download queue's state for this episode
+   * @param onDevice a local copy (any origin) exists for this server
+   */
+  fun windowAction(entry: PodcastAutoDownloadEntry, episodeId: String, queued: DownloadItemManager.QueuedState, onDevice: Boolean): WindowAction {
+    if (episodeId in entry.manualEpisodeIds) return WindowAction.SKIP
+    val owned = episodeId in entry.autoDownloadedEpisodeIds
+    val attempts = entry.failedAttempts[episodeId] ?: 0
+    return when (queued) {
+      DownloadItemManager.QueuedState.PENDING -> WindowAction.SKIP
+      DownloadItemManager.QueuedState.FAILED ->
+              if (owned && attempts < MAX_AUTO_ATTEMPTS) WindowAction.RETRY else WindowAction.SKIP
+      DownloadItemManager.QueuedState.NOT_QUEUED -> when {
+        onDevice -> WindowAction.SKIP
+        // Owned but gone: a cleared failure is retried (bounded); one that completed and was deleted is not
+        owned -> if (attempts in 1 until MAX_AUTO_ATTEMPTS) WindowAction.ENQUEUE else WindowAction.SKIP
+        else -> WindowAction.ENQUEUE
+      }
+    }
+  }
+
+  /** A downloaded episode as retention sees it. */
+  data class LocalEpisode(
+          val serverEpisodeId: String,
+          val inProgress: Boolean, // started and not finished (local or server progress)
+          val isLastPlayed: Boolean, // the session currently loaded in / last used by the player
+          val queued: Boolean
+  )
+
+  /**
+   * Episodes automatic retention may delete: auto-owned, not claimed manually, no longer in the newest window, still
+   * listed by the server (missing metadata never causes deletion), not being listened to, not the player's session
+   * and not in the download queue.
+   */
+  fun retentionDeletions(
+          entry: PodcastAutoDownloadEntry,
+          windowIds: Set<String>,
+          serverEpisodeIds: Set<String>,
+          local: List<LocalEpisode>
+  ): List<String> =
+          local.filter { ep ->
+            ep.serverEpisodeId in entry.autoDownloadedEpisodeIds &&
+                    ep.serverEpisodeId !in entry.manualEpisodeIds &&
+                    ep.serverEpisodeId !in windowIds &&
+                    ep.serverEpisodeId in serverEpisodeIds &&
+                    !ep.inProgress && !ep.isLastPlayed && !ep.queued
+          }.map { it.serverEpisodeId }
 }

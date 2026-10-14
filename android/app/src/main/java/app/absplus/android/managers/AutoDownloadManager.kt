@@ -1,9 +1,6 @@
 package app.absplus.android.managers
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
-import android.os.BatteryManager
 import android.util.Log
 import app.absplus.android.data.DeviceSettings
 import app.absplus.android.data.MediaProgress
@@ -95,18 +92,9 @@ object AutoDownloadManager {
     return Pair(Status.STARTED, settings)
   }
 
-  private fun constraintsMet(appContext: Context, settings: DeviceSettings): Boolean {
-    if (AutoDownloadPolicy.requiresUnmeteredNetwork(settings)) {
-      val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-      val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
-      if (caps == null || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) return false
-    }
-    if (settings.autoDownloadChargingOnly) {
-      val bm = appContext.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-      if (!bm.isCharging) return false
-    }
-    return true
-  }
+  // Same rule as the download queue's gate for auto-owned transfers (offline, metered, charger)
+  private fun constraintsMet(appContext: Context, settings: DeviceSettings): Boolean =
+          AutoDownloadPolicy.transfersAllowed(settings, AutoDownloadConditions.current(appContext))
 
   private enum class Recheck { OK, SKIP_PODCAST, ABORT_CHECK }
 
@@ -127,9 +115,10 @@ object AutoDownloadManager {
     }
   }
 
-  private fun isDownloadedLocally(libraryItemId: String, episodeId: String): Boolean {
+  private fun isDownloadedLocally(serverConfigId: String, libraryItemId: String, episodeId: String): Boolean {
     return DeviceManager.dbManager.getLocalLibraryItems().any { local ->
-      local.libraryItemId == libraryItemId && (local.media as? Podcast)?.episodes?.any { it.serverEpisodeId == episodeId } == true
+      local.libraryItemId == libraryItemId && local.serverConnectionConfigId == serverConfigId &&
+              (local.media as? Podcast)?.episodes?.any { it.serverEpisodeId == episodeId } == true
     }
   }
 
@@ -192,6 +181,7 @@ object AutoDownloadManager {
     var queued = 0
     var retried = 0
     var failedPodcasts = 0
+    var removed = 0
 
     for (id in targets) {
       if (DeviceManager.serverConnectionConfig?.id != serverConfigId) {
@@ -236,10 +226,16 @@ object AutoDownloadManager {
         it.audioFile != null && "$id/${it.id}" !in finished
       }
 
-      val downloadedEpisodeIds = localItems.filter { it.libraryItemId == id }
+      // Only this server's copies count; another server's local item never satisfies or blocks this one
+      val podcastLocals = localItems.filter { it.libraryItemId == id && it.serverConnectionConfigId == serverConfigId }
+      // Auto download writes to internal app storage only; a podcast kept in a device folder is left to the user
+      if (podcastLocals.any { !it.folderId.startsWith("internal-") }) {
+        AbsLogger.info(TAG, "Podcast $id is downloaded to a device folder; auto download skips it")
+        continue
+      }
+      val downloadedEpisodeIds = podcastLocals
         .flatMap { local -> (local.media as? Podcast)?.episodes?.mapNotNull { it.serverEpisodeId } ?: emptyList() }
         .toSet()
-      val knownIds = entry.autoDownloadedEpisodeIds.toSet()
       var podcastFailed = false
 
       for (episode in window) {
@@ -263,26 +259,19 @@ object AutoDownloadManager {
           Recheck.SKIP_PODCAST -> break
           Recheck.OK -> Unit
         }
-        when (state) {
-          DownloadItemManager.QueuedState.PENDING -> AutoDownloadStore.addEpisodeId(serverConfigId, id, episode.id)
-          DownloadItemManager.QueuedState.FAILED -> {
+        // The local snapshot is taken before network calls; a manual download may have finished since
+        val onDevice = episode.id in downloadedEpisodeIds || isDownloadedLocally(serverConfigId, id, episode.id)
+        // Fresh entry: a manual request may have claimed the episode while this check was waiting
+        when (AutoDownloadPolicy.windowAction(AutoDownloadStore.get(serverConfigId, id), episode.id, state, onDevice)) {
+          AutoDownloadPolicy.WindowAction.SKIP -> Unit
+          AutoDownloadPolicy.WindowAction.RETRY -> {
             val result = await<DownloadServiceHost.ExistingDownloadResult> { DownloadServiceHost.retryExisting(appContext, downloadId, it) }
-            when (result) {
-              DownloadServiceHost.ExistingDownloadResult.RETRIED -> {
-                retried++
-                AutoDownloadStore.addEpisodeId(serverConfigId, id, episode.id)
-              }
-              DownloadServiceHost.ExistingDownloadResult.SERVICE_START_FAILED ->
-                AutoDownloadStore.addEpisodeId(serverConfigId, id, episode.id)
-              else -> Log.d(TAG, "Retry of $downloadId not applied: $result")
-            }
+            if (result == DownloadServiceHost.ExistingDownloadResult.RETRIED) retried++
+            else Log.d(TAG, "Retry of $downloadId not applied: $result")
           }
-          DownloadItemManager.QueuedState.NOT_QUEUED -> {
-            // The local snapshot is taken before network calls; a manual download may have finished since
-            if (episode.id in downloadedEpisodeIds || episode.id in knownIds || isDownloadedLocally(id, episode.id)) {
-              AutoDownloadStore.addEpisodeId(serverConfigId, id, episode.id)
-              continue
-            }
+          AutoDownloadPolicy.WindowAction.ENQUEUE -> {
+            // Ownership is recorded before the item exists, so the queue never sees it as a manual download
+            if (!AutoDownloadStore.markAutoQueued(serverConfigId, id, episode.id)) continue
             item.userMediaProgress = progressByKey["$id/${episode.id}"]
             val result = await<StartResult> { cb ->
               LibraryItemDownloadStarter.startPodcastEpisodeDownload(appContext, item, episode) { cb(StartResult(it)) }
@@ -290,19 +279,15 @@ object AutoDownloadManager {
             when {
               result == null -> {
                 AbsLogger.error(TAG, "Timed out starting download $downloadId")
+                AutoDownloadStore.recordAutoFailure(serverConfigId, id, episode.id)
                 podcastFailed = true
               }
-              result.error == null -> {
-                queued++
-                AutoDownloadStore.addEpisodeId(serverConfigId, id, episode.id)
-              }
+              result.error == null -> queued++
               // The item is already persisted in the queue and resumes when the app opens
-              result.error == DownloadServiceHost.SERVICE_START_FAILED_MESSAGE -> {
-                queued++
-                AutoDownloadStore.addEpisodeId(serverConfigId, id, episode.id)
-              }
+              result.error == DownloadServiceHost.SERVICE_START_FAILED_MESSAGE -> queued++
               else -> {
                 AbsLogger.error(TAG, "Could not start download $downloadId: ${result.error}")
+                AutoDownloadStore.recordAutoFailure(serverConfigId, id, episode.id)
                 podcastFailed = true
               }
             }
@@ -310,8 +295,19 @@ object AutoDownloadManager {
         }
       }
       if (podcastFailed) failedPodcasts++
+
+      // Retention: only with this podcast's current server metadata and progress in hand (both loaded above)
+      if (recheck(serverConfigId, id) != Recheck.OK) continue
+      val serverEpisodeIds = (podcast.episodes ?: mutableListOf()).map { it.id }.toSet()
+      val queuedIds = (await<List<app.absplus.android.models.DownloadItem>> { DownloadServiceHost.snapshot(appContext, it) } ?: continue)
+        .filter { it.libraryItemId == id && it.serverConnectionConfigId == serverConfigId }
+        .mapNotNull { it.episodeId }.toSet()
+      val owned = AutoDownloadStore.get(serverConfigId, id)
+      val progressById = progressByKey.filterKeys { it.startsWith("$id/") }.mapKeys { it.key.removePrefix("$id/") }
+      removed += AutoDownloadRetention.apply(appContext, serverConfigId, id, owned, window.map { it.id }.toSet(), serverEpisodeIds, progressById, queuedIds).size
+      AutoDownloadStore.forgetEpisodes(serverConfigId, id, owned.autoDownloadedEpisodeIds.filter { it !in serverEpisodeIds })
     }
 
-    AbsLogger.info(TAG, "Auto download check finished: queued $queued, retried $retried, failed podcasts $failedPodcasts")
+    AbsLogger.info(TAG, "Auto download check finished: queued $queued, retried $retried, removed $removed, failed podcasts $failedPodcasts")
   }
 }

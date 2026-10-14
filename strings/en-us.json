@@ -459,7 +459,7 @@
   "MessageAudiobookshelfServerNotConnected": "Audiobookshelf server not connected",
   "MessageAudiobookshelfServerRequired": "<strong>Important!</strong> This app is designed to work with an Audiobookshelf server that you or someone you know is hosting. This app does not provide any content.",
   "MessageAutoDownloadDisabledInSettings": "Auto download is turned off in the app settings, so nothing will be downloaded automatically.",
-  "MessageAutoDownloadSettingsHelp": "Downloads the latest unfinished episodes of each podcast. Downloaded episodes are never deleted automatically. Only episodes that are already on your server are downloaded. New episodes appear on the server only if auto download is enabled for the podcast on the server.",
+  "MessageAutoDownloadSettingsHelp": "Downloads the latest unfinished episodes of each podcast to this device. An automatically downloaded episode is removed again once you have finished it or it is no longer among the latest episodes, unless you have started listening to it. Episodes you download yourself are never removed automatically. Only episodes that are already on your server are downloaded. New episodes appear on the server only if auto download is enabled for the podcast on the server.",
   "MessageBookshelfEmpty": "Bookshelf empty",
   "MessageConfirmAppExit": "Did you want to exit the app?",
   "MessageConfirmClearDiagnosticLog": "Delete the diagnostic log? Your downloads, listening progress, queue and settings are not affected.",
