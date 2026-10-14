@@ -8,6 +8,7 @@ import app.absplus.android.models.DownloadItem
 import app.absplus.android.models.DownloadItemPart
 import app.absplus.android.server.ApiHandler
 import app.absplus.android.managers.DownloadItemManager
+import app.absplus.android.managers.DownloadIdentifiers
 import app.absplus.android.services.DownloadServiceHost
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -131,6 +132,12 @@ class AbsDownloader : Plugin() {
     val libraryItemId = call.data.getString("libraryItemId").toString()
     var episodeId = call.data.getString("episodeId").toString()
     if (episodeId == "null") episodeId = ""
+    // Reject before queue lookup or API/path construction; do not rewrite IDs into colliding names.
+    if (!DownloadIdentifiers.isSafe(libraryItemId) ||
+            (episodeId.isNotEmpty() && !DownloadIdentifiers.isSafe(episodeId))) {
+      resolveDownloadCall(call, "Invalid download identifier")
+      return
+    }
     var localFolderId = call.data.getString("localFolderId", "").toString()
     AbsLogger.info(tag, "Requested download for item $libraryItemId${if (episodeId.isEmpty()) "" else " / episode $episodeId"}")
 
@@ -150,6 +157,9 @@ class AbsDownloader : Plugin() {
           apiHandler.getLibraryItemWithProgress(libraryItemId, episodeId) { libraryItem ->
             if (libraryItem == null) {
               call.resolve(JSObject("{\"error\":\"Server request failed\"}"))
+            } else if (!DownloadIdentifiers.matchesRequest(libraryItemId, libraryItem.id)) {
+              // The configured server's response is a separate trust boundary from the request.
+              resolveDownloadCall(call, "Server returned an invalid download identifier")
             } else {
               AbsLogger.info(tag, "Preparing download for ${libraryItem.id}")
 
@@ -214,6 +224,11 @@ class AbsDownloader : Plugin() {
           episode: PodcastEpisode?,
           callback: (String?) -> Unit
   ) {
+    if (!DownloadIdentifiers.isSafe(libraryItem.id) ||
+            (episode != null && !DownloadIdentifiers.isSafe(episode.id))) {
+      callback("Invalid download identifier")
+      return
+    }
     val isInternal = localFolder.id.startsWith("internal-")
 
     val finalInternalFolderPath = "${mainActivity.filesDir}/downloads/${libraryItem.id}"
