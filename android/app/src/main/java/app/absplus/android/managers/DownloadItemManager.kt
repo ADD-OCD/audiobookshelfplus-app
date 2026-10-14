@@ -55,6 +55,8 @@ class DownloadItemManager(
   var currentDownloadItemParts: MutableList<DownloadItemPart> = mutableListOf()
     private set
 
+  enum class QueuedState { NOT_QUEUED, PENDING, FAILED }
+
   interface DownloadEventEmitter {
     fun onDownloadItem(downloadItem: DownloadItem)
     fun onDownloadItemPartUpdate(downloadItemPart: DownloadItemPart)
@@ -74,6 +76,22 @@ class DownloadItemManager(
     clientEventEmitter = eventEmitter
     downloadItemQueue.forEach(clientEventEmitter::onDownloadItem)
     notifyQueueChanged()
+  }
+
+  @Synchronized
+  fun queuedState(downloadItemId: String): QueuedState {
+    val item = downloadItemQueue.find { it.id == downloadItemId } ?: return QueuedState.NOT_QUEUED
+    return if (item.terminalFailureAt != null) QueuedState.FAILED else QueuedState.PENDING
+  }
+
+  // A failed episode stays in the queue, so the auto download set must drop it for the next check to retry
+  private fun forgetAutoDownloadedEpisode(item: DownloadItem) {
+    if (item.episodeId.isNullOrBlank() || item.serverConnectionConfigId.isBlank()) return
+    try {
+      AutoDownloadStore.removeEpisodeId(item.serverConnectionConfigId, item.libraryItemId, item.episodeId!!)
+    } catch (e: Exception) {
+      AbsLogger.error(tag, "Could not update auto download state (${e.javaClass.simpleName}: ${e.message})")
+    }
   }
 
   @Synchronized
@@ -121,8 +139,10 @@ class DownloadItemManager(
         if (!resetPartForFreshDownload(part)) resetFailed = true
       }
       if (resetFailed) {
+        val newlyFailed = item.terminalFailureAt == null
         item.terminalFailureAt = item.terminalFailureAt ?: System.currentTimeMillis()
         item.stagingCleanupAt = null
+        if (newlyFailed) forgetAutoDownloadedEpisode(item)
       }
       if (item.terminalFailureAt != null) {
         item.downloadItemParts.filter { !it.moved }.forEach { part ->
@@ -590,6 +610,7 @@ class DownloadItemManager(
     item.terminalFailureAt = item.terminalFailureAt ?: System.currentTimeMillis()
     item.stagingCleanupAt = null
     persist(item, force = true)
+    forgetAutoDownloadedEpisode(item)
     IncompleteDownloadCleanup.schedule(context, item)
     clientEventEmitter.onDownloadItemPartUpdate(part)
     notifyQueueChanged()
