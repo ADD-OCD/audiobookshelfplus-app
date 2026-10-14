@@ -8,6 +8,7 @@ import androidx.work.WorkManager
 import app.absplus.android.data.LocalFolder
 import app.absplus.android.data.MediaType
 import app.absplus.android.data.MediaTypeMetadata
+import app.absplus.android.data.ServerConnectionConfig
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.FolderScanner
 import app.absplus.android.models.DownloadItem
@@ -20,6 +21,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -36,6 +38,8 @@ class DownloadControlsTest {
   private lateinit var context: Context
   private lateinit var root: File
   private val events = mutableListOf<String>()
+  private lateinit var previousServers: MutableList<ServerConnectionConfig>
+  private var previousActive: ServerConnectionConfig? = null
 
   private val emitter =
           object : DownloadItemManager.DownloadEventEmitter {
@@ -51,6 +55,12 @@ class DownloadControlsTest {
     Paper.init(context)
     Paper.book("downloadItems").destroy()
     Paper.book("localLibraryItems").destroy()
+    previousServers = DeviceManager.deviceData.serverConnectionConfigs
+    previousActive = DeviceManager.serverConnectionConfig
+    DeviceManager.deviceData.serverConnectionConfigs = mutableListOf(
+            ServerConnectionConfig("server", 0, "Synthetic owner", "http://server", null,
+                    "user", "synthetic", "synthetic-owner-token", null))
+    DeviceManager.serverConnectionConfig = null
     try {
       WorkManager.initialize(context, Configuration.Builder().setExecutor { it.run() }.build())
     } catch (e: IllegalStateException) {
@@ -58,6 +68,12 @@ class DownloadControlsTest {
     }
     root = File(context.cacheDir, "downloads-test").apply { deleteRecursively(); mkdirs() }
     events.clear()
+  }
+
+  @After
+  fun restoreServerFixtures() {
+    DeviceManager.deviceData.serverConnectionConfigs = previousServers
+    DeviceManager.serverConnectionConfig = previousActive
   }
 
   private fun part(
@@ -275,5 +291,65 @@ class DownloadControlsTest {
     val lost = restored.getValue("l").downloadItemParts.single()
     assertTrue(lost.failed && lost.permissionLost)
     assertTrue(events.contains("item:l"))
+  }
+
+  @Test
+  fun missingOwnerOnRestoreKeepsPartialBytesAndDoesNotAdoptActiveServer() {
+    val partial = part("held", "01.mp3", bytes = 6)
+    val bytes = touch(partial.destinationPath, 6).readBytes().toList()
+    DeviceManager.dbManager.saveDownloadItem(item("held", partial).apply { terminalFailureAt = 1L })
+    val other = DeviceManager.deviceData.serverConnectionConfigs.single().copy(
+            id = "other", address = "http://other.invalid", token = "synthetic-other-token")
+    DeviceManager.deviceData.serverConnectionConfigs = mutableListOf(other)
+    DeviceManager.serverConnectionConfig = other
+
+    val manager = manager()
+    manager.restoreQueue()
+    val held = manager.downloadItemQueue.single()
+    assertEquals("server", held.serverConnectionConfigId)
+    assertEquals(6L, held.downloadItemParts.single().bytesDownloaded)
+    assertTrue(held.downloadItemParts.single().failed)
+    assertNull(held.terminalFailureAt)
+    assertEquals(bytes, File(partial.destinationPath).readBytes().toList())
+    assertEquals(6L, DeviceManager.dbManager.getDownloadItems().single().downloadItemParts.single().bytesDownloaded)
+  }
+
+  @Test
+  fun changedOwnerCannotRetryOrDiscardPartialData() {
+    val partial = part("held", "01.mp3", failed = true, bytes = 7)
+    touch(partial.destinationPath, 7)
+    val held = item("held", partial).apply { terminalFailureAt = 1L }
+    DeviceManager.deviceData.serverConnectionConfigs.single().userId = "different-user"
+    val manager = manager()
+    manager.downloadItemQueue.add(held)
+
+    assertFalse(manager.retryDownloadItem("held"))
+    assertTrue(partial.failed)
+    assertEquals(7L, partial.bytesDownloaded)
+    assertEquals(7L, File(partial.destinationPath).length())
+    assertNull(held.terminalFailureAt)
+    assertEquals(1, DeviceManager.dbManager.getDownloadItems().size)
+  }
+
+  @Test
+  fun expiredCleanupBeforeRestorePreservesMissingOwnersPartialData() {
+    val partial = part("expired-held", "01.mp3", failed = true, bytes = 7).copy(
+            destinationPath = File(context.filesDir, "authorization-expiry-fixture/01.mp3.part").path)
+    val owner = DeviceManager.deviceData.serverConnectionConfigs.single().copy()
+    touch(partial.destinationPath, 7)
+    DeviceManager.dbManager.saveDownloadItem(item("expired-held", partial).apply { terminalFailureAt = 1L })
+    DeviceManager.deviceData.serverConnectionConfigs.clear()
+
+    IncompleteDownloadCleanup.cleanupExpired(context)
+    val kept = DeviceManager.dbManager.getDownloadItems().single()
+    assertNull(kept.stagingCleanupAt)
+    assertEquals(7L, kept.downloadItemParts.single().bytesDownloaded)
+    assertEquals(7L, File(partial.destinationPath).length())
+
+    // The ordinary retention policy still works for a verified owner; the guard is not a blanket bypass.
+    DeviceManager.deviceData.serverConnectionConfigs.add(owner)
+    IncompleteDownloadCleanup.cleanupExpired(context)
+    assertFalse(File(partial.destinationPath).exists())
+    assertEquals(0L, DeviceManager.dbManager.getDownloadItems().single().downloadItemParts.single().bytesDownloaded)
   }
 }
