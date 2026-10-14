@@ -4,16 +4,15 @@ Items noted for later investigation. Nothing here is implemented or scheduled. E
 
 ## "Follow Device" theming
 
-**Not implemented.** Investigate a theme option that follows the device's appearance. It would be a token provider in the semantic theme architecture added in Phase 1 (`docs/theme-architecture.md`). It plugs into the `$theme` service, not into components, and its output passes the same validation as any theme data.
+**Done as part of RICE** (merged into `plus`, not yet released): "Follow device" uses the Android 12+ system palette, which Samsung One UI's Color palette also sets, plus system light/dark and contrast. Verified on a Galaxy S22 Ultra. Samsung Galaxy Themes data is not exposed to apps through public APIs and is not used. See `docs/rice-customization.md`.
 
-Scope of the investigation:
+## RICE follow-ups
 
-- Android system light/dark appearance.
-- Material You and Android dynamic colors.
-- Samsung One UI integration, including what Samsung Galaxy Themes actually exposes to third-party apps.
-- Mapping the supported system appearance values onto Audiobookshelf+ theme tokens.
-- It stays presentation-only: no changes to layout, controls or behavior.
-- Behavior must be verified on Samsung hardware.
+- Image-based palettes (the preset schema reserves `source.kind = 'image'`).
+- More import formats (GTK, Rofi, Polybar and other config files) and hosts other than GitHub.
+- Right-to-left and Chinese/Japanese/Korean text with the RICE type options on a device.
+- Colors that predate the token system and stay fixed in every appearance (for example the yellow in-progress bar on book cards).
+- With three-button navigation, One UI draws its own dark scrim over the navigation bar (built-in Light shows it too).
 
 ## Runtime system-bar colors
 

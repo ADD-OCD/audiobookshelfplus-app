@@ -28,7 +28,7 @@ export default {
     link: [{ rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }]
   },
 
-  css: ['@/assets/tailwind.css', '@/assets/app.css'],
+  css: ['@/assets/tailwind.css', '@/assets/app.css', '@/assets/rice-fonts.css'],
 
   plugins: [
     '@/plugins/server.js',
@@ -36,6 +36,7 @@ export default {
     '@/plugins/authRenewal.js',
     '@/plugins/localStore.js',
     '@/plugins/theme.client.js',
+    '@/plugins/rice.client.js',
     '@/plugins/init.client.js',
     '@/plugins/axios.js',
     '@/plugins/capacitor/index.js',

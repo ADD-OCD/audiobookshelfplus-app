@@ -159,7 +159,7 @@ object DownloadServiceHost {
     val queue = ensure(context)
     scope.launch {
       restoreJob?.join()
-      val existing = queue.downloadItemQueue.find { it.id == downloadItemId }
+      val existing = queue.findDownloadItem(downloadItemId)
       val missingFolders = if (existing == null) emptyList() else queue.foldersWithoutAccess(downloadItemId)
       if (existing == null) {
         callback(ExistingDownloadResult.NOT_FOUND)

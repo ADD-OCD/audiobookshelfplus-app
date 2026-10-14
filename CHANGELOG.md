@@ -5,8 +5,55 @@ Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and d
 
 ## Unreleased
 
-On `plus`, not in any release yet (merged from `fix/auth-refresh-single-flight`).
+Merged into `plus`, not yet in a published release.
 
+- **Podcast library navigation:** every tab now shows both its icon and its label, selected or not: Home (house),
+  Latest (clock), Library (stacked books) and Add (plus). Library no longer uses the microphone and Add no longer
+  uses the broadcast symbol. Tabs keep equal widths, the labels name each destination for screen readers, and the
+  layout adapts to portrait, landscape and larger text. Audiobook libraries are unchanged.
+- **Large podcast download queues** (contributed by Stanislav Markin, PR #25): a queued episode no longer stores a
+  full copy of its podcast, so queueing many episodes of a podcast with long show notes uses far less memory and
+  storage. In testing with 100 queued episodes, the app stayed around 55 MB of memory where it previously ran out of
+  memory at about 54. Queues saved by older versions are converted on the next start, and queued downloads continue
+  after a restart.
+- **Download reliability:** fixed a crash when the download list subscribed while downloads were starting or finishing,
+  and made Retry and new download requests safe while other downloads change the queue.
+
+## v0.18.2 — LLAMA landscape cover frame fix
+
+**Released 2026-10-13:** versionCode 136, versionName `0.14.2-beta` (upstream base unchanged), `PLUS_VERSION`
+`0.18.2`, tag `v0.14.2-beta-plus-v0.18.2`. Maintenance release; changes since v0.18.1 (`76abcf09`).
+
+- **LLAMA full player in landscape:** the cover's frame now fits the cover itself, with no empty space beside it,
+  sits on the bottom edge of the screen, stays below the top buttons and is centered in the left half. Square, tall
+  and wide covers keep their shape and are never cropped. Portrait and the Dark, Black and Light themes are
+  unchanged.
+
+## v0.18.1 — Up Next restoration fix
+
+**Released 2026-10-12:** versionCode 135, versionName `0.14.2-beta` (upstream base unchanged), `PLUS_VERSION`
+`0.18.1`, tag `v0.14.2-beta-plus-v0.18.1`. Maintenance release; changes since v0.18.0 (`aaa10605`).
+
+- **Up Next after resuming:** after the app had been closed by Android (for example after a long break or an app
+  update), pressing Play on the widget, notification or headset resumed the book but Up Next stayed empty. The queue
+  now appears again, in its original order and position. Details: `docs/continuous-playback.md`.
+
+## v0.18.0 — RICE customization and sign-in reliability
+
+**Released 2026-10-12:** versionCode 134, versionName `0.14.2-beta` (upstream base unchanged), `PLUS_VERSION`
+`0.18.0`, tag `v0.14.2-beta-plus-v0.18.0`. Changes since v0.17.0 (`a9084e19`).
+
+- **RICE customization** (Settings → Appearance), off by default. Dark, Black, Light and LLAMA are unchanged.
+  - Ten starter palettes adapted from Catppuccin (Mocha, Latte), Dracula, Nord, Gruvbox, Tokyo Night, Rosé Pine,
+    Solarized (Dark, Light) and Everforest, with their licences and sources listed in the app.
+  - Personal presets (up to 32): bounded color and style options, a live preview, Apply, Cancel and Reset, and a
+    readability check before saving. Damaged saved appearance data falls back to the last good copy or a built-in.
+  - Device colors: on Android 12 and newer, follows the system color palette (including Samsung One UI's Color palette)
+    and system light/dark.
+  - The home-screen widget takes RICE colors on Android 12 and newer.
+  - Import palette colors from public GitHub Linux theme projects: pywal, Kitty, Base16/Base24 and plain hex lists.
+    Nothing is applied before you save it.
+  - Details: `docs/rice-customization.md`.
 - **Sign-in renewal:** when several requests find the sign-in expired at once, the app renews it once and retries
   each of them. Overlapping renewals could use the same single-use refresh token and sign you out.
 - **Fewer unexpected sign-outs:**
@@ -14,7 +61,20 @@ On `plus`, not in any release yet (merged from `fix/auth-refresh-single-flight`)
   - neither does a request that fails for another reason after renewing.
   You're signed out only when the server refuses the sign-in.
 - **No crossed sessions:** a renewal still running when you sign out or switch server or account can't change the new
-  session or the saved sign-in. Details: `docs/authentication.md`.
+  session or the saved sign-in. A sign-in renewed at startup is saved. Details: `docs/authentication.md`.
+
+### Known limitations
+
+- **Linux theme import:** only the four formats above, from public GitHub repositories. It doesn't read GTK, Rofi,
+  Polybar or other config files, other hosts, or images.
+- **Image palettes:** making a palette from an image or wallpaper isn't included.
+- **Samsung themes:** RICE follows the system color palette that One UI sets. It can't import Samsung Galaxy Themes or
+  Theme Park themes.
+- **Not themed:** the media notification, launcher icon and Android's own dialogs keep their standard look, and a few
+  older colors (such as the yellow progress bar on book covers) stay the same in every appearance.
+- **Progress from another device:** while an audiobook is playing, progress updates from another device are not
+  applied, and the next progress save from this device may overwrite those updates. When you return to a paused
+  audiobook, progress changes from another device are recognized and applied.
 
 ## v0.17.0 — In-app GitHub updates
 

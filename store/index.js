@@ -10,6 +10,7 @@ export const state = () => ({
   playerIsStartingPlayback: false, // When pressing play before native play response
   playerStartingPlaybackMediaId: null,
   playbackQueue: null, // { sourceType: String, sourceId: String, items: Array, currentIndex: Number }
+  playbackQueueGeneration: 0, // bumped by every set/clear, so an older async native queue answer can't replace a newer one
   isCasting: false,
   isCastAvailable: false,
   attemptingConnection: false,
@@ -225,10 +226,12 @@ export const mutations = {
   },
   setPlaybackQueue(state, queue) {
     state.playbackQueue = queue
+    state.playbackQueueGeneration++
     this.$localStore.setPlaybackQueue(queue)
   },
   clearPlaybackQueue(state) {
     state.playbackQueue = null
+    state.playbackQueueGeneration++
     this.$localStore.setPlaybackQueue(null)
   }
 }

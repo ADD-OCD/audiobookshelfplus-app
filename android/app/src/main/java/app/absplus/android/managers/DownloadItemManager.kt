@@ -188,16 +188,21 @@ class DownloadItemManager(
   private data class RestoredFailure(val permissionLost: Boolean, val storageUnavailable: Boolean, val reason: String?)
 
   @Synchronized
-  fun addDownloadItem(downloadItem: DownloadItem) {
-    val existingItem = downloadItemQueue.find { it.id == downloadItem.id }
+  fun addDownloadItem(newItem: DownloadItem) {
+    val existingItem = downloadItemQueue.find { it.id == newItem.id }
     if (existingItem != null) {
       return
     }
+    val downloadItem = newItem.withoutPodcastEpisodes()
     persist(downloadItem, force = true)
     downloadItemQueue.add(downloadItem)
     clientEventEmitter.onDownloadItem(downloadItem)
     notifyQueueChanged()
   }
+
+  /** The queued item with this id. Under the queue's lock: download threads add and remove items concurrently. */
+  @Synchronized
+  fun findDownloadItem(downloadItemId: String): DownloadItem? = downloadItemQueue.find { it.id == downloadItemId }
 
   /** Names of device folders the item can't write to any more (see [DownloadControls.foldersWithoutAccess]). */
   @Synchronized

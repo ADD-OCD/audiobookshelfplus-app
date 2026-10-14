@@ -138,3 +138,19 @@ Tracked-file diff (new files are listed above and included in the exported patch
 - Streaming the starting book still goes through the normal cellular-streaming permission check. An opt-in setting can prompt to download the missing books first.
 
 `tests/playbackQueue.test.mjs` was written for the download-only design; its five download-only expectations were updated to this behavior during the upstream v0.14.2-beta synchronization. The same pass added coverage for `ino` matching, Up Next reattachment from the native queue, queue-edit races, and the persisted Up Next display copy. The file now has 28 tests.
+
+## Later change: Up Next after a native restore (v0.18.1)
+
+Two copies of the queue exist, and only the second is what Up Next shows:
+
+- **Native queue** (`PlayerNotificationService.playlistQueue` / `playlistQueueIndex`): item IDs only, saved on every change by `PlaybackRestoreStore`. After process death, a widget, headset, notification or Android Auto Play rebuilds the last session and reattaches this queue when its current entry is the restored item (`finishRestore`). It never runs at app launch.
+- **Up Next display** (Vuex `playbackQueue`): full items with titles and covers, set by the UI's own Play and copied to Preferences (`$localStore.setPlaybackQueue`) as the display copy.
+
+**Defect (v0.18.0 and earlier):** the display was rebuilt from the saved copy only when the UI *started* while a native session already existed (`AudioPlayer.reattachNativePlayback` → `native-playback-reattached`). If the UI was already open when a Play restored the session, the usual case after inactivity or an update (open the app, then press Play on the widget, notification or headset), native held the queue but Up Next stayed empty. A field log showed exactly this: `Queue restored (13 items, index 3)`, then `queue=13` from native, with an empty Up Next.
+
+**Fix:**
+- `AudioPlayer` forwards every natively prepared session (`onNativePlaybackSession`) as `native-playback-session`. When the UI has no queue and isn't preparing a Play of its own, `AudioPlayerContainer.nativePlaybackSessionPrepared` reads the native queue.
+- Both paths use `restoreQueueDisplay` / `queueDisplayFromNative`. The saved copy is shown only if its IDs match the native queue in the same order, the native index is valid and the native current entry is the session's item. The native index is used (it may have advanced in the background).
+- A store `playbackQueueGeneration`, bumped by every queue set or clear, makes an older native answer lose to any newer Play, edit, Clear or Close. A queue is never rebuilt from a series or library, and nothing new is persisted.
+
+Tests: `tests/queue-restoration.test.mjs` (21, real container methods, store mutations and getters, controlled promise ordering); native persistence is covered by `PlaybackRestoreStoreTest.kt`. On the S22 the defect was reproduced on the unfixed build and fixed on the new one (process death, update, WebView recreation, widget restore with the UI open or closed).

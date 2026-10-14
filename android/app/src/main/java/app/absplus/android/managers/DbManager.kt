@@ -134,8 +134,14 @@ class DbManager {
 
   fun getDownloadItems(): List<DownloadItem> {
     val downloadItems: MutableList<DownloadItem> = mutableListOf()
-    Paper.book("downloadItems").allKeys.forEach { downloadItemId ->
-      Paper.book("downloadItems").read<DownloadItem>(downloadItemId)?.let { downloadItems.add(it) }
+    val book = Paper.book("downloadItems")
+    book.allKeys.forEach { downloadItemId ->
+      book.read<DownloadItem>(downloadItemId)?.let { stored ->
+        val compact = stored.withoutPodcastEpisodes()
+        // Rewrite entries saved by older versions so they shrink on disk too
+        if (compact !== stored) book.write(downloadItemId, compact)
+        downloadItems.add(compact)
+      }
     }
     return downloadItems
   }
@@ -154,7 +160,9 @@ class DbManager {
     val downloadBook = Paper.book("downloadItems")
     val queueIsValid =
             try {
+              // One entry at a time: entries saved before compaction can each hold a whole podcast
               downloadBook.allKeys
+                      .asSequence()
                       .map { downloadItemId ->
                         val item =
                                 downloadBook.read<DownloadItem>(downloadItemId)

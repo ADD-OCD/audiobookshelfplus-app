@@ -137,7 +137,9 @@ class AbsDownloader : Plugin() {
   override fun addListener(call: PluginCall) {
     super.addListener(call)
     if (call.getString("eventName") == "onDownloadItem" && ::downloadItemManager.isInitialized) {
-      downloadItemManager.downloadItemQueue.forEach { item ->
+      // Download threads change the queue while the frontend subscribes
+      val queued = synchronized(downloadItemManager) { downloadItemManager.downloadItemQueue.toList() }
+      queued.forEach { item ->
         notifyListeners("onDownloadItem", JSObject(jacksonMapper.writeValueAsString(item)))
       }
     }

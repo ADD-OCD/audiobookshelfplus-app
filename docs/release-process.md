@@ -66,9 +66,13 @@ published (release, prerelease, or test build):
 | 132 | **Audiobookshelf+ v0.16.0** (upstream v0.14.2-beta), versionName `0.14.2-beta`: "LLAMA visual refresh and stability fixes", built from `plus` at `10db9077` and tagged `v0.14.2-beta-plus-v0.16.0`. Published 2026-10-11 as the Latest GitHub release with the assets `audiobookshelf-plus-v0.16.0-release.apk` (SHA-256 `5db2ed02ecabbd3a119094e12cb2b944aa97981d83b0bda77adcd35886dde5a8`) and its `.sha256` checksum file, and announced in Discussions #21. Physical S22 release validation passed, including an in-place update from v0.15.1. An earlier candidate built from `6505177b` was superseded before publication and never distributed. |
 | 133 | **Audiobookshelf+ v0.17.0** (upstream v0.14.2-beta), versionName `0.14.2-beta`, `PLUS_VERSION` `0.17.0`: "In-app GitHub updates", built from `plus` at `a9084e19` and tagged `v0.14.2-beta-plus-v0.17.0`. Published 2026-10-11 as the Latest GitHub release with the assets `audiobookshelf-plus-v0.17.0-release.apk` (15,052,980 bytes, SHA-256 `e11b9bbc353e7fea30b1e32c94c556b4c3758ce8d0aa6ab1c887331528396415`, signed with the release certificate above) and its `.sha256` checksum file. CI on the build commit: Build APK 38195849700, i18n 38195849703 (both success). The S22 updated a signed v0.16.0 install in place, kept login, library and theme, streamed, and the new updater reported it up to date. **No Announcement was posted:** the announcement is deferred until a later release has been installed over a production v0.17.0 through the in-app updater. |
 
-**Next distributed versionCode: 134.** The temporary GitHub prereleases/tags for 124–126 were
+| 134 | **Audiobookshelf+ v0.18.0** (upstream v0.14.2-beta), versionName `0.14.2-beta`, `PLUS_VERSION` `0.18.0`: "RICE customization and sign-in reliability", built from `plus` at `aaa10605` (clean build) and tagged `v0.14.2-beta-plus-v0.18.0`. Published 2026-10-12 as the Latest GitHub release with the assets `audiobookshelf-plus-v0.18.0-release.apk` (15,158,210 bytes, SHA-256 `1a184aa743200dc9897f46d3fa44c24b812672ca4f6d896f23464a61954a7bca`, release certificate above) and its `.sha256` checksum file. CI on the build commit: Build APK 38276925050, i18n 38276925350 (both success). An earlier incremental build that still carried `PLUS_VERSION` 0.17.0 in the updater was rejected before publication. **Production self-update:** the user's own phone (Galaxy S26 Ultra) updated its production v0.17.0 to v0.18.0 through Settings → Updates on 2026-10-12 (its diagnostic log shows the verified download, Android's installer and the restart as versionCode 134). |
+| 135 | **Audiobookshelf+ v0.18.1** (upstream v0.14.2-beta), versionName `0.14.2-beta`, `PLUS_VERSION` `0.18.1`: "Up Next restoration fix", a maintenance release built from `plus` at `76abcf09` (clean build; the fix merged at `88f94830` from `hotfix/queue-restoration-v0.18.1`) and tagged `v0.14.2-beta-plus-v0.18.1`. Published 2026-10-12 as the Latest GitHub release with the assets `audiobookshelf-plus-v0.18.1-release.apk` (15,158,938 bytes, SHA-256 `766d982a5befc59ea55cd270136d91779741a5774c61d59ca86988eb4b0f2eec`, release certificate above) and its `.sha256` checksum file. CI on the build commit: Build APK 38284011391, i18n 38284011378 (both success). The defect was reproduced and the fix verified on the S22 with a debug build before release. **Production self-update verified (S22):** the published v0.17.0 found v0.18.1 in Settings → Updates, downloaded and verified it, asked Android for "Install unknown apps" and Android's installer required the user's confirmation; after the user confirmed on 2026-10-12, the package was replaced in place as versionCode 135 (installer: the app itself; first-install time unchanged; installed APK byte-identical to the release asset, certificate above). Login, server, Dark theme, settings and the saved listening position were kept, Settings → Updates reports it up to date, and the next start renewed the expired sign-in once without signing out. Announced in [Discussion #26](https://github.com/ADD-OCD/audiobookshelfplus-app/discussions/26) together with v0.18.0 and the deferred v0.17.0 updater announcement. |
+| 136 | **Audiobookshelf+ v0.18.2** (upstream v0.14.2-beta), versionName `0.14.2-beta`, `PLUS_VERSION` `0.18.2`: "LLAMA landscape cover frame fix", a maintenance release built from `plus` at `ef757efd` (clean build; the fix merged at `2b88ca49` from `fix/llama-landscape-artwork-frame`) and tagged `v0.14.2-beta-plus-v0.18.2`. Published 2026-10-13 as the Latest GitHub release with the assets `audiobookshelf-plus-v0.18.2-release.apk` (15,159,634 bytes, SHA-256 `b99e202d0ef1652b196c42abe9120440104bbe09fc52884629706fc23a1c470f`, release certificate above) and its `.sha256` checksum file. CI on the build commit: i18n 38414067712 (success), Build APK 38414067883 (attempt 1 failed when Robolectric could not download its Android runtime jar; the re-run of the failed job passed). The S22 production v0.18.1 offers it in Settings → Updates. Acceptance on the user's S26 is pending. |
+
+**Next distributed versionCode: 137.** The temporary GitHub prereleases/tags for 124–126 were
 deleted after approval; these ledger rows are the permanent record, and those numbers (and 127,
-128, 129, 130, 131, 132, 133) must never be reused.
+128, 129, 130, 131, 132, 133, 134, 135, 136) must never be reused.
 
 Before building anything intended for distribution — including a one-off test/RC build — bump
 `versionCode` to the next integer above the value in this table, build, distribute, then update
@@ -114,11 +118,18 @@ Milestones on `plus` that weren't distributed builds, so they have no `versionCo
   - **Evidence scope:** the final grid-title fix was validated on the accepted build. The rest of the on-device evidence comes from the build before it (`a5828114`), which differed only in that fix.
 - **Not tested on a device** (no test content): the EPUB, MOBI, comic and podcast flows; see `docs/future-work.md`. The S26 Ultra was not part of this validation.
 
+**RICE customization (2026-10-12).** Merged from `feature/rice-customization` (final commit `bae478a4`); not a distributed build, so `versionCode` stays 133 and 134 is still unused. Listed under Unreleased in `CHANGELOG.md`; details in `docs/rice-customization.md`.
+
+- **Automated results:** JS 364/364, Kotlin 283/283 (WidgetContainment 8/8), `lintDebug` 0 errors / 108 warnings (the baseline register), `lintRelease` 0 / 103, web build, Capacitor sync, debug and release builds, translation order; GitHub Build APK and translation checks passed.
+- **Physical validation:** Samsung Galaxy S22 Ultra (Android 16, One UI 8): the system palette through public APIs matched the rendered colors in light and dark, live system light/dark switching, background/foreground, WebView reload, return to the built-in themes, widget colors, text and Play/Pause. Two light-appearance defects found there were fixed and rechecked (mini-player play glyph, widget button faces). Emulator (Android 15) covered starters, the editor, playback continuity, recovery and a live GitHub import. The S26 Ultra was not part of this validation.
+
 ## Announcements
 
 **Deferred for v0.17.0:** v0.17.0 introduced the in-app updater and was published without an Announcement. The updater
 announcement waits until a later release has updated an existing production-signed installation through Settings →
-Updates on a test phone. Post it with that release, describing the verified result.
+Updates on a test phone. Post it with that release, describing the verified result. **Done:** the S22's production
+v0.17.0 updated itself to v0.18.1 on 2026-10-12, and [Discussion #26](https://github.com/ADD-OCD/audiobookshelfplus-app/discussions/26)
+announced the updater together with v0.18.0 and v0.18.1.
 
 Audiobookshelf+ has no in-app "what's new"/announcements screen (checked during the v0.14.0
 release — there isn't one to reuse). The [GitHub Discussions "Announcements" category](https://github.com/ADD-OCD/audiobookshelfplus-app/discussions/categories/announcements)
@@ -156,7 +167,9 @@ finalize docs), not before.
 
 1. Check the `versionCode` table above; use `last + 1`. Set `PLUS_VERSION` in `android/app/build.gradle` to the
    release's public version (`X.Y.Z`, the tag's `-plus-vX.Y.Z`) in the same commit (in-app updater, once merged).
-2. Build the **release** variant (`app.absplus.android`), not debug.
+2. Build the **release** variant (`app.absplus.android`), not debug, **from a clean build** (`./gradlew clean` first).
+   Kotlin incremental compilation can keep the previous `PLUS_VERSION` inlined in the updater after the bump (seen while
+   preparing v0.18.0), so also confirm the APK's updater code carries the new version and not the old one.
 3. Confirm it's signed with the fingerprint above (`apksigner verify --verbose --print-certs`).
 4. For a normal release (not a test/RC build): write/post the Announcements entry for it first,
    and make sure every completed feature/fix it includes is documented in the README.

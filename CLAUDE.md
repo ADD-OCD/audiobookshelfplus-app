@@ -32,6 +32,33 @@ cd android && ./gradlew testDebugUnitTest   # Kotlin JVM + Robolectric unit test
 
 Use the glob form for the JS suite: `node --test tests/` fails on Node 22+.
 
+## Test devices
+
+Use the first level that is sufficient:
+
+1. **No device:** JS tests, Kotlin/Robolectric unit tests, lint, static checks and Android builds. None of them needs, or may start, an emulator.
+2. **Samsung Galaxy S22 Ultra test bench** (`R5CT60CSGEF`, SM-S908U1, Android 16 / One UI 8): all runtime testing (UI, screenshots, widgets, playback/MediaSession, notifications and lock screen, downloads/offline, lifecycle/background, device regressions).
+   - Choose it with `dev-tools/android-test/target-device.sh`, which checks the serial, authorization and model. Then always use `adb -s <serial>`, and never send commands to an unidentified device.
+   - Wrap scripted sessions in `with-s22-session.sh` (it runs `test-session.sh start`/`end`, with `end` guaranteed).
+   - If the S22 is unavailable, report it. Don't substitute an emulator.
+3. **Emulator** (`absplus_test`, Android 15), only for:
+
+   - another Android version or screen configuration;
+   - a clean isolated environment;
+   - an emulator-specific problem;
+   - an explicit user request.
+
+   Start it only with `~/.android/emu-tools/start-emulator.sh`:
+
+   - headless by default; `--window` for visual work, minimized without taking focus as soon as it appears;
+   - Below Normal priority for its own processes only;
+   - one instance only, and not during busy builds;
+   - it never changes the home screen, apps or data. Home-screen cleanup is a separate opt-in command that is disabled until validated.
+
+   Reuse it across tests rather than restarting it. Stop it with `stop-emulator.sh`, which stops only the emulator this session started and verifies cleanup.
+
+The Galaxy S26 Ultra is the user's final acceptance device: never send ADB commands to it. Machine-specific tooling and its README live outside the repository in `C:\Users\Ben\AI\CLAUDE\dev-tools\android-test\`.
+
 ## Architecture
 
 ### Two-layer structure
@@ -42,7 +69,7 @@ Use the glob form for the JS suite: `node --test tests/` fails on Node 22+.
 
 ### Custom Capacitor Plugins
 
-The bridge between JS and native is six custom Capacitor plugins. Each has a JS counterpart in `plugins/capacitor/` and a Kotlin implementation in `android/.../plugins/`:
+The bridge between JS and native is custom Capacitor plugins. Each has a JS counterpart in `plugins/capacitor/` and a Kotlin implementation in `android/.../plugins/`:
 
 | Plugin | Purpose |
 |---|---|
@@ -52,6 +79,8 @@ The bridge between JS and native is six custom Capacitor plugins. Each has a JS 
 | `AbsFileSystem` | File system access, folder scanning |
 | `AbsLogger` | Native log capture |
 | `AbsUpdater` | Settings → Updates: GitHub release check, verified download, Android installer (`updater/`, docs/in-app-updates.md) |
+| `AbsAppearance` | RICE: device light/dark, Android 12+ system palette, contrast; app-owned background (`appearance/`, docs/rice-customization.md) |
+| `AbsThemeImport` | RICE: bounded GitHub palette-file import (`themeimport/`); start/readCandidate/cancel only |
 
 **JS → Native**: Call plugin methods directly, e.g. `AbsAudioPlayer.prepareLibraryItem({...})`.
 **Native → JS**: Use Capacitor's `notifyListeners()` on the native side and `addListener()` on the JS side.

@@ -33,6 +33,14 @@
         <ui-text-input :value="themeOption" readonly append-icon="expand_more" style="max-width: 200px" />
       </div>
     </div>
+    <nuxt-link to="/appearance" class="py-3 flex items-center">
+      <span class="material-symbols text-xl w-10 text-center" aria-hidden="true">palette</span>
+      <span class="pl-4 flex-grow">
+        <span class="block">{{ $strings.LabelRiceAppearanceSettings }}</span>
+        <span class="block text-sm text-fg-muted">{{ $strings.MessageRiceAppearanceSubtitle }}</span>
+      </span>
+      <span class="material-symbols text-xl text-fg-muted" aria-hidden="true">chevron_right</span>
+    </nuxt-link>
 
     <!-- Playback settings -->
     <p class="uppercase text-xs font-semibold text-fg-muted mb-2 mt-10">{{ $strings.HeaderPlaybackSettings }}</p>
@@ -497,6 +505,9 @@ export default {
       return this.languageOptionItems.find((i) => i.value === this.settings.languageCode)?.text || ''
     },
     themeOption() {
+      // A RICE appearance (Settings → Appearance) is named, not shown as its built-in base
+      const rice = this.$theme.rice && this.$theme.rice.state
+      if (rice && rice.kind !== 'builtin') return rice.label || this.$strings.LabelThemeCustom
       return this.themeOptionItems.find((i) => i.value === this.theme)?.text || ''
     },
     sleepTimerLengthOption() {

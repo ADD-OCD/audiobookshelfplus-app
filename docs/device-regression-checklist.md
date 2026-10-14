@@ -69,6 +69,10 @@ Items marked **emulator-covered** already pass on an AOSP API 35 emulator (see t
 
 1. Switch to Korean, Arabic, Hebrew and Slovak. Screens stay readable, and fork-only strings fall back to English. Arabic and Hebrew are not mirrored right-to-left, which is expected for now.
 2. Font size at 200%: Settings → Diagnostics and the login screen stay usable. The login screen also works with the keyboard open.
+3. RICE (Settings → Appearance, `docs/rice-customization.md`), on a Samsung phone:
+   - **Follow device:** with "Device colors and light/dark" selected, change the One UI Color palette and switch dark mode. The app follows after returning to it, and a placed widget follows at its next update.
+   - **Starter and custom presets:** a starter and a custom preset color the widget (Android 12+), the status/navigation bar areas and the app.
+   - **Back to built-ins:** choosing a built-in or turning RICE off restores the exact built-in look everywhere.
 
 ## Emulator baseline (for comparison)
 

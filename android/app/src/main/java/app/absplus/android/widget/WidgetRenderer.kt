@@ -105,16 +105,16 @@ object WidgetRenderer {
     val key = artworkUri(context, state.session).toString()
     val bitmap = if (key == artworkKey) artworkBitmap else null
     val actions = Actions.create(context)
-    val theme = WidgetTheme.current(context)
+    val look = WidgetTheme.look(context)
     val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
     val full = fullPlan(context, appWidgetId, options)
     val views =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         // Android 12+: the launcher picks the layout for the current size, including while resizing
-        RemoteViews(WidgetSize.RESPONSIVE_IDEAL_SIZES.associate { (idealSize, size) -> idealSize to build(context, size, theme, state, bitmap, actions, full) })
+        RemoteViews(WidgetSize.RESPONSIVE_IDEAL_SIZES.associate { (idealSize, size) -> idealSize to build(context, size, look, state, bitmap, actions, full) })
       } else {
         // API 24-30: pick the layout from the size the launcher reported (redrawn on onAppWidgetOptionsChanged)
-        build(context, sizeFromOptions(context, options), theme, state, bitmap, actions, full)
+        build(context, sizeFromOptions(context, options), look, state, bitmap, actions, full)
       }
     appWidgetManager.updateAppWidget(appWidgetId, views)
     if (bitmap == null && key != failedArtworkKey) loadArtwork(context, key)
@@ -174,8 +174,8 @@ object WidgetRenderer {
         }
     }
 
-  private fun build(context: Context, size: WidgetSize, theme: WidgetTheme, state: State, bitmap: Bitmap?, actions: Actions, full: FullArtwork.Plan?): RemoteViews {
-    val views = RemoteViews(context.packageName, layoutFor(size, theme, full?.presentation ?: FullArtwork.Presentation.NORMAL))
+  private fun build(context: Context, size: WidgetSize, look: WidgetLook, state: State, bitmap: Bitmap?, actions: Actions, full: FullArtwork.Plan?): RemoteViews {
+    val views = RemoteViews(context.packageName, layoutFor(size, look.theme, full?.presentation ?: FullArtwork.Presentation.NORMAL))
     views.setOnClickPendingIntent(R.id.widgetPlayPauseButton, actions.playPause)
     views.setOnClickPendingIntent(R.id.widgetFastForwardButton, actions.fastForward)
     views.setOnClickPendingIntent(R.id.widgetRewindButton, actions.rewind)
@@ -208,6 +208,7 @@ object WidgetRenderer {
         views.setTextViewText(R.id.widgetRemainingText, snapshot.remaining)
       }
     }
+    WidgetPaint.apply(views, size, look)
     return views
   }
 
