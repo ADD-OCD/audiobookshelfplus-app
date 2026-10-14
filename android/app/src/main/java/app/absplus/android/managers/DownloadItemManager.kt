@@ -136,6 +136,10 @@ class DownloadItemManager(
     notifyQueueChanged()
   }
 
+  /** The queued item with this id. Under the queue's lock: download threads add and remove items concurrently. */
+  @Synchronized
+  fun findDownloadItem(downloadItemId: String): DownloadItem? = downloadItemQueue.find { it.id == downloadItemId }
+
   /** Names of device folders the item can't write to any more (see [DownloadControls.foldersWithoutAccess]). */
   @Synchronized
   fun foldersWithoutAccess(downloadItemId: String): List<String> {
