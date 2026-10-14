@@ -11,6 +11,13 @@ Merged into `plus`, not yet in a published release.
   Latest (clock), Library (stacked books) and Add (plus). Library no longer uses the microphone and Add no longer
   uses the broadcast symbol. Tabs keep equal widths, the labels name each destination for screen readers, and the
   layout adapts to portrait, landscape and larger text. Audiobook libraries are unchanged.
+- **Large podcast download queues** (contributed by Stanislav Markin, PR #25): a queued episode no longer stores a
+  full copy of its podcast, so queueing many episodes of a podcast with long show notes uses far less memory and
+  storage. In testing with 100 queued episodes, the app stayed around 55 MB of memory where it previously ran out of
+  memory at about 54. Queues saved by older versions are converted on the next start, and queued downloads continue
+  after a restart.
+- **Download reliability:** fixed a crash when the download list subscribed while downloads were starting or finishing,
+  and made Retry and new download requests safe while other downloads change the queue.
 
 ## v0.18.2 — LLAMA landscape cover frame fix
 
