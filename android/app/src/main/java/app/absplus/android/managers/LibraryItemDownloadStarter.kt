@@ -28,9 +28,8 @@ object LibraryItemDownloadStarter {
       callback("Invalid library item not a podcast")
       return
     }
-    // Keep new episodes in the podcast's existing folder: a second local item there would hide them in the UI
-    val existingFolder = DeviceManager.dbManager.getLocalLibraryItemByLId(libraryItem.id)?.folderId?.let { DeviceManager.dbManager.getLocalFolder(it) }
-    val localFolder = existingFolder ?: getOrCreateLocalFolder("internal-podcast", "podcast")
+    // Auto download uses internal app storage only (AutoDownloadManager skips podcasts kept in a device folder)
+    val localFolder = getOrCreateLocalFolder("internal-podcast", "podcast")
     if (localFolder == null) {
       callback("Local Folder Not Found")
       return
@@ -144,6 +143,14 @@ object LibraryItemDownloadStarter {
 
       val audioTrack = episode?.audioTrack
       val audioFileIno = episode?.audioFile?.ino
+      // Incomplete metadata would name the destination after the item folder itself (empty filename) or request
+      // file "null"; refuse before anything is queued or written
+      val episodeFilename = getFilenameFromRelPath(audioTrack?.relPath ?: "")
+      if (episode == null || audioTrack == null || audioFileIno.isNullOrBlank() || episodeFilename.isBlank() ||
+              episodeFilename == "." || episodeFilename == "..") {
+        callback("Episode has no downloadable audio file")
+        return
+      }
       val fileSize = audioTrack?.metadata?.size ?: 0
 
       AbsLogger.info(tag, "Queueing podcast episode download")

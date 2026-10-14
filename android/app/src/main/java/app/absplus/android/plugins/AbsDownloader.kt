@@ -156,6 +156,16 @@ class AbsDownloader : Plugin() {
     }
     var localFolderId = call.data.getString("localFolderId", "").toString()
     AbsLogger.info(tag, "Requested download for item $libraryItemId${if (episodeId.isEmpty()) "" else " / episode $episodeId"}")
+    // A request from the user makes the episode the user's own, also when auto download already queued or started
+    // it: automatic retention never removes it and the auto download network rules no longer hold it back
+    val activeServerId = DeviceManager.serverConnectionConfig?.id
+    if (episodeId.isNotEmpty() && !activeServerId.isNullOrBlank()) {
+      try {
+        AutoDownloadStore.claimManual(activeServerId, libraryItemId, episodeId)
+      } catch (e: Exception) {
+        AbsLogger.error(tag, "Could not record the manual download of $episodeId (${e.javaClass.simpleName}: ${e.message})")
+      }
+    }
 
     val downloadId = if (episodeId.isEmpty()) libraryItemId else "$libraryItemId-$episodeId"
     DownloadServiceHost.retryExisting(mainActivity, downloadId) { result ->
