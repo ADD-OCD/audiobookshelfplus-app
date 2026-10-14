@@ -14,7 +14,8 @@ export const state = () => ({
     collapseBookSeries: false,
     podcastEpisodesOrderBy: 'publishedAt',
     podcastEpisodesOrderDesc: null,
-    podcastEpisodesFilterBy: 'incomplete'
+    podcastEpisodesFilterBy: 'incomplete',
+    podcastEpisodesOrderOverrides: {}
   }
 })
 
