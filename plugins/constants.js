@@ -35,13 +35,22 @@ const PlayerState = {
   ENDED: 3
 }
 
+const PodcastEpisodeSortItems = [
+  { value: 'publishedAt', labelKey: 'LabelPubDate' },
+  { value: 'title', labelKey: 'LabelTitle' },
+  { value: 'season', labelKey: 'LabelSeason' },
+  { value: 'episode', labelKey: 'LabelEpisode' },
+  { value: 'audioFile.metadata.filename', labelKey: 'LabelFilename' }
+]
+
 const Constants = {
   DownloadStatus,
   SyncStatus,
   CoverDestination,
   BookCoverAspectRatio,
   PlayMethod,
-  PlayerState
+  PlayerState,
+  PodcastEpisodeSortItems
 }
 
 export {

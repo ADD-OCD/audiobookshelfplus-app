@@ -8,11 +8,19 @@
               <span class="font-normal ml-3 block truncate text-lg">{{ item.text }}</span>
             </div>
             <span v-if="item.value === selected" class="text-yellow-300 absolute inset-y-0 right-0 flex items-center pr-4">
-              <span class="material-symbols text-3xl">{{ descending ? 'south' : 'north' }}</span>
+              <span class="material-symbols text-3xl">{{ descending === null ? 'swap_vert' : descending ? 'south' : 'north' }}</span>
             </span>
           </li>
         </template>
       </ul>
+      <div v-if="showReset || allowAuto" class="border-t border-fg/20">
+        <div v-if="allowAuto" class="py-4 px-3">
+          <ui-checkbox :value="descending === null" :label="$strings.LabelSortDirectionAuto" checkbox-bg="primary" border-color="gray-600" label-class="pl-2 text-lg" @input="toggleAuto" />
+        </div>
+        <div v-if="showReset" class="py-4 px-3">
+          <ui-btn class="text-lg h-10" :padding-y="0" @click="resetClicked">{{ $strings.ButtonResetToGlobalSort }}</ui-btn>
+        </div>
+      </div>
     </div>
   </modals-modal>
 </template>
@@ -23,7 +31,9 @@ export default {
     value: Boolean,
     orderBy: String,
     descending: Boolean,
-    episodes: Boolean
+    episodes: Boolean,
+    showReset: Boolean,
+    allowAuto: Boolean
   },
   data() {
     return {
@@ -115,28 +125,7 @@ export default {
           value: 'random'
         }
       ],
-      episodeItems: [
-        {
-          text: this.$strings.LabelPubDate,
-          value: 'publishedAt'
-        },
-        {
-          text: this.$strings.LabelTitle,
-          value: 'title'
-        },
-        {
-          text: this.$strings.LabelSeason,
-          value: 'season'
-        },
-        {
-          text: this.$strings.LabelEpisode,
-          value: 'episode'
-        },
-        {
-          text: this.$strings.LabelFilename,
-          value: 'audioFile.metadata.filename'
-        }
-      ]
+      episodeItems: this.$constants.PodcastEpisodeSortItems.map((i) => ({ text: this.$strings[i.labelKey], value: i.value }))
     }
   },
   computed: {
@@ -174,6 +163,13 @@ export default {
     }
   },
   methods: {
+    toggleAuto(val) {
+      this.$emit('update:descending', val ? null : true)
+    },
+    resetClicked() {
+      this.$emit('reset')
+      this.show = false
+    },
     async clickedOption(val) {
       await this.$hapticsImpact()
       if (this.selected === val) {
