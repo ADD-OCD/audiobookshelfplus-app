@@ -34,7 +34,8 @@ Every push to `plus` in this repository also publishes its debug APK from the **
 | Retention | 14 days                                                                                                                                            |
 
 - The APK is signed and uploaded only after every gate in that run passed (JS tests, web build, debug build, Kotlin tests). A failed run uploads nothing, and the file always comes from that run's own build.
-- Pull requests (including forks), other branches and forks' own pushes never sign or upload: the steps check `push`, `refs/heads/plus` and this repository. Pull requests from forks never receive repository secrets anyway.
+- Pull requests (including forks), other branches and forks' own pushes never sign or upload: the hand-over step and the signing job both check `push`, `refs/heads/plus` and this repository. Pull requests from forks never receive repository secrets anyway.
+- Signing runs in a separate job (`debug-apk`) that receives only the built APK. The signing secrets never share a runner with npm or Gradle code, which runs in the validation job. The hand-over artifact `ci-intermediate-not-for-install-run<id>` (CI's throwaway debug key, 1 day) is not for installing.
 - The run fails instead of uploading if the signer is not exactly the pinned test certificate, the package is not `app.absplus.android.debug`, or the APK's versionCode differs from `android/app/build.gradle`.
 
 To download it: **Actions** → **Build APK** → the newest successful run on `plus` → **Artifacts** → `AudiobookshelfPlus-debug-…`, then follow "On the phone" below.
