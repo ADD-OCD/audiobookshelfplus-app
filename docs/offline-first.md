@@ -14,7 +14,7 @@ The chosen approach is a local replica in SQLite (Room) with a sync engine in th
 
 **Phase 1 (this document).** The server is still needed to sign in and to download; everything else works without it.
 
-- **One active server.** The replica, progress and outbox are tagged with the active connection's `serverConnectionConfigId`. Switching servers switches the active replica; the previous one is kept, never merged. An action on a downloaded copy is recorded for the server that copy came from (the active one by default); outbox rows of an inactive server wait until it is active again.
+- **One active server.** The replica, progress and outbox are tagged with the active connection's `serverConnectionConfigId`. Switching servers switches the active replica; the previous one is kept, never merged. An action on a downloaded copy is recorded for the server that copy came from (the active one by default); outbox rows of an inactive server wait until it is active again. Removing a server connection keeps its rows and outbox; they are sent if that server becomes active again.
 - **Target size:** 10,000 library items. Larger libraries work, without speed guarantees.
 - **Written offline:** progress and "finished" for any book, including streamed books with no local copy; bookmarks (create, rename, delete).
 - **Not written offline:** playlists and collections are read-only offline. Settings and Up Next stay local to the device, as today: they work offline and are not synced between devices.
@@ -104,14 +104,14 @@ Listening sessions stay in Paper (`playbackSession`) and are sent through `local
 
 - **Explicit actions** ("finished", reset, e-book progress, bookmarks) set `pending` and add an outbox row.
 - **Playback ticks** write `media_progress` without an outbox row and without setting `pending`: listening progress reaches the server through sessions (`/sync` and `local-all`). A tick never clears a `pending` that is already set.
-- **Unsent listening sessions count as pending.** While an item has listening sessions in Paper waiting for `local-all`, its row is treated as `pending` for merging, so offline listening to a downloaded book is not rolled back by the server (see [Open questions](#open-questions)).
+- **Unsent listening sessions count as pending.** While an item has listening sessions in Paper waiting for `local-all`, its row is treated as `pending` for merging, so offline listening to a downloaded book is not rolled back by the server.
 
 **Pull (`reconcile`):** per server, single-flight, interruptible, recorded per library in `sync_state`.
 
 1. `GET /api/libraries` → upsert; libraries no longer on the server are deleted.
 2. Per library, page through `items?limit=500&sort=addedAt`: compare `updatedAt`, upsert changed items, delete items the server no longer has. Downloaded copies in Paper are never touched by these deletes.
 3. Series and authors page by page; collections and playlists whole.
-4. Progress and bookmarks: `/api/me/progress` and `/api/me/bookmarks` on servers ≥ 2.36.0, otherwise `/api/me`. Progress merges by the rule above; bookmarks merge as a set keyed by item + time, and tombstones hide deleted ones until the delete is sent.
+4. Progress and bookmarks: `/api/me/progress` and `/api/me/bookmarks` on servers ≥ 2.36.0, otherwise `/api/me`. Progress merges by the rule above; a local row with no server record (progress deleted by another client) is deleted unless it is `pending`. Bookmarks merge as a set keyed by item + time, and tombstones hide deleted ones until the delete is sent.
 5. Book expanded copies are not part of reconcile; podcast expanded copies (episodes) are fetched for podcasts whose `updatedAt` changed, one request per podcast.
 
 **Reconcile is the safety net, not the main channel:** while the socket is connected, changes arrive as events. Reconcile runs on app start, on the socket's `init` after every (re)connect (including going `online`), and on a manual "Sync now". There is no periodic timer. **Reconcile runs only while the app is in the foreground;** in the background (Android Auto, the player service) going `online` only pushes the outbox, and the skipped reconcile is marked as deferred. Returning to the foreground runs a reconcile if one was deferred, or if the socket dropped while in the background and the last successful reconcile is older than 15 minutes; otherwise it only pushes the outbox.
@@ -127,13 +127,14 @@ Listening sessions stay in Paper (`playbackSession`) and are sent through `local
 - **404 and other 4xx:** the row is dropped and logged to diagnostics so it can't block the queue, and the related `pending` is cleared (a pending bookmark row is removed).
 - **Rows of an inactive server** stay queued until that server is active again.
 - **`progress_patch`** stores which fields the action changed. When sent, the body is those fields read from the current `media_progress` row, plus `lastUpdate`, to `PATCH /api/me/progress/:libraryItemId` (or `/:libraryItemId/:episodeId`). So "finished" or e-book progress never overwrites an audio position set elsewhere. If the row changes while the `PATCH` is in flight, another `PATCH` is queued after the 2xx; `pending` is cleared only once the latest value has been sent.
-- **`progress_delete`** (a progress reset, as today) sends `DELETE /api/me/progress/:serverProgressId`; a 404 counts as success (see [Open questions](#open-questions)).
+- **`progress_delete`** (a progress reset, as today) sends `DELETE /api/me/progress/:serverProgressId`; a 404 counts as success. If the item was played locally after the reset was queued (the row is newer than the outbox row), the `progress_delete` is cancelled and a `progress_patch` with the row's current fields is queued instead.
 - **Coalescing:** `progress_patch` rows of one item (server, item, episode) merge into one with the union of changed fields. `bookmark_add` and `bookmark_remove` of the same bookmark cancel out only if the add was never attempted; otherwise the remove is queued after it. A row already in flight is never coalesced; a new action is queued after it.
 
 **Listening sessions**, two fixes to the existing path:
 
 - An offline segment of a streamed item gets its own uuid instead of the server session's id, so `local-all` can't overwrite the server session, and the same listening time is not sent through both `/sync` and `local-all`.
 - The `local-all` response is handled per session: successful sessions are removed, failed ones stay queued for next time, except sessions the server rejected because the item or library no longer exists — those are dropped and logged, like a 404 in the outbox, or the queue would never empty. Only the snapshot that was sent is removed: a session updated by a tick while `local-all` was in flight stays and goes next time.
+- A session the server accepts without taking its position (`success` with `progressSynced: false`, because the server's `lastUpdate` is newer) doesn't silently lift the unsent-session protection: a `progress_patch` with the row's position, progress and `lastUpdate` is queued, and `pending` is cleared after its 2xx.
 
 **Paper mirror and import.** `MediaProgressSyncer` writes `media_progress` after every tick. Every accepted progress change of a downloaded copy — a tick, a user action or a server value — is also mirrored to Paper `LocalMediaProgress` from one place during phase 1. In the other direction, on every start Paper progress newer than the Room row is imported into Room (this covers time spent on a rolled-back version); each server seen in the import is remembered until its first successful user reconcile; on that reconcile every imported row of that server whose `lastUpdate` is newer than the server's, or that has no server record at all, gets `pending` and a `progress_patch` with its audio and e-book fields, and only then is that server forgotten (other servers wait for their own connection). The old local-progress sync is removed in release 2b only together with this replacement.
 
@@ -165,7 +166,7 @@ Listening sessions stay in Paper (`playbackSession`) and are sent through `local
 
 **JS:** the store gets `serverState` for every data decision; `networkConnected` stays only for downloads. The reconnect logic in `layouts/default.vue` moves from the network watcher to `serverState`: going `online` retries authorization when there is no user and syncs listening sessions when there is, and the home shelves are reloaded. The "no signed-in user means no data" branches go away as pages move to `$absData`.
 
-**Sign-out behaviour.** In release 1, `unauthorized` still signs out and opens `/connect` as today. From release 2b, when data no longer depends on a signed-in `user`, a refused refresh only revokes the live session: the selected library, bookmarks, progress and outbox stay, the indicator asks to sign in again, and sending resumes after sign-in. An explicit logout is unchanged.
+**Sign-out behaviour.** In release 1, `unauthorized` still signs out and opens `/connect` as today. From release 2b, when data no longer depends on a signed-in `user`, a refused refresh only revokes the live session: the selected library, bookmarks, progress and outbox stay, the indicator asks to sign in again, and sending resumes after sign-in. Until release 4 the catalogue tabs are empty without a `user` (as offline today) while downloaded items play and the indicator asks to sign in; this is an accepted intermediate state. An explicit logout is unchanged.
 
 **Startup:** home and tabs open at once from the replica; authorization runs in the background; progress and bookmarks come from `userdata.db`. Offline, the user's permissions and settings come from `sync_state.userJson` as a separate cached copy in the store. It doesn't stand in for the live `user`, so when the server appears, authorization, the socket and token renewal start as usual.
 
@@ -219,13 +220,6 @@ Each release is its own PR (release 2 is three, release 4 five): useful on its o
 - **Device clocks:** the `lastUpdate` rule inherits the server's clock-skew problem. Accepted on purpose.
 - **Bridge performance on lists:** at most 100 items per call; `LazyBookshelf` already loads page by page.
 - **Paper and Room in parallel until phase 2:** progress of downloaded items is written twice. Mitigation: every accepted change is mirrored to Paper from one place, newer Paper values are imported back on every start, and a test checks that the two don't diverge.
-
-## Open questions
-
-Both must be decided before release 2b.
-
-- **Offline reset, then listening before it is sent.** A delayed `progress_delete` is unconditional, so it deletes the server record even after a `local-all` session has updated it since the reset. The `DELETE` needs to be tied to the version of the reset, and the current row sent after it.
-- **`local-all` accepts a session but not its position.** When the server's `lastUpdate` is newer, it answers `success` with `progressSynced: false`. The session is removed, the unsent-session `pending` protection is lifted, and the next reconcile can overwrite the offline position. "Session saved" and "position accepted" need to be told apart.
 
 ## Alternatives considered
 
