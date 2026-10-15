@@ -115,10 +115,9 @@ object AutoDownloadManager {
     }
   }
 
-  private fun isDownloadedLocally(serverConfigId: String, libraryItemId: String, episodeId: String): Boolean {
+  private fun isDownloadedLocally(libraryItemId: String, episodeId: String): Boolean {
     return DeviceManager.dbManager.getLocalLibraryItems().any { local ->
-      local.libraryItemId == libraryItemId && local.serverConnectionConfigId == serverConfigId &&
-              (local.media as? Podcast)?.episodes?.any { it.serverEpisodeId == episodeId } == true
+      local.libraryItemId == libraryItemId && (local.media as? Podcast)?.episodes?.any { it.serverEpisodeId == episodeId } == true
     }
   }
 
@@ -215,8 +214,9 @@ object AutoDownloadManager {
         it.audioFile != null && "$id/${it.id}" !in finished
       }
 
-      // Only this server's copies count; another server's local item never satisfies or blocks this one
-      val podcastLocals = localItems.filter { it.libraryItemId == id && it.serverConnectionConfigId == serverConfigId }
+      // Local copies are stored per library item (one folder, one local item), whichever saved server downloaded
+      // them, so any copy counts as on the device; retention, by contrast, only ever touches this server's own copy
+      val podcastLocals = localItems.filter { it.libraryItemId == id }
       // Auto download writes to internal app storage only; a podcast kept in a device folder is left to the user
       if (podcastLocals.any { !it.folderId.startsWith("internal-") }) {
         AbsLogger.info(TAG, "Podcast $id is downloaded to a device folder; auto download skips it")
@@ -244,7 +244,7 @@ object AutoDownloadManager {
           Recheck.OK -> Unit
         }
         // The local snapshot is taken before network calls; a manual download may have finished since
-        val onDevice = episode.id in downloadedEpisodeIds || isDownloadedLocally(serverConfigId, id, episode.id)
+        val onDevice = episode.id in downloadedEpisodeIds || isDownloadedLocally(id, episode.id)
         // Fresh entry: a manual request may have claimed the episode while this check was waiting
         when (AutoDownloadPolicy.windowAction(AutoDownloadStore.get(serverConfigId, id), episode.id, state, onDevice)) {
           AutoDownloadPolicy.WindowAction.SKIP -> Unit
