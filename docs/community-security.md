@@ -1,6 +1,7 @@
 # Repository contribution and security administration
 
-This records the 2026-10-13 setup and the remaining rollout work. Repository settings
+This records the 2026-10-13 setup and the remaining rollout work (PR and branch
+numbers below are that day's snapshot). Repository settings
 are live independently of the files on the configuration branch. Forms and community
 documents become the defaults only after a reviewed merge into `plus`.
 
@@ -97,8 +98,12 @@ separate reviewed change:
 
 Production signing is local according to `release-process.md`; this setup does not
 read, move, rotate, or change signing credentials. Existing automatic PR workflows
-use `pull_request` with read-only permissions and no signing-secret references.
-There is no new privileged `pull_request_target` or `workflow_run` execution path.
+use `pull_request` with read-only permissions. Since 2026-10-14 `Build APK` also has a
+separate `debug-apk` job that reads the debug/test signing secrets; it runs only for
+pushes to `plus` in this repository (never pull requests or forks), after `main`
+passed, and executes no repository code (docs/debug-test-builds.md). Production
+signing secrets are not referenced by any workflow. There is no privileged
+`pull_request_target` or `workflow_run` execution path.
 
 The existing manually dispatched debug APK workflow uses separate test-signing
 secrets, allows repository branches, and has no environment approval gate. A branch
