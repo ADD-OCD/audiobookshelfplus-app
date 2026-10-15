@@ -209,9 +209,20 @@ object AutoDownloadManager {
       val keepCount = AutoDownloadPolicy.keepCountFor(entry, current)
       if (keepCount <= 0) continue
 
+      // Stored and listed ids reach URLs, queue lookups and folder paths below
+      if (!DownloadIdentifiers.isSafe(id)) {
+        AbsLogger.error(TAG, "Invalid podcast id, skipping")
+        failedPodcasts++
+        continue
+      }
       val item = await<app.absplus.android.data.LibraryItem?> { api.getLibraryItemWithProgress(id, null, it) }
       if (item == null) {
         AbsLogger.error(TAG, "Could not load podcast $id, skipping")
+        failedPodcasts++
+        continue
+      }
+      if (!DownloadIdentifiers.matchesRequest(id, item.id)) {
+        AbsLogger.error(TAG, "Server returned an invalid id for podcast $id, skipping")
         failedPodcasts++
         continue
       }
@@ -232,6 +243,11 @@ object AutoDownloadManager {
       var podcastFailed = false
 
       for (episode in window) {
+        if (!DownloadIdentifiers.isSafe(episode.id)) {
+          AbsLogger.error(TAG, "Invalid episode id in podcast $id, skipping")
+          podcastFailed = true
+          continue
+        }
         val downloadId = "$id-${episode.id}"
         val state = await<DownloadItemManager.QueuedState> { DownloadServiceHost.queuedState(appContext, downloadId, it) }
         if (state == null) {

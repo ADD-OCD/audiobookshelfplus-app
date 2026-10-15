@@ -4,16 +4,15 @@ Items noted for later investigation. Nothing here is implemented or scheduled. E
 
 ## "Follow Device" theming
 
-**Not implemented.** Investigate a theme option that follows the device's appearance. It would be a token provider in the semantic theme architecture added in Phase 1 (`docs/theme-architecture.md`). It plugs into the `$theme` service, not into components, and its output passes the same validation as any theme data.
+**Done as part of RICE** (merged into `plus`, not yet released): "Follow device" uses the Android 12+ system palette, which Samsung One UI's Color palette also sets, plus system light/dark and contrast. Verified on a Galaxy S22 Ultra. Samsung Galaxy Themes data is not exposed to apps through public APIs and is not used. See `docs/rice-customization.md`.
 
-Scope of the investigation:
+## RICE follow-ups
 
-- Android system light/dark appearance.
-- Material You and Android dynamic colors.
-- Samsung One UI integration, including what Samsung Galaxy Themes actually exposes to third-party apps.
-- Mapping the supported system appearance values onto Audiobookshelf+ theme tokens.
-- It stays presentation-only: no changes to layout, controls or behavior.
-- Behavior must be verified on Samsung hardware.
+- Image-based palettes (the preset schema reserves `source.kind = 'image'`).
+- More import formats (GTK, Rofi, Polybar and other config files) and hosts other than GitHub.
+- Right-to-left and Chinese/Japanese/Korean text with the RICE type options on a device.
+- Colors that predate the token system and stay fixed in every appearance (for example the yellow in-progress bar on book cards).
+- With three-button navigation, One UI draws its own dark scrim over the navigation bar (built-in Light shows it too).
 
 ## Runtime system-bar colors
 
@@ -171,7 +170,7 @@ See `docs/downloads.md`. Retained: a user Retry and an app restart start unfinis
 
 It measures its viewport from `#bookshelf-wrapper`, the element that scrolls. It used to measure `#bookshelf`, which is `h-full`, and so is only as tall as its rows when a page wraps it in an unsized element. The series page has wrapped it in a `<div>` since `15ec49ec` (v0.14.0), so there the height was 0 before the first page loaded. Only the one or two rows at the top edge ever got cards, at any scroll position. A bookshelf left while a page was loading no longer mounts cards afterwards. That is what logged `mount entity card invalid shelf 0/1`, and all bookshelves share the `#shelf-N` ids, so it could have reached the next bookshelf's rows. `tests/bookshelfViewport.test.mjs` runs the real component on Vue with a modelled page to cover both.
 
-Still upstream-shaped and left as is: concurrent page fetches after a reset can write a stale response into the new list (a library or filter change while a page is in flight), and `nativeHttp` refreshes an expired token separately for each request that got a 401, so several at once can race on a rotating refresh token.
+Still upstream-shaped and left as is: concurrent page fetches after a reset can write a stale response into the new list (a library or filter change while a page is in flight). The separate token refresh per 401 in `nativeHttp` (several at once raced on a rotating refresh token) is fixed on `plus` (from `fix/auth-refresh-single-flight`), not released yet: one shared renewal per saved server (`docs/authentication.md`).
 
 ## Missing local cover crashes playback
 
@@ -233,19 +232,46 @@ The 2026-10-10 LLAMA finish changed the comic, EPUB and MOBI readers' offsets ab
 
 **Still not tested on a device:** comic CBR files, compressed or KF8/AZW3 MOBI files, and real podcast RSS feeds (feed refresh, remote episode downloads).
 
-## Streamed refocus and recent remote progress
+## Streamed refocus and remote progress
 
-Returning to the app with a paused streamed book keeps the native player's position unless the server's progress is another device's newer update (`utils/livePosition.js` `refocusServerAction`). The server copy counts as newer only when it is more than 10 seconds newer than this session's last update, because this device's own sync is stamped by the server a moment later. A remote update made within 10 seconds of this device's last sync is therefore not applied on refocus.
+Returning to the app with a paused streamed book compares the server's progress with what this phone wrote (`utils/livePosition.js` `refocusServerAction`):
+- **This phone's own write:** the position of its last sync the server acknowledged, a sync sent without an answer yet, or, before any sync, the position the server created the session with. The native side reports these as `serverProgressAck` (`player/ServerProgressAck.kt`, recorded by `MediaProgressSyncer`). The native player's position stands, so a move made while paused is kept and saved by the next sync.
+- **Already handled:** a server state an earlier refocus dealt with (same session, server `lastUpdate` not newer). It is kept in the WebView's storage so it survives a recreated UI.
+- **Anything else is another device's update** and is applied (seek, still paused), however soon after this phone's last save it came. The next sync continues from it.
 
-Nothing applies it later either. Pressing Play does not check the server (that check is commented out upstream in `PlayerListener`), and this device's next sync writes its own position over the remote one: last writer wins.
+No timestamp from this phone is compared with the server's. The earlier 10-second rule (unpublished v0.16.0 candidate) missed remote updates inside that window and let the next sync overwrite them.
 
-The session's last sync time comes from the native playback state's `lastSyncedAt` (`player/SessionSyncTime.kt`). The service's session copy keeps its creation time, and before v0.16.0 that made every own sync older than 10 seconds look like a remote update.
+**Remaining limits:**
+- While an audiobook is playing, refocus does not check the server: progress updates from another device are not applied, and this device's next progress save may overwrite those updates (last writer wins, as upstream: the Play-time server check is commented out in `PlayerListener`). Returning to a paused audiobook applies them, as described above.
+- A remote position within 1 second of this phone's last saved position counts as this phone's own.
+- Downloaded books follow the separate local-progress rules (`checkSyncServerProgressWithLocalProgress`).
 
-**Verified on the S22 (2026-10-11), with a server-side write standing in for another device:**
-- this phone's own sync is kept;
-- a paused native seek is kept;
-- a remote update 12 seconds after the last sync is applied on refocus, and playback stays paused;
-- a remote update 3 seconds after it is not applied, and the next Play and sync replace it.
+**Verified on the S22 (2026-10-11)** with a server-side write standing in for another device, real Home and relaunch refocus, and media-session fast-forward keys for paused moves:
+- the phone's own save is kept, and a paused move is kept and then saved;
+- remote updates 3.1 and 15.1 seconds after the phone's save are applied, and the next save continues from them;
+- a paused move after an applied remote update is kept;
+- on a fresh session before any save, a paused move is kept and a remote update is applied.
+
+## In-app updater: what is not yet proven
+
+The updater (`feature/in-app-github-updater`, docs/in-app-updates.md) was tested on the S22 with a disposable fixture
+package and disposable test keys: real downloads, Android's real package parser and real installer confirmations.
+
+**Not yet exercised:**
+- **The production signing path end to end:** a production-signed APK verified against the pinned
+  `c540046a…b9d4` certificate, then installed over a production-signed app. That happens with the first release that
+  contains the updater, when the next release is installed through it.
+- **The installer completing a self-update:** the app replacing itself and its process restarting.
+- **Instrumentation tests:** the project has no instrumented test setup, so APK parsing and the installer are covered
+  by the device runs, not by `androidTest`.
+
+**Play Protect:** on the S22, Google Play Protect sometimes put an "App scan recommended" dialog in front of Android's
+installer for the unknown fixture package. When it was dismissed, the installer reported a cancel and the verified
+update was kept. "Install without scanning" completed the install. A published Audiobookshelf+ release may see the same
+dialog; nothing in the app can or should bypass it.
+
+**A Google Play build** would need a variant without `REQUEST_INSTALL_PACKAGES` and the updater (see
+docs/in-app-updates.md, "Google Play separation").
 
 ## Widget ANR on display-size changes
 

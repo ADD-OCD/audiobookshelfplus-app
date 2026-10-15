@@ -65,6 +65,11 @@ object LibraryItemDownloadStarter {
           episode: PodcastEpisode?,
           callback: (String?) -> Unit
   ) {
+    if (!DownloadIdentifiers.isSafe(libraryItem.id) ||
+            (episode != null && !DownloadIdentifiers.isSafe(episode.id))) {
+      callback("Invalid download identifier")
+      return
+    }
     val isInternal = localFolder.id.startsWith("internal-")
 
     val finalInternalFolderPath = "${context.filesDir}/downloads/${libraryItem.id}"

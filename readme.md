@@ -16,152 +16,78 @@ original app goes to [advplyr](https://github.com/advplyr) and the Audiobookshel
 This fork exists to carry a small set of additional fixes/features that aren't (yet, or won't
 be) in the official app.
 
+### Latest release
+
+**[Audiobookshelf+ v0.18.2](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/tag/v0.14.2-beta-plus-v0.18.2)** — LLAMA landscape cover frame fix
+([download the APK](https://github.com/ADD-OCD/audiobookshelfplus-app/releases/download/v0.14.2-beta-plus-v0.18.2/audiobookshelf-plus-v0.18.2-release.apk)). [CHANGELOG.md](CHANGELOG.md) lists the changes.
+
+New in v0.18.2:
+- LLAMA full player in landscape: the cover's frame fits the cover, sits on the bottom edge and stays below the top
+  buttons.
+
+New in v0.18.1:
+- Up Next shows your queue again after resuming a book once Android has closed the app (for example after a long
+  break or an update).
+
+New in v0.18.0:
+- Optional RICE customization (Settings → Appearance): ten starter palettes, your own color presets, the phone's
+  system colors (including Samsung One UI), and palette colors from GitHub Linux theme projects.
+- More reliable sign-in renewal, with fewer unexpected sign-outs.
+
+New in v0.17.0:
+- In-app GitHub update checks, verified APK downloads, and Android-confirmed installation (Settings → Updates).
+
+New in v0.16.0 ([announcement](https://github.com/ADD-OCD/audiobookshelfplus-app/discussions/21)):
+- Refreshed LLAMA theme and widgets.
+- Fixed playback position when returning to the app, including progress from another device.
+- Improved headset and Bluetooth playback controls.
+- Fixed bookmark access while offline.
+- Improved layouts with larger text.
+- Fixed crashes caused by damaged downloaded cover images.
+- Prevented sign-in details from appearing in system logs.
+
 ### What's different from official
 
-- **Continuous playback for downloaded series/collections** — automatically advances to the
-  next downloaded book in a series instead of stopping after one.
-- **More reliable background playlist advancement for podcasts** — survives Android Doze mode,
-  keeps CPU/network awake during transitions, correctly forwards playback-ended state to the UI
-  when backgrounded, and pauses properly on Bluetooth disconnect instead of continuing to play
-  through the phone speaker.
-- **Auto-play next episode** when playing through a podcast playlist.
-- **Fixed a bug where downloading a series would silently stall** after the first book
-  (a race condition/permanent lock in the download queue) — inherited for free from an upstream
-  rewrite this fork rebases onto.
-- **Cross-library downloaded-item recognition** — if the same book exists in more than one of
-  your libraries, downloading it once now shows it as downloaded everywhere it appears, instead
-  of only in the library you downloaded it from.
-- **Rescan a local folder** — a "Rescan Folder" action on the local folder detail page picks up
-  books that already exist on disk (from before cross-library recognition existed, from another
-  install, or from the official app's own download folder) and links them back to your library
-  without re-downloading.
-- **Distinct app identity** — installs as "Audiobookshelf+" with its own icon (a bronze plus
-  badge over the official icon), so it's visually distinguishable from the official app and can
-  be installed alongside it.
-- **Fixed downloads silently stalling when a local folder's permission is lost** — instead of
-  retrying forever and re-downloading the whole file from scratch on every app restart, the app
-  now detects a lost/invalid folder permission immediately and shows a clear error telling you to
-  re-select the folder.
-- **Fixed playback progress tracking the wrong book during continuous series playback** — after
-  the queue advanced to the next book, progress kept being recorded against the previous book
-  (wrong position, book never marked finished, series progress not shown); progress now follows
-  whichever book is actually playing.
-- **A visible, reorderable "Up Next" queue** — see what's playing next from the player's menu (or
-  an optional icon in the player itself), reorder or remove upcoming items, and add individual
-  books/episodes or a whole series/playlist/collection to the queue while something is already
-  playing.
-- **Bigger, clearer home screen widget buttons** — rewind/play/fast-forward now have a visible
-  rounded-rectangle outline and a larger tap target, instead of bare icons that were easy to miss.
-- **Fixed series progress not reflecting locally downloaded books** — the series shelf card only
-  checked server-synced progress, so a downloaded book's real progress (before it synced to the
-  server, or if it never needed to) could show as barely started even though it was finished;
-  it now checks local device progress too.
-- **Podcasts now auto-advance from the podcast page's Play button** — it already found the next
-  unfinished episode, but never queued anything after it, so playback stopped after one episode.
-  Now queues and continues through the remaining unfinished episodes, same as playlists already did.
-- **Fixed offline listening progress getting silently wiped on reconnect** — the server/local
-  progress sync only compared timestamps, so a newer server timestamp would overwrite local
-  progress even when the server's actual position was behind (e.g. after a long offline listening
-  session). A newer server timestamp is now only trusted when its progress is actually caught up;
-  otherwise local's progress is pushed to the server instead of being overwritten.
-- **Continuous series/collection playback now streams past gaps in your downloads** instead of
-  silently skipping undownloaded books — local is still always preferred when present.
-- **Optional prompt when playing an incomplete series/collection/playlist** — off by default; when
-  enabled (Settings), tapping Play on something that isn't fully downloaded offers a choice
-  between playing now (streaming the gaps) or downloading the missing pieces while playback starts
-  immediately. Downloads are triggered in the order they'll actually be needed.
-- **Fixed the "Download Series" button downloading in arbitrary order** — it now downloads in
-  series sequence, same order continuous playback already uses.
-- **Fixed a playlist item restarting from 0:00 despite showing prior progress** — a downloaded
-  book with progress recorded only on the server (e.g. listened to elsewhere before downloading)
-  now resumes from that progress when played from a playlist, instead of silently ignoring it
-  because only local progress was checked.
-- **Fixed the "Ask before streaming incomplete series/collections/playlists" setting not staying
-  enabled** — the native device-settings model was missing this field, so it was silently dropped
-  every time settings saved and the toggle immediately reverted to off.
-- **Stability pass**: fixed a batch of playback/download edge cases found during a full audit of
-  existing features. Playlist and podcast auto-advance now correctly resume/play the intended
-  item; a book downloaded via one library now shows as downloaded everywhere it appears, even
-  during continuous series/collection/playlist playback (not just on the bookshelf badge);
-  Collection playback no longer treats a partially-downloaded book as complete; the Up Next queue
-  now shows a proper title and cover for items that are streaming rather than downloaded; a rare
-  situation that could stop all playback until the app was restarted is fixed; failed downloads
-  (e.g. a lost folder permission) now show an error instead of failing silently; and Rescan Folder
-  now checks your whole library instead of only the first 100 books.
-- **Keyboard-friendly connection and login screens** — when the Android on-screen keyboard opens,
-  the Server Address and Login screens now adapt: the fields and Submit buttons stay reachable,
-  the page scrolls if space runs short, and the large logo condenses until the keyboard closes.
-  The connection screen also links separately to Official Audiobookshelf and to Audiobookshelf+
-  (this unofficial fork), and those links no longer overlap the form.
-- **Playback restoration** — swiping Audiobookshelf+ away no longer loses your place. Playback
-  that is already playing simply keeps going. A paused book can be resumed from the Android
-  widget, the media notification or a headset button, even after Android has closed the player
-  in the background: pressing Play rebuilds the session with the same book, position, playback
-  speed and Up Next queue. Downloaded books resume this way without a network connection
-  (streamed books need to reach your server). Reopening the app reconnects the player screen to
-  whatever is already playing. Closing the player with its X ends the session, so it isn't
-  brought back later. (Android's *Force stop* is still a hard stop — open the app normally after
-  using it.) New in v0.16.0: a headset's Play or call button and a
-  Bluetooth *Play* now restore a paused book reliably after the player was closed in the
-  background; before, only Play/Pause did, and those buttons could do nothing or, rarely, make the
-  app close.
-- **Downloaded books with a broken cover keep playing** — new in v0.16.0: if a downloaded book's cover image is missing, unreadable or damaged, the book still
-  plays and resumes normally, and the notification and lock screen show the Audiobookshelf+
-  artwork instead. Before, starting or resuming such a book could make the app close.
-- **In-app diagnostics** — Settings → Diagnostics can keep a diagnostic log on the phone to help
-  troubleshoot problems without a computer or ADB. Choose *Normal*, *Debug* or *Verbose*; the log
-  keeps recording while the app is closed or playing in the background, combines the app's
-  playback service and screens into one timeline, and is size-limited, with the oldest entries
-  removed automatically. **Log actions**: *View* it in the app, *Save* it to your phone through
-  Android's normal Save As screen, *Share* it, *Mark* the moment something goes wrong with a note,
-  or *Clear* it. Logs are sanitized before they're stored or exported — passwords, tokens, server
-  addresses and file locations are redacted — but please look over a log before sharing it
-  publicly. New in v0.16.0: Android's own system log (what
-  `adb logcat` and bug reports show) no longer receives sign-in tokens, server connection details
-  or your username, including in debug builds.
-- **LLAMA theme** — an optional, original late-1990s audio-equipment theme (Settings → Theme): a
-  deep navy chassis, a full player with physical-style transport and utility keys, amber key
-  legends and progress, and green readouts for speed, sleep timer and playback time. The home
-  screen widget follows it. Black, Dark and Light are unchanged. New in v0.16.0: a more faithful finish across the app — brushed-steel panels and keys, steel home
-  screen widget keys, black recessed dialogs with steel frames, steel action buttons with amber
-  labels, amber Play controls in lists, series, collections, playlists and downloaded books, cover
-  frames that are complete on the Home shelves, a slimmer collapsed player without the empty strip
-  under its progress bar, and a fainter page texture. Green stays the color of selection, focus
-  and readouts.
-- **Fixes in every theme** — new in v0.16.0:
-  - The full player's bookmark button stays available when the app can't reach the server (it
-    used to disappear); your saved bookmarks can still be viewed offline.
-  - A paused book shows its real position when you return to the app. Before, a downloaded book
-    could show an older saved position (and a new bookmark could use it), and a streamed book that
-    was moved from the notification, widget or a headset while paused could jump back to the
-    server's older position.
-  - With large text (Android font size), book titles in the grids sit below the covers instead of
-    over them, long series names wrap in the series toolbar without covering the navigation, and
-    the downloaded-books screens no longer run under the player.
-  - The PDF reader's page counter is visible again above the page, and swiping up on page content
-    just above the collapsed player no longer opens the player by accident.
-- **Download controls** — the Downloads screen shows each download's real state in words
-  (queued, waiting for space, downloading, failed, folder access lost, finishing) and offers
-  *Retry*, *Cancel* and *Clear*. Retry keeps the files that already finished and starts only the
-  unfinished ones again. A failed download stays failed, with its reason, across app restarts
-  instead of retrying silently. When a device folder can't be written any more, *Choose folder*
-  restores access and continues the download.
-- **Fixed downloads to device folders and the Local Folders permission check** — downloads into a
-  folder on the phone no longer fail at once as "lost access", and adding a working folder no
-  longer reports "Folder permissions failed".
-- **Rescan Folder across libraries** — when the same book is in several of your libraries,
-  Rescan Folder now links each downloaded book to the copy it was actually downloaded from, so
-  covers show and the book opens in the right library. Books that were linked to the wrong copy
-  are repaired on rescan without losing files or listening progress. Rescan also shows live
-  progress and reports books it couldn't link.
-- **Library lists recover from loading failures** — if part of a library fails to load (a weak
-  mobile connection, or returning to the app after a long time in the background), those rows are
-  loaded again instead of staying blank. A series opened from the Series tab shows all of its books
-  again; in v0.15.0 only the first one or two appeared and the other rows stayed blank (fixed in
-  v0.15.1).
-- **Smaller touches** — the downloaded tick in list rows sits above the Play key instead of on the
-  cover, and the connection screen shows the GitHub avatars of the official project and of
-  Audiobookshelf+.
+**Playback and queue**
+- Continuous playback through series and collections, preferring downloaded books and streaming the rest.
+- Optional prompt before playing an incomplete series, collection or playlist, with the choice to download what's
+  missing.
+- A visible, reorderable Up Next queue.
+- Podcasts auto-advance to the next unfinished episode, from playlists and from the podcast page.
+- More reliable background advancement (including under Android Doze), and playback pauses when Bluetooth disconnects.
+- Playback restoration: a paused book resumes from the widget, notification or a headset after Android closed the
+  player, and reopening the app reconnects to what's playing. (Android's *Force stop* is still a hard stop.)
+- Fixed progress being saved to the wrong book during continuous playback.
+- Fixed offline listening progress being overwritten when reconnecting.
+- Fixed playlist items restarting from 0:00 when their progress was only on the server.
+
+**Downloads and local files**
+- Download controls: each download's state in words, with Retry, Cancel and Clear.
+- A downloaded book shows as downloaded in every library it appears in.
+- Rescan Folder links books already on the phone to the right library, without downloading them again.
+- "Download Series" downloads in series order.
+- Fixed downloads stalling after the first book of a series, or after a folder's permission was lost.
+- Fixed downloads to device folders and the Local Folders permission check.
+
+**Appearance**
+- Optional LLAMA theme, a late-1990s audio-equipment look (Settings → Theme), including the home screen widget.
+- Optional RICE customization (Settings → Appearance): starter palettes, personal presets, system colors and GitHub
+  palette imports, including the home screen widget.
+- Bigger, clearer home screen widget buttons.
+- Keyboard-friendly connection and login screens.
+- Its own name and icon, so it installs alongside the official app.
+
+**Reliability and privacy**
+- Sign-in renews once when it expires, without unexpected sign-outs when offline or switching accounts.
+- Library lists reload rows that failed to load, and series show all of their books.
+- Series progress includes books downloaded to the phone.
+- In-app diagnostics log (Settings → Diagnostics) to view, save or share, with passwords, tokens and server addresses
+  removed. Please look over a log before sharing it publicly.
+- Many smaller playback and download fixes from a full stability audit.
+
+**Known limitations:** While an audiobook is playing, progress updates from another device are not applied. The next
+progress save from this device may overwrite those updates. However, when you return to a paused audiobook, progress
+changes from another device are recognized and applied. See [CHANGELOG.md](https://github.com/ADD-OCD/audiobookshelfplus-app/blob/plus/CHANGELOG.md) for other known limitations.
 
 ### Getting builds
 

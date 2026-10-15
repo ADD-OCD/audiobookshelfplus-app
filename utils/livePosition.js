@@ -19,22 +19,61 @@ export function refocusDisplayTime(uiSession, nativeState, savedTime) {
   return { time: savedTime, source: 'saved' }
 }
 
-// Server progress counts as another device's update only when it is newer than this session's last update by more than
-// this margin. A sync stamps the server copy a moment after the device stamps its session (latency, small clock skew), so
-// without the margin our own last sync would look newer than a later move made here while paused
-export const REMOTE_UPDATE_MARGIN_MS = 10000
+// Within this distance two positions are the same position (the server stores the time a sync sends as it is)
+export const SAME_POSITION_S = 1
 
-// Streamed (server) book. As before, the server's progress is applied (seek) when it is another device's update, i.e. newer
-// than the session's last sync (the rule PlayerNotificationService.checkCurrentSessionProgress uses, plus the margin), or
-// when the native player does not hold this session (then compared with the displayed time, as before). The last sync is
-// the native state's lastSyncedAt: the service's session copy keeps its creation time as updatedAt (SessionSyncTime.kt).
-// Otherwise the native position stands and is displayed: no seek back to a stale server position.
-export function refocusServerAction(uiSession, nativeState, serverProgress, displayedTime) {
+const isTime = (t) => typeof t === 'number' && Number.isFinite(t)
+
+// Where the server's progress for the live streamed session comes from, decided by position and the server's own stamps,
+// never by how close the server's stamp is to this phone's clock:
+// - 'own': it is a position this phone wrote and the server acknowledged, a sync still in flight (the server may hold
+//   it), or, before any sync, the position the server created the session with (nativeState.serverProgressAck,
+//   ServerProgressAck.kt). A later move made here while paused is then this phone's newer position.
+// - 'handled': a server state this refocus check already dealt with (`handled`: the session and the server's lastUpdate
+//   it saw), so a paused move made here after it is not undone by it again.
+// - 'remote': anything else, i.e. a position another device (or a server-side change) wrote after this phone's last write.
+//   Also when the native side does not report what it wrote, which leaves the server authoritative as upstream.
+export function serverProgressOrigin(live, serverProgress, handled) {
+  const sessionId = live.playbackSession.id
+  const ack = live.serverProgressAck
+  if (ack && ack.sessionId === sessionId) {
+    const own = [ack.ackedTime, ack.pendingTime].filter(isTime)
+    if (own.some((t) => Math.abs(t - serverProgress.currentTime) <= SAME_POSITION_S)) return 'own'
+  }
+  if (handled && handled.sessionId === sessionId && Number(serverProgress.lastUpdate) <= handled.lastUpdate) return 'handled'
+  return 'remote'
+}
+
+// Streamed (server) book. Another device's newer progress is applied (seek), as upstream does on refocus; the server
+// position this phone wrote itself is not, so a position the native player moved to while paused stands and is
+// displayed. When the native player does not hold this session, the server is compared with the displayed time as before.
+// The result's `handled` is what the caller passes to the next check for the same session.
+export function refocusServerAction(uiSession, nativeState, serverProgress, displayedTime, handled) {
   if (!serverProgress || typeof serverProgress.currentTime !== 'number') return { action: 'none' }
   const live = liveState(uiSession, nativeState)
-  if (!live) return Math.abs(serverProgress.currentTime - displayedTime) > 1 ? { action: 'seek', time: serverProgress.currentTime } : { action: 'none' }
-  const sessionUpdatedAt = Number(live.lastSyncedAt ?? live.playbackSession.updatedAt) || 0
-  const remoteUpdate = Number(serverProgress.lastUpdate) > sessionUpdatedAt + REMOTE_UPDATE_MARGIN_MS
-  if (remoteUpdate && Math.abs(serverProgress.currentTime - live.currentTime) > 1) return { action: 'seek', time: serverProgress.currentTime }
-  return { action: 'display', time: live.currentTime }
+  if (!live) return Math.abs(serverProgress.currentTime - displayedTime) > SAME_POSITION_S ? { action: 'seek', time: serverProgress.currentTime } : { action: 'none' }
+  const origin = serverProgressOrigin(live, serverProgress, handled)
+  const seen = Number(serverProgress.lastUpdate) || 0
+  const nextHandled = { sessionId: live.playbackSession.id, lastUpdate: handled && handled.sessionId === live.playbackSession.id ? Math.max(handled.lastUpdate, seen) : seen }
+  if (origin === 'remote' && Math.abs(serverProgress.currentTime - live.currentTime) > SAME_POSITION_S) return { action: 'seek', time: serverProgress.currentTime, origin, handled: nextHandled }
+  return { action: 'display', time: live.currentTime, origin, handled: nextHandled }
+}
+
+// The handled record outlives the UI (an Activity recreated while the native player keeps its session): it is kept in the
+// WebView's storage. Storage can be unavailable or hold anything, so reads validate and both directions fail quietly.
+export const REFOCUS_HANDLED_KEY = 'absplus.refocusServerHandled'
+
+export function readRefocusHandled(storage) {
+  try {
+    const h = JSON.parse(storage.getItem(REFOCUS_HANDLED_KEY))
+    return h && typeof h.sessionId === 'string' && isTime(h.lastUpdate) ? { sessionId: h.sessionId, lastUpdate: h.lastUpdate } : null
+  } catch (error) {
+    return null
+  }
+}
+
+export function writeRefocusHandled(storage, handled) {
+  try {
+    storage.setItem(REFOCUS_HANDLED_KEY, JSON.stringify(handled))
+  } catch (error) {}
 }

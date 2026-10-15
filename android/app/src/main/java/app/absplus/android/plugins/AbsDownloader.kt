@@ -9,6 +9,7 @@ import app.absplus.android.server.ApiHandler
 import app.absplus.android.managers.AutoDownloadManager
 import app.absplus.android.managers.AutoDownloadStore
 import app.absplus.android.managers.DownloadItemManager
+import app.absplus.android.managers.DownloadIdentifiers
 import app.absplus.android.managers.LibraryItemDownloadStarter
 import app.absplus.android.services.DownloadServiceHost
 import app.absplus.android.managers.AutoDownloadScheduler
@@ -134,7 +135,9 @@ class AbsDownloader : Plugin() {
   override fun addListener(call: PluginCall) {
     super.addListener(call)
     if (call.getString("eventName") == "onDownloadItem" && ::downloadItemManager.isInitialized) {
-      downloadItemManager.downloadItemQueue.forEach { item ->
+      // Download threads change the queue while the frontend subscribes
+      val queued = synchronized(downloadItemManager) { downloadItemManager.downloadItemQueue.toList() }
+      queued.forEach { item ->
         notifyListeners("onDownloadItem", JSObject(jacksonMapper.writeValueAsString(item)))
       }
     }
@@ -145,6 +148,12 @@ class AbsDownloader : Plugin() {
     val libraryItemId = call.data.getString("libraryItemId").toString()
     var episodeId = call.data.getString("episodeId").toString()
     if (episodeId == "null") episodeId = ""
+    // Reject before queue lookup or API/path construction; do not rewrite IDs into colliding names.
+    if (!DownloadIdentifiers.isSafe(libraryItemId) ||
+            (episodeId.isNotEmpty() && !DownloadIdentifiers.isSafe(episodeId))) {
+      resolveDownloadCall(call, "Invalid download identifier")
+      return
+    }
     var localFolderId = call.data.getString("localFolderId", "").toString()
     AbsLogger.info(tag, "Requested download for item $libraryItemId${if (episodeId.isEmpty()) "" else " / episode $episodeId"}")
 
@@ -164,6 +173,9 @@ class AbsDownloader : Plugin() {
           apiHandler.getLibraryItemWithProgress(libraryItemId, episodeId) { libraryItem ->
             if (libraryItem == null) {
               call.resolve(JSObject("{\"error\":\"Server request failed\"}"))
+            } else if (!DownloadIdentifiers.matchesRequest(libraryItemId, libraryItem.id)) {
+              // The configured server's response is a separate trust boundary from the request.
+              resolveDownloadCall(call, "Server returned an invalid download identifier")
             } else {
               AbsLogger.info(tag, "Preparing download for ${libraryItem.id}")
 

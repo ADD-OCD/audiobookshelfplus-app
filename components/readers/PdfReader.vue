@@ -28,6 +28,7 @@
 
 <script>
 import pdf from '@teckel/vue-pdf'
+import { pdfDocumentParams } from '@/utils/pdfDocumentParams'
 
 export default {
   components: {
@@ -51,7 +52,8 @@ export default {
       windowWidth: 0,
       windowHeight: 0,
       pdfDocInitParams: null,
-      isRefreshing: false
+      isRefreshing: false,
+      renewedToken: null
     }
   },
   computed: {
@@ -170,49 +172,25 @@ export default {
       this.page++
       this.updateProgress()
     },
-    async handleRefreshFailure() {
-      try {
-        console.log('[PdfReader] Handling refresh failure - logging out user')
-
-        const serverConnectionConfigId = this.$store.getters['user/getServerConnectionConfigId']
-
-        // Clear store
-        await this.$store.dispatch('user/logout')
-
-        if (serverConnectionConfigId) {
-          // Clear refresh token for server connection config
-          await this.$db.clearRefreshToken(serverConnectionConfigId)
-        }
-
-        if (window.location.pathname !== '/connect') {
-          window.location.href = '/connect?error=refreshTokenFailed&serverConnectionConfigId=' + serverConnectionConfigId
-        }
-      } catch (error) {
-        console.error('[PdfReader] Failed to handle refresh failure:', error)
-      }
-    },
     async refreshToken() {
       if (this.isRefreshing) return
+      const failedToken = (this.pdfDocInitParams?.httpHeaders?.Authorization || '').replace(/^Bearer /, '')
+      // The reload with a renewed token was refused too: renewing again would only loop
+      if (failedToken && failedToken === this.renewedToken) {
+        console.error('[PdfReader] Request refused after token renewal')
+        return
+      }
       this.isRefreshing = true
       // Cannot use axios with this pdf reader so we need to handle the refresh separately
       // Should work on migrating to a different pdf reader in the future
-      const newAccessToken = await this.$store.dispatch('user/refreshToken').catch((error) => {
-        console.error('Failed to refresh token', error)
-        return null
-      })
-      if (!newAccessToken) {
-        this.handleRefreshFailure()
-        return
-      }
+      // Shares the renewal with other requests; a refused refresh token signs out through $authRenewal
+      const newAccessToken = await this.$store.dispatch('user/refreshToken', failedToken || undefined)
+      this.isRefreshing = false
+      if (!newAccessToken) return
+      this.renewedToken = newAccessToken
 
       // Force Vue to re-render the PDF component by creating a new object
-      this.pdfDocInitParams = {
-        url: this.ebookUrl,
-        httpHeaders: {
-          Authorization: `Bearer ${newAccessToken}`
-        }
-      }
-      this.isRefreshing = false
+      this.pdfDocInitParams = pdfDocumentParams(this.ebookUrl, newAccessToken)
     },
     async error(err) {
       if (err && err.status === 401) {
@@ -227,12 +205,7 @@ export default {
       this.windowHeight = window.innerHeight
     },
     init() {
-      this.pdfDocInitParams = {
-        url: this.ebookUrl,
-        httpHeaders: {
-          Authorization: `Bearer ${this.userToken}`
-        }
-      }
+      this.pdfDocInitParams = pdfDocumentParams(this.ebookUrl, this.userToken)
     }
   },
   mounted() {

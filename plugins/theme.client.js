@@ -10,7 +10,8 @@ import { AbsDatabase } from '@/plugins/capacitor/AbsDatabase'
  * Built-in theme CSS is generated at build time, so applying a theme only sets <html data-theme> to a
  * validated built-in id and applies the system-bar token. Persistence stays on the existing
  * Preferences key `theme` ('dark' | 'black' | 'light'); unknown stored values resolve to the default.
- * A future token provider (e.g. Follow Device/System) would plug in here, not in components.
+ * RICE customization (plugins/rice.client.js, theme/rice/) attaches here: while a RICE appearance is active, `theme`
+ * returns its validated theme object and `id` its approved base; with RICE off nothing below changes.
  */
 export class ThemeService {
   constructor({ localStore, root, platform, statusBar, widgets }) {
@@ -19,7 +20,8 @@ export class ThemeService {
     this.platform = platform
     this.statusBar = statusBar
     this.widgets = widgets
-    this.state = Vue.observable({ id: themeEngine.DEFAULT_THEME_ID })
+    this.state = Vue.observable({ id: themeEngine.DEFAULT_THEME_ID, resolved: null })
+    this.rice = null
     this.ready = Promise.resolve()
   }
 
@@ -28,7 +30,12 @@ export class ThemeService {
   }
 
   get theme() {
-    return themeEngine.getTheme(this.state.id)
+    return this.state.resolved || themeEngine.getTheme(this.state.id)
+  }
+
+  /** RICE controller (theme/rice/controller.js); once its store exists, built-in choices go through it too. */
+  attachRice(rice) {
+    this.rice = rice
   }
 
   get themes() {
@@ -53,8 +60,13 @@ export class ThemeService {
 
   /** Applies and persists a user selection. */
   async select(requestedId) {
+    if (this.rice && this.rice.persisted) {
+      await this.rice.selectBuiltin(requestedId)
+      return this.state.id
+    }
     const id = this.apply(requestedId)
     await this.localStore.setTheme(id)
+    if (this.rice) this.rice.noteBuiltin(id)
     this.refreshWidgets()
     return id
   }

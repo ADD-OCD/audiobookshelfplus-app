@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
 // Load the Nuxt ES module without changing this project's CommonJS package type.
 const helperSource = await readFile(new URL('../utils/playbackQueue.js', import.meta.url), 'utf8')
-const { downloadedBookItems, fetchSeriesBooks, nativeQueueItems, queueItemDisplay, resolvePlaybackQueue, resolveQueueSourceAppendItems, sessionToQueueItem } = await import(`data:text/javascript;base64,${Buffer.from(helperSource).toString('base64')}`)
+const { downloadedBookItems, fetchSeriesBooks, nativeQueueItems, queueDisplayFromNative, queueItemDisplay, resolvePlaybackQueue, resolveQueueSourceAppendItems, sessionToQueueItem } = await import(`data:text/javascript;base64,${Buffer.from(helperSource).toString('base64')}`)
 
 const book = (id) => ({ id, mediaType: 'book', media: { numTracks: 1 } })
 // Queue entry as the Play controls build it: server identity plus the local copy when one is complete.
@@ -215,7 +215,7 @@ async function container(native) {
     .match(/<script>([\s\S]*?)<\/script>/)[1]
     .replace(/^import .*$/gm, '')
     .replace('export default', 'globalThis.component =')
-  const sandbox = { AbsAudioPlayer: native, AbsLogger: { info: async () => {} }, CellularPermissionHelpers: {}, nativeQueueItems, resolvePlaybackQueue, resolveQueueSourceAppendItems, sessionToQueueItem, console: { ...console, log: () => {} } }
+  const sandbox = { AbsAudioPlayer: native, AbsLogger: { info: async () => {} }, CellularPermissionHelpers: {}, nativeQueueItems, queueDisplayFromNative, resolvePlaybackQueue, resolveQueueSourceAppendItems, sessionToQueueItem, console: { ...console, log: () => {} } }
   vm.runInNewContext(script, sandbox)
   const ctx = context([local('1'), local('2')])
   ctx.$diag = { debug: () => {} }

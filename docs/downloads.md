@@ -6,6 +6,8 @@ How a book or episode download moves through the app, and what the user's contro
 
 1. The item page (or series/episode rows) calls `AbsDownloader.downloadLibraryItem`. If the item is already in the queue the call is a Retry of it; otherwise a `DownloadItem` is built with one part per audio file, ebook and cover (`cover-<server item id>.jpg`) and queued.
 2. The queue is persisted (Paper `downloadItems`) and survives navigation, the UI closing and process death. `DownloadService` runs the transfers (up to 3 files at once) into app staging files, then each finished file is moved to its destination: internal app storage, or the chosen device folder (SAF).
+   - A queued podcast episode keeps only the podcast's metadata, not its episode list (`DownloadItem.withoutPodcastEpisodes`; native code reads the podcast only through `getLocalCopy()`, JS never reads `media`). Entries saved by older versions are rewritten compact when the queue is restored, and startup validation reads them one at a time (PR #25, contributed by Stanislav Markin).
+   - Every read or change of `DownloadItemManager.downloadItemQueue` holds the manager's lock: mutations are `@Synchronized`, `findDownloadItem` serves Retry and new requests, and the `onDownloadItem` replay and the Downloads screen copy the list under the lock, then emit outside it.
 3. When every file is in place the item is scanned into a local library item, removed from the queue and reported to the UI (`onItemDownloadComplete`).
 
 ## States (as the Downloads screen shows them)

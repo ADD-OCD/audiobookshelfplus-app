@@ -13,6 +13,7 @@ import app.absplus.android.models.DownloadItem
 import app.absplus.android.models.DownloadItemPart
 import app.absplus.android.plugins.AbsLogger
 import app.absplus.android.server.ApiHandler
+import app.absplus.android.server.RefreshResult
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.getcapacitor.JSObject
@@ -97,6 +98,14 @@ class DownloadItemManager(
   fun restoreQueue() {
     if (downloadItemQueue.isNotEmpty()) return
     DeviceManager.dbManager.getDownloadItems().forEach { item ->
+      // Validate before restore resets (and deletes) partial files. Missing ownership is a hold,
+      // not a terminal transfer failure and must not schedule the 24-hour staging cleanup.
+      if (item.downloadItemParts.any { !it.moved && downloadToken(it, item) == null }) {
+        holdForDownloadAuthorization(item)
+        downloadItemQueue.add(item)
+        clientEventEmitter.onDownloadItem(item)
+        return@forEach
+      }
       item.downloadItemParts.filter { it.moved }.forEach { part ->
         if (!finalizedFileExists(part)) {
           AbsLogger.error(tag, "Finalized file is missing; resetting ${part.filename}")
@@ -110,6 +119,14 @@ class DownloadItemManager(
       if (item.isDownloadFinished) {
         downloadItemQueue.add(item)
         checkDownloadItemFinished(item)
+        return@forEach
+      }
+      // A missing finalized file above can make a previously moved part unfinished. Recheck
+      // before resetting its retained staging copy; the initial guard only saw moved parts.
+      if (item.downloadItemParts.any { !it.moved && downloadToken(it, item) == null }) {
+        holdForDownloadAuthorization(item)
+        downloadItemQueue.add(item)
+        clientEventEmitter.onDownloadItem(item)
         return@forEach
       }
       var resetFailed = false
@@ -144,16 +161,21 @@ class DownloadItemManager(
   }
 
   @Synchronized
-  fun addDownloadItem(downloadItem: DownloadItem) {
-    val existingItem = downloadItemQueue.find { it.id == downloadItem.id }
+  fun addDownloadItem(newItem: DownloadItem) {
+    val existingItem = downloadItemQueue.find { it.id == newItem.id }
     if (existingItem != null) {
       return
     }
+    val downloadItem = newItem.withoutPodcastEpisodes()
     persist(downloadItem, force = true)
     downloadItemQueue.add(downloadItem)
     clientEventEmitter.onDownloadItem(downloadItem)
     notifyQueueChanged()
   }
+
+  /** The queued item with this id. Under the queue's lock: download threads add and remove items concurrently. */
+  @Synchronized
+  fun findDownloadItem(downloadItemId: String): DownloadItem? = downloadItemQueue.find { it.id == downloadItemId }
 
   /** Names of device folders the item can't write to any more (see [DownloadControls.foldersWithoutAccess]). */
   @Synchronized
@@ -166,6 +188,12 @@ class DownloadItemManager(
   fun retryDownloadItem(downloadItemId: String): Boolean {
     val item = downloadItemQueue.find { it.id == downloadItemId } ?: return false
     if (!DownloadControls.canRetry(item) { it in currentDownloadItemParts }) return false
+    if (item.downloadItemParts.any { !it.moved && downloadToken(it, item) == null }) {
+      holdForDownloadAuthorization(item)
+      clientEventEmitter.onDownloadItem(item)
+      notifyQueueChanged()
+      return false
+    }
     val unfinished = item.downloadItemParts.count { !it.moved }
     AbsLogger.info(
             tag,
@@ -330,6 +358,12 @@ class DownloadItemManager(
   }
 
   private fun startDownload(item: DownloadItem, part: DownloadItemPart) {
+    val token = downloadToken(part, item)
+    if (token == null) {
+      holdForDownloadAuthorization(item)
+      clientEventEmitter.onDownloadItem(item)
+      return
+    }
     val stagingFile = File(part.destinationPath)
     stagingFile.parentFile?.mkdirs()
     part.downloadId = APP_MANAGED_DOWNLOAD_ID
@@ -338,12 +372,6 @@ class DownloadItemManager(
     currentDownloadItemParts.add(part)
     persist(item, force = true)
     AbsLogger.info(tag, "Starting download for ${part.filename}")
-    val activeConfig = DeviceManager.serverConnectionConfig
-    val token =
-            if (activeConfig?.id == item.serverConnectionConfigId) activeConfig.token
-            else
-                    DeviceManager.getServerConnectionConfig(item.serverConnectionConfigId)?.token
-                            ?: DeviceManager.token
     val handle =
             InternalDownloadManager(
                             stagingFile,
@@ -397,6 +425,31 @@ class DownloadItemManager(
                     .download(serverUrl(item, part), token)
     if (part in currentDownloadItemParts && !part.completed && !part.failed) {
       activeCalls[part.id] = handle
+    }
+  }
+
+  private fun downloadToken(part: DownloadItemPart, item: DownloadItem): String? {
+    val saved = DeviceManager.getServerConnectionConfig(item.serverConnectionConfigId)?.copy()
+    return DownloadAuthorization.tokenFor(
+            item.serverConnectionConfigId, item.serverAddress, item.serverUserId,
+            saved?.id, saved?.address, saved?.userId, saved?.token, serverUrl(item, part))
+  }
+
+  /** Retain media and queue ownership when credentials cannot be safely selected. */
+  private fun holdForDownloadAuthorization(item: DownloadItem) {
+    synchronized(IncompleteDownloadCleanup) {
+      item.downloadItemParts.filter { !it.moved && !it.isMoving }.forEach { part ->
+        activeCalls.remove(part.id)?.cancel()
+        currentDownloadItemParts.remove(part)
+        reservations.remove(part.destinationPath)
+        part.downloadId = null
+        part.failed = true
+        part.waitingForSpace = false
+        part.failureReason = "Download authorization changed: reconnect the original server before retrying"
+      }
+      item.terminalFailureAt = null
+      IncompleteDownloadCleanup.cancel(context, item.id)
+      persist(item, force = true)
     }
   }
 
@@ -494,16 +547,16 @@ class DownloadItemManager(
       synchronized(this@DownloadItemManager) {
         refreshingServerIds.remove(serverConnectionConfigId)
         when (result) {
-          is ApiHandler.RefreshResult.Success -> {
+          is RefreshResult.Success -> {
             AbsLogger.info(
                     tag,
                     "Token refresh succeeded; resuming downloads for $serverConnectionConfigId"
             )
             checkUpdateDownloadQueue()
           }
-          ApiHandler.RefreshResult.Rejected -> failParkedAuthParts(serverConnectionConfigId)
+          RefreshResult.Rejected -> failParkedAuthParts(serverConnectionConfigId)
           // Parked parts are still queued, so MAX_AUTH_RETRIES bounds the reattempts.
-          ApiHandler.RefreshResult.Transient -> {
+          RefreshResult.Transient -> {
             AbsLogger.info(
                     tag,
                     "Token refresh could not be completed; retrying downloads for $serverConnectionConfigId"

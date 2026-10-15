@@ -764,6 +764,7 @@ LLAMA only. Home, Library and navigation are the content environment around the 
 
 - **Navigation strip** (`#bookshelf-navbar`, `BROWSE_NAV_CHASSIS`): the content chassis (base surface, chassis sheen, faint lit top lip, dark seam below) instead of the brighter steel strip. The app bar, navigation and content now read as one chassis. Unselected icons rise from 5.0:1 to 7.2:1.
 - **Selected tab** (`BROWSE_NAV_SELECTED`): a recessed dark key pressed into the strip, the players' key language. It keeps the accent underline and its text label (unselected tabs show an icon), so the state never reads by color alone.
+  In podcast libraries every tab shows its icon and its label (BookshelfNavBar `labeled`, 2026-10-13); the selected tab keeps the key, the accent and a semibold label, and LLAMA sets every tab label in the condensed face.
 - **Shelf headings** (`shelf-heading` hook, `SECTION_LABEL_TYPE`): the system `sans-serif-condensed` face, neutral, same size and weight, 0.03em spacing.
 - **Shelf heading rule** (`shelf-heading-band` hook, `SHELF_HEADING_RULE`): the heading band paints an engraved line (a dark seam over a faint lit return) 6px above its bottom edge, so 6px above the artwork, inset 20px. It uses background layers only, with no element and no box. A rule on the band's edge would sit directly on the artwork.
 - **Toolbar count** (`toolbar-count` hook, `COUNT_TYPE`): condensed with tabular figures, neutral (a count is not a live readout). Only its text box narrows (about 4px, about 6px at font scale 1.3) and the flex spacer absorbs it; no control moves. The series-name line keeps its face.
@@ -877,6 +878,19 @@ These are still hardcoded, by decision, and documented rather than forced into t
   - **No prototype pollution:** only own schema properties are read.
   - **No unrestricted fonts:** no font fields exist yet, and future presets must be enums over bundled or system families.
 - The persisted selection is only an id, resolved against built-ins.
+
+## RICE customization (branch `feature/rice-customization`)
+
+The imported/user themes, Follow Device and dynamic-color items below are implemented as RICE (`docs/rice-customization.md`). It reuses this engine:
+
+- **Data:** RICE snapshots carry the same 29 tokens.
+- **CSS:** `themeDeclarations` stays the only serializer.
+- **Boundaries:**
+  - `html[data-theme]` stays a built-in base;
+  - one runtime `<style>` scoped under `data-rice` overrides the token variables;
+  - a strict validator (`theme/rice/schema.js`) runs before anything is serialized.
+- **Built-ins:** the four built-in definitions, their compiled CSS and their recipes are unchanged.
+- **Galaxy Themes:** no Galaxy Themes or Theme Park import, since there's no public API for it.
 
 ## Future work (not implemented)
 

@@ -1,6 +1,6 @@
 // Closure pass (2026-10-10): every consumer of the collapsed player's height uses its projection; reader toolbars sit above
-// their pages; the downloaded book's Play is an amber action in LLAMA; the series toolbar grows for a wrapped title; and a
-// paused streamed book's refocus no longer seeks the native player back to an older server position.
+// their pages; the downloaded book's Play is an amber action in LLAMA; the series toolbar grows for a wrapped title. The streamed
+// refocus rules moved to streamed-progress-conflict.test.mjs.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, readdir } from 'node:fs/promises'
@@ -13,7 +13,6 @@ const presets = require('../theme/presets.js')
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8').then((s) => s.replace(/\r\n/g, '\n'))
 const esm = async (path) => import(`data:text/javascript;base64,${Buffer.from(await read(path)).toString('base64')}`)
 const { miniPlayerHeight } = await esm('../utils/miniPlayerHeight.js')
-const { refocusServerAction, refocusDisplayTime, REMOTE_UPDATE_MARGIN_MS } = await esm('../utils/livePosition.js')
 const H = 'var(--mini-player-height, 120px)'
 
 test('miniPlayerHeight: the published projection, 120px when unset or invalid', () => {
@@ -124,74 +123,5 @@ test('Series toolbar: grows for a wrapped title (two lines at most); the shelf t
   assert.match(page, /\.main-content \{\n  flex: 1 1 0;\n  min-height: 0;\n  max-width: 100vw;\n\}/)
   assert.doesNotMatch(page, /calc\(100% - (72|36)px\)/)
   const nav = await read('../components/home/BookshelfNavBar.vue')
-  assert.match(nav, /<div class="w-full h-9 bg-bg relative">/, 'the navigation keeps its 36px')
-})
-
-test('refocusServerAction: another device’s newer progress is applied; a paused native move here is kept', () => {
-  const session = { id: 's1' }
-  const native = (currentTime, updatedAt) => ({ playbackSession: { id: 's1', updatedAt }, currentTime, isPlaying: false })
-  const T = 1_791_684_022_099
-  // The S22 case: server at 1269.279 (last synced before), native moved to 1569.279 while paused
-  assert.deepEqual(refocusServerAction(session, native(1569.279, T), { currentTime: 1269.279, lastUpdate: T - 2_000_000 }, 1569.28), { action: 'display', time: 1569.279 })
-  // Our own last sync stamps the server a moment after the session: still ours, not a remote update
-  assert.deepEqual(refocusServerAction(session, native(1569.279, T), { currentTime: 1269.279, lastUpdate: T + 300 }, 1269.28), { action: 'display', time: 1569.279 })
-  // Another device moved on later: applied as before
-  assert.deepEqual(refocusServerAction(session, native(1569.279, T), { currentTime: 3000, lastUpdate: T + REMOTE_UPDATE_MARGIN_MS + 1 }, 1569.28), { action: 'seek', time: 3000 })
-  assert.deepEqual(refocusServerAction(session, native(3000.5, T), { currentTime: 3000, lastUpdate: T + 60_000 }, 1569.28), { action: 'display', time: 3000.5 }, 'within 1s: no seek')
-  // No matching native session: the previous rule against the displayed time
-  assert.deepEqual(refocusServerAction(session, { playbackSession: { id: 'other' }, currentTime: 5 }, { currentTime: 100, lastUpdate: 1 }, 50), { action: 'seek', time: 100 })
-  assert.deepEqual(refocusServerAction(session, null, { currentTime: 100.5, lastUpdate: 1 }, 100), { action: 'none' })
-  assert.deepEqual(refocusServerAction(session, native(1, T), null, 1), { action: 'none' })
-  // The S22 release check: the service's session keeps its creation time as updatedAt, while lastSyncedAt follows the
-  // syncer. This phone's own sync 13s after creation, then a paused move: kept (previously sought back to the server)
-  const created = T - 60_000
-  const synced = (currentTime, lastSyncedAt) => ({ playbackSession: { id: 's1', updatedAt: created }, lastSyncedAt, currentTime, isPlaying: false })
-  assert.deepEqual(refocusServerAction(session, synced(1398.246, created + 13_213), { currentTime: 1278.232, lastUpdate: created + 13_250 }, 1398.25), { action: 'display', time: 1398.246 })
-  // Another device 12s after this phone's sync: applied; within the margin: not applied on refocus
-  assert.deepEqual(refocusServerAction(session, synced(2214.321, created + 63_500), { currentTime: 2814, lastUpdate: created + 63_500 + 12_000 }, 2214.27), { action: 'seek', time: 2814 })
-  assert.deepEqual(refocusServerAction(session, synced(1284.157, created + 31_700), { currentTime: 2184, lastUpdate: created + 31_700 + 3_000 }, 1284.11), { action: 'display', time: 1284.157 })
-  // Without lastSyncedAt (an older native side) the session's updatedAt is used, as before
-  assert.deepEqual(refocusServerAction(session, { playbackSession: { id: 's1', updatedAt: T }, currentTime: 1569.279 }, { currentTime: 1269.279, lastUpdate: T + 300 }, 1269.28), { action: 'display', time: 1569.279 })
-  // The downloaded-book rule is unchanged
-  assert.deepEqual(refocusDisplayTime(session, native(7107.976, T), 6107.556), { time: 7107.976, source: 'live' })
-})
-
-test('deviceFocused for a paused streamed book: no seek back to an older server position; remote updates still apply', async () => {
-  const source = await read('../components/app/AudioPlayerContainer.vue')
-  const script = source
-    .match(/<script>([\s\S]*?)<\/script>/)[1]
-    .replace(/^import .*$/gm, '')
-    .replace('export default', 'globalThis.component =')
-  const sandbox = { AbsAudioPlayer: {}, AbsLogger: { info: async () => {} }, Dialog: {}, CellularPermissionHelpers: {}, nativeQueueItems() {}, resolvePlaybackQueue() {}, resolveQueueSourceAppendItems() {}, sessionToQueueItem() {}, refocusDisplayTime, refocusServerAction, console: { log() {}, error() {} } }
-  vm.runInNewContext(script, sandbox)
-  const methods = sandbox.component.methods
-  const T = 1_791_684_022_099
-  const run = async (server) => {
-    const seeks = []
-    const ctx = { currentPlaybackSession: { id: 's1' }, currentTime: 1569.28, onPlaybackEnded: async () => {}, getServerMediaProgressForCurrentSession: async () => server }
-    ctx.$refs = {
-      audioPlayer: {
-        isPlaying: false,
-        isLocalPlayMethod: false,
-        currentTime: 1569.28,
-        seek: (t) => seeks.push(t),
-        timeupdate() {
-          ctx.currentTime = this.currentTime
-        }
-      }
-    }
-    ctx.getNativePlaybackState = methods.getNativePlaybackState.bind(ctx)
-    sandbox.AbsAudioPlayer.getCurrentPlaybackState = async () => ({ playbackSession: { id: 's1', updatedAt: T }, currentTime: 1569.279, isPlaying: false })
-    await methods.deviceFocused.call(ctx, true)
-    return { seeks, shown: ctx.currentTime }
-  }
-  assert.deepEqual(await run({ currentTime: 1269.279, lastUpdate: T - 2_000_000 }), { seeks: [], shown: 1569.279 })
-  assert.deepEqual(await run({ currentTime: 3000, lastUpdate: T + 60_000 }), { seeks: [3000], shown: 1569.28 })
-})
-
-test('Native playback state reports the last sync time from the progress syncer (SessionSyncTime)', async () => {
-  const plugin = await read('../android/app/src/main/java/app/absplus/android/plugins/AbsAudioPlayer.kt')
-  assert.match(plugin, /val synced = runCatching \{ pns\.mediaProgressSyncer\.currentPlaybackSession \}\.getOrNull\(\)\n\s+ret\.put\("lastSyncedAt", SessionSyncTime\.lastSyncedAt\(session\.id, session\.updatedAt, synced\?\.id, synced\?\.updatedAt\)\)/)
-  const live = await read('../utils/livePosition.js')
-  assert.match(live, /Number\(live\.lastSyncedAt \?\? live\.playbackSession\.updatedAt\)/)
+  assert.match(nav, /<div class="w-full bg-bg relative" :class="labeled \? 'labeled-nav' : 'h-9'">/, 'book libraries keep the 36px strip; labeled podcast tabs grow with the font scale')
 })

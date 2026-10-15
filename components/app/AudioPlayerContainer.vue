@@ -13,8 +13,8 @@
 import { AbsAudioPlayer, AbsLogger } from '@/plugins/capacitor'
 import { Dialog } from '@capacitor/dialog'
 import CellularPermissionHelpers from '@/mixins/cellularPermissionHelpers'
-import { nativeQueueItems, resolvePlaybackQueue, resolveQueueSourceAppendItems, sessionToQueueItem } from '@/utils/playbackQueue'
-import { refocusDisplayTime, refocusServerAction } from '@/utils/livePosition'
+import { nativeQueueItems, queueDisplayFromNative, resolvePlaybackQueue, resolveQueueSourceAppendItems, sessionToQueueItem } from '@/utils/playbackQueue'
+import { refocusDisplayTime, refocusServerAction, readRefocusHandled, writeRefocusHandled } from '@/utils/livePosition'
 
 export default {
   data() {
@@ -42,7 +42,9 @@ export default {
       sleepInterval: null,
       currentEndOfChapterTime: 0,
       serverLibraryItemId: null,
-      serverEpisodeId: null
+      serverEpisodeId: null,
+      // The streamed session's server progress the refocus check already dealt with (refocusServerAction)
+      refocusServerHandled: null
     }
   },
   mixins: [CellularPermissionHelpers],
@@ -210,23 +212,44 @@ export default {
           this.$toast.error('Failed to play')
         })
     },
-    // After the UI restarts, reuse the saved Up Next display copy only if it still describes exactly
-    // the queue the native player holds (it may have advanced or been restored in the background).
-    async nativePlaybackReattached(state) {
-      const native = state?.queue
-      if (this.$store.state.playbackQueue || !native?.items?.length) return
+    // Up Next display for a queue the native player holds without this UI having set it (queueDisplayFromNative):
+    // the saved display copy is reused only if it still describes exactly the native queue (it may have advanced or
+    // been restored in the background). `generation` is the store's queue generation when the native state was
+    // requested: any queue set or cleared since then (a newer Play, Close, an edit) wins over this older answer.
+    async restoreQueueDisplay(native, session, generation, origin) {
+      if (this.$store.state.playbackQueue || this.preparingPlayback || !native?.items?.length) return
       const saved = await this.$localStore.getPlaybackQueue()
-      if (!saved?.items?.length || this.$store.state.playbackQueue) return
-      const savedIds = nativeQueueItems(saved.items)
-      const matches = savedIds.length === native.items.length && savedIds.every((item, index) => item.libraryItemId === native.items[index].libraryItemId && item.episodeId === (native.items[index].episodeId || null))
-      if (!matches) {
-        console.log('[AudioPlayerContainer] Saved queue does not match native queue, not restoring queue display')
-        this.$diag.debug('AudioPlayerContainer', 'Saved Up Next display did not match the native queue - not restored')
+      if (this.$store.state.playbackQueue || this.preparingPlayback || this.$store.state.playbackQueueGeneration !== generation) return
+      const { queue, reason } = queueDisplayFromNative(saved, native, session)
+      if (!queue) {
+        console.log(`[AudioPlayerContainer] Native queue not shown in Up Next (${origin}): ${reason}`)
+        this.$diag.debug('AudioPlayerContainer', `Up Next display not restored (${origin}): ${reason}`)
         return
       }
-      console.log('[AudioPlayerContainer] Restored queue display from native queue', native.currentIndex)
-      this.$diag.debug('AudioPlayerContainer', `Up Next display restored from native queue (${native.items.length} items, index ${native.currentIndex})`)
-      this.$store.commit('setPlaybackQueue', { ...saved, currentIndex: native.currentIndex })
+      console.log('[AudioPlayerContainer] Restored queue display from native queue', queue.currentIndex)
+      this.$diag.debug('AudioPlayerContainer', `Up Next display restored from native queue (${origin}, ${native.items.length} items, index ${queue.currentIndex})`)
+      this.$store.commit('setPlaybackQueue', queue)
+    },
+    // The UI started while a native session already existed (AudioPlayer.reattachNativePlayback)
+    async nativePlaybackReattached(state) {
+      await this.restoreQueueDisplay(state?.queue, state?.playbackSession || null, this.$store.state.playbackQueueGeneration, 'reattach')
+    },
+    // The native player prepared a session while this UI was open. A Play from this UI sets or clears the queue first,
+    // so this only matters for sessions native prepared on its own: a widget, headset or notification Play that
+    // restored the last session and its queue after the process had been stopped (e.g. after inactivity or an update).
+    async nativePlaybackSessionPrepared(session) {
+      if (this.$platform !== 'android' || this.$store.state.playbackQueue || this.preparingPlayback) return
+      const generation = this.$store.state.playbackQueueGeneration
+      let native
+      try {
+        native = await AbsAudioPlayer.getPlaylistQueue()
+      } catch (error) {
+        console.error('[AudioPlayerContainer] Failed to read native queue', error)
+        return
+      }
+      // Another session arrived while the queue was read: that one's own event decides
+      if (session?.id && this.$store.state.currentPlaybackSession?.id && this.$store.state.currentPlaybackSession.id !== session.id) return
+      await this.restoreQueueDisplay(native, session, generation, 'session')
     },
     async onPlaybackEnded() {
       const queue = this.$store.state.playbackQueue
@@ -602,10 +625,15 @@ export default {
         const data = await this.getServerMediaProgressForCurrentSession()
         if (!data) return
         if (!this.$refs.audioPlayer?.isPlaying) {
-          // Another device's newer progress is applied as before; a position the native player moved to while paused
-          // (not yet synced) stands and is displayed instead of being sought back to the older server position
-          const decision = refocusServerAction(this.currentPlaybackSession, await this.getNativePlaybackState(), data, this.currentTime)
-          console.log('[AudioPlayerContainer] device visibility: got server media progress', data.currentTime, 'last time in player is', this.currentTime, 'decision', decision.action)
+          // Another device's newer progress is applied as before; the server position this phone wrote itself is not, so
+          // a position the native player moved to while paused (not yet synced) stands and is displayed
+          if (!this.refocusServerHandled) this.refocusServerHandled = readRefocusHandled(globalThis.localStorage)
+          const decision = refocusServerAction(this.currentPlaybackSession, await this.getNativePlaybackState(), data, this.currentTime, this.refocusServerHandled)
+          if (decision.handled) {
+            this.refocusServerHandled = decision.handled
+            writeRefocusHandled(globalThis.localStorage, decision.handled)
+          }
+          console.log('[AudioPlayerContainer] device visibility: got server media progress', data.currentTime, 'last time in player is', this.currentTime, 'decision', decision.action, decision.origin || '')
           if (decision.action === 'seek') {
             // Use seek() so the native audio player's current session is updated
             this.$refs.audioPlayer.seek(decision.time)
@@ -620,6 +648,7 @@ export default {
   async mounted() {
     // Registered before any await: the child audio player emits this from its own init right after mount
     this.$eventBus.$on('native-playback-reattached', this.nativePlaybackReattached)
+    this.$eventBus.$on('native-playback-session', this.nativePlaybackSessionPrepared)
     this.onLocalMediaProgressUpdateListener = await AbsAudioPlayer.addListener('onLocalMediaProgressUpdate', this.onLocalMediaProgressUpdate)
     this.onSleepTimerEndedListener = await AbsAudioPlayer.addListener('onSleepTimerEnded', this.onSleepTimerEnded)
     this.onSleepTimerSetListener = await AbsAudioPlayer.addListener('onSleepTimerSet', this.onSleepTimerSet)
@@ -660,6 +689,7 @@ export default {
     this.$eventBus.$off('add-to-queue', this.addSingleItemToQueue)
     this.$eventBus.$off('add-queue-source-to-queue', this.addQueueSourceToQueue)
     this.$eventBus.$off('native-playback-reattached', this.nativePlaybackReattached)
+    this.$eventBus.$off('native-playback-session', this.nativePlaybackSessionPrepared)
   }
 }
 </script>

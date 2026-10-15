@@ -28,9 +28,26 @@ export default {
     link: [{ rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }]
   },
 
-  css: ['@/assets/tailwind.css', '@/assets/app.css'],
+  css: ['@/assets/tailwind.css', '@/assets/app.css', '@/assets/rice-fonts.css'],
 
-  plugins: ['@/plugins/server.js', '@/plugins/db.js', '@/plugins/localStore.js', '@/plugins/theme.client.js', '@/plugins/init.client.js', '@/plugins/axios.js', '@/plugins/capacitor/index.js', '@/plugins/diagnostics.client.js', '@/plugins/capacitor/AbsAudioPlayer.js', '@/plugins/nativeHttp.js', '@/plugins/toast.js', '@/plugins/constants.js', '@/plugins/haptics.js', '@/plugins/i18n.js'],
+  plugins: [
+    '@/plugins/server.js',
+    '@/plugins/db.js',
+    '@/plugins/authRenewal.js',
+    '@/plugins/localStore.js',
+    '@/plugins/theme.client.js',
+    '@/plugins/rice.client.js',
+    '@/plugins/init.client.js',
+    '@/plugins/axios.js',
+    '@/plugins/capacitor/index.js',
+    '@/plugins/diagnostics.client.js',
+    '@/plugins/capacitor/AbsAudioPlayer.js',
+    '@/plugins/nativeHttp.js',
+    '@/plugins/toast.js',
+    '@/plugins/constants.js',
+    '@/plugins/haptics.js',
+    '@/plugins/i18n.js'
+  ],
 
   components: true,
 

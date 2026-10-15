@@ -6,4 +6,14 @@
       <certificates src="system"/>
     </trust-anchors>
   </base-config>
+  <!-- In-app updates: GitHub over HTTPS only, trusting system certificate authorities only (not user-added ones) -->
+  <domain-config cleartextTrafficPermitted="false">
+    <domain includeSubdomains="false">api.github.com</domain>
+    <domain includeSubdomains="false">github.com</domain>
+    <domain includeSubdomains="false">release-assets.githubusercontent.com</domain>
+    <domain includeSubdomains="false">objects.githubusercontent.com</domain>
+    <trust-anchors>
+      <certificates src="system"/>
+    </trust-anchors>
+  </domain-config>
 </network-security-config>

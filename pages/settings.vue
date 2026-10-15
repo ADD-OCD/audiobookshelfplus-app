@@ -33,6 +33,20 @@
         <ui-text-input :value="themeOption" readonly append-icon="expand_more" style="max-width: 200px" />
       </div>
     </div>
+    <nuxt-link to="/appearance" class="py-3 flex items-center">
+      <span class="material-symbols text-xl w-10 text-center" aria-hidden="true">palette</span>
+      <span class="pl-4 flex-grow">
+        <span class="block">{{ $strings.LabelRiceAppearanceSettings }}</span>
+        <span class="block text-sm text-fg-muted">{{ $strings.MessageRiceAppearanceSubtitle }}</span>
+      </span>
+      <span class="material-symbols text-xl text-fg-muted" aria-hidden="true">chevron_right</span>
+    </nuxt-link>
+    <div class="py-3 flex items-center">
+      <p class="pr-4 w-36">{{ $strings.LabelPodcastEpisodesSort }}</p>
+      <div @click.stop="showPodcastEpisodesOrderModal = true">
+        <ui-text-input :value="podcastEpisodesSortText" readonly append-icon="expand_more" style="max-width: 200px" />
+      </div>
+    </div>
 
     <!-- Playback settings -->
     <p class="uppercase text-xs font-semibold text-fg-muted mb-2 mt-10">{{ $strings.HeaderPlaybackSettings }}</p>
@@ -245,6 +259,9 @@
           </span>
         </ui-btn>
       </div>
+
+      <!-- In-app updates from the official GitHub releases (Android) -->
+      <settings-updates />
     </template>
 
     <div v-show="loading" class="w-full h-full absolute top-0 left-0 flex items-center justify-center z-10">
@@ -254,6 +271,7 @@
     <modals-dialog v-model="showMoreMenuDialog" :items="moreMenuItems" :selected="moreMenuSelected" @action="clickMenuAction" />
     <modals-sleep-timer-length-modal v-model="showSleepTimerLengthModal" @change="sleepTimerLengthModalSelection" />
     <modals-auto-sleep-timer-rewind-length-modal v-model="showAutoSleepTimerRewindLengthModal" @change="showAutoSleepTimerRewindLengthModalSelection" />
+    <modals-order-modal v-model="showPodcastEpisodesOrderModal" :order-by.sync="podcastEpisodesOrderBy" :descending.sync="podcastEpisodesOrderDesc" episodes allow-auto />
   </div>
 </template>
 
@@ -271,6 +289,7 @@ export default {
       showMoreMenuDialog: false,
       showSleepTimerLengthModal: false,
       showAutoSleepTimerRewindLengthModal: false,
+      showPodcastEpisodesOrderModal: false,
       moreMenuSetting: '',
       settings: {
         disableAutoRewind: false,
@@ -422,6 +441,29 @@ export default {
     }
   },
   computed: {
+    podcastEpisodesOrderBy: {
+      get() {
+        return this.$store.getters['user/getUserSetting']('podcastEpisodesOrderBy') || 'publishedAt'
+      },
+      set(val) {
+        this.$store.dispatch('user/updateUserSettings', { podcastEpisodesOrderBy: val })
+      }
+    },
+    podcastEpisodesOrderDesc: {
+      get() {
+        return this.$store.getters['user/getUserSetting']('podcastEpisodesOrderDesc')
+      },
+      set(val) {
+        this.$store.dispatch('user/updateUserSettings', { podcastEpisodesOrderDesc: val })
+      }
+    },
+    podcastEpisodesSortText() {
+      const item = this.$constants.PodcastEpisodeSortItems.find((i) => i.value === this.podcastEpisodesOrderBy)
+      const keyText = item ? this.$strings[item.labelKey] : ''
+      const desc = this.podcastEpisodesOrderDesc
+      const dirText = desc == null ? this.$strings.LabelAuto : desc ? this.$strings.LabelDescending : this.$strings.LabelAscending
+      return `${keyText} · ${dirText}`
+    },
     // This is flipped because alt view was the default until v0.9.61-beta
     enableBookshelfView: {
       get() {
@@ -479,6 +521,9 @@ export default {
       return this.languageOptionItems.find((i) => i.value === this.settings.languageCode)?.text || ''
     },
     themeOption() {
+      // A RICE appearance (Settings → Appearance) is named, not shown as its built-in base
+      const rice = this.$theme.rice && this.$theme.rice.state
+      if (rice && rice.kind !== 'builtin') return rice.label || this.$strings.LabelThemeCustom
       return this.themeOptionItems.find((i) => i.value === this.theme)?.text || ''
     },
     sleepTimerLengthOption() {

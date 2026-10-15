@@ -1176,7 +1176,7 @@ const READOUT_LAYOUT_PROPERTIES = {
   // slider block: its decorative inner element's size, standing out of a channel that no longer clips it (the touch
   // target is the separate hit element, unchanged)
   '#appbar .library-selector p': ['font-family', 'letter-spacing'],
-  '#bookshelf-navbar a.bg-primary p': ['font-family', 'letter-spacing'],
+  '#bookshelf-navbar a p': ['font-family', 'letter-spacing'],
   '#content p.uppercase.text-fg-muted': ['font-family', 'letter-spacing'],
   '.modal .z-40 > p.text-white.truncate': ['font-family', 'letter-spacing'],
   '.modal .queue-panel p.uppercase': ['font-family', 'letter-spacing'],
@@ -2065,7 +2065,7 @@ test('Faithful pass typography: condensed display roles only (face, spacing, fig
   // section labels, the library name, the selected tab's label, dialog titles, Up Next's labels, chapter times and speed
   // and sleep option values
   const typed = Object.entries(rules).filter(([s, d]) => !s.includes('#streamContainer') && Object.keys(d).some((p) => p === 'font-family'))
-  assert.deepEqual(typed.map(([s]) => s.slice(root.length + 1)).sort(), ['#appbar .library-selector p', '#bookshelf-navbar a.bg-primary p', '#content p.uppercase.text-fg-muted', '.modal .chapters-panel .font-mono', '.modal .playback-option-panel li[role=option]', '.modal .queue-panel p.uppercase', '.modal .z-40 > p.text-white.truncate', '.search-section-label', '.shelf-heading', '.toolbar-count'])
+  assert.deepEqual(typed.map(([s]) => s.slice(root.length + 1)).sort(), ['#appbar .library-selector p', '#bookshelf-navbar a p', '#content p.uppercase.text-fg-muted', '.modal .chapters-panel .font-mono', '.modal .playback-option-panel li[role=option]', '.modal .queue-panel p.uppercase', '.modal .z-40 > p.text-white.truncate', '.search-section-label', '.shelf-heading', '.toolbar-count'])
   for (const [, declarations] of typed) {
     assert.equal(declarations['font-family'], 'sans-serif-condensed, sans-serif')
     for (const property of ['font-size', 'font-weight', 'line-height']) assert.equal(declarations[property], undefined, property)
