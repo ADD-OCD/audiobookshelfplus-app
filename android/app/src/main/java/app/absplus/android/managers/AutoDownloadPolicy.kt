@@ -3,11 +3,22 @@ package app.absplus.android.managers
 import app.absplus.android.data.DeviceSettings
 import app.absplus.android.data.DownloadUsingCellularSetting
 import app.absplus.android.data.PodcastAutoDownloadEntry
+import app.absplus.android.services.DownloadServiceHost
 
 /** Pure decisions of podcast auto download, kept apart from Android and network code for tests. */
 object AutoDownloadPolicy {
   /** Automatic attempts per episode; after that only a manual download (or Retry) tries again. */
   const val MAX_AUTO_ATTEMPTS = 3
+
+  enum class EpisodeOutcome { QUEUED, SKIPPED, FAILED }
+
+  // A missing SD card is not a failure: the episode is retried on a later check once the card is back
+  fun outcomeFor(error: String?): EpisodeOutcome =
+          when (error) {
+            null, DownloadServiceHost.SERVICE_START_FAILED_MESSAGE -> EpisodeOutcome.QUEUED
+            LibraryItemDownloadStarter.STORAGE_UNAVAILABLE_MESSAGE -> EpisodeOutcome.SKIPPED
+            else -> EpisodeOutcome.FAILED
+          }
 
   // Auto download has no UI to ask in, so anything but "Always" for cellular means unmetered only
   fun requiresUnmeteredNetwork(settings: DeviceSettings): Boolean =
@@ -83,6 +94,8 @@ object AutoDownloadPolicy {
     val attempts = entry.failedAttempts[episodeId] ?: 0
     return when (queued) {
       DownloadItemManager.QueuedState.PENDING -> WindowAction.SKIP
+      // Its SD card is away: the queued download and its files wait for the card, nothing is retried or re-queued
+      DownloadItemManager.QueuedState.STORAGE_UNAVAILABLE -> WindowAction.SKIP
       DownloadItemManager.QueuedState.FAILED ->
               if (owned && attempts < MAX_AUTO_ATTEMPTS) WindowAction.RETRY else WindowAction.SKIP
       DownloadItemManager.QueuedState.NOT_QUEUED -> when {

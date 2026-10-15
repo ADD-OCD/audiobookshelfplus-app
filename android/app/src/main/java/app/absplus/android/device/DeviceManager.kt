@@ -115,6 +115,18 @@ object DeviceManager {
         }
       }
     }
+    // Download storage added: Paper leaves the missing field null despite its non-null type
+    deviceData.deviceSettings?.let {
+      val normalized = DownloadStorageSetting.normalize(it.downloadStorage)
+      if (normalized != it.downloadStorage) {
+        it.downloadStorage = normalized
+        try {
+          dbManager.saveDeviceData(deviceData)
+        } catch (e: Exception) {
+          Log.e(tag, "Failed to save backfilled download storage setting", e)
+        }
+      }
+    }
   }
 
   /**

@@ -286,7 +286,7 @@ class AutoDownloadSafetyTest {
     val latch = CountDownLatch(1); var result: String? = "TIMEOUT"
     val cb: (String?) -> Unit = { result = it; latch.countDown() }
     if (auto) LibraryItemDownloadStarter.startPodcastEpisodeDownload(context, item, ep, cb)
-    else LibraryItemDownloadStarter.startLibraryItemDownload(context, item, LibraryItemDownloadStarter.getOrCreateLocalFolder("internal-podcast", "podcast")!!, ep, cb)
+    else LibraryItemDownloadStarter.startLibraryItemDownload(context, item, null, ep, cb)
     latch.await(10, TimeUnit.SECONDS)
     return result
   }

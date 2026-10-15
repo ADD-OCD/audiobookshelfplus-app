@@ -3,7 +3,6 @@ package app.absplus.android.managers
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import app.absplus.android.data.LibraryItem
-import app.absplus.android.data.LocalFolder
 import app.absplus.android.data.Podcast
 import app.absplus.android.data.PodcastEpisode
 import app.absplus.android.data.PodcastMetadata
@@ -19,7 +18,6 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class LibraryItemDownloadStarterTest {
   private val context = ApplicationProvider.getApplicationContext<Context>()
-  private val folder = LocalFolder("internal-podcast", "Internal App Storage", "", "", "", "internal", "podcast")
 
   private fun episode(id: String) =
           PodcastEpisode(id, 1, "1", "full", "Episode", null, null, null, 1L, null, null, null, 60.0, 1000L, null, null)
@@ -33,7 +31,7 @@ class LibraryItemDownloadStarterTest {
 
   private fun start(itemId: String, episodeId: String): String? {
     var error: String? = "not called"
-    LibraryItemDownloadStarter.startLibraryItemDownload(context, podcastItem(itemId), folder, episode(episodeId)) { error = it }
+    LibraryItemDownloadStarter.startLibraryItemDownload(context, podcastItem(itemId), "internal-podcast", episode(episodeId)) { error = it }
     return error
   }
 

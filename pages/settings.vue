@@ -178,6 +178,16 @@
         <ui-text-input :value="streamingUsingCellularOption" readonly append-icon="expand_more" style="max-width: 200px" />
       </div>
     </div>
+    <template v-if="isAndroid">
+      <div class="py-3 flex items-center">
+        <p class="pr-4 w-36">{{ $strings.LabelDownloadStorage }}</p>
+        <div @click.stop="showDownloadStorageOptions">
+          <ui-text-input :value="downloadStorageOption" readonly append-icon="expand_more" style="max-width: 200px" />
+        </div>
+      </div>
+      <p v-for="line in downloadStorageView.lines" :key="line" class="text-xs text-fg-muted pb-1">{{ line }}</p>
+      <p v-if="downloadStorageView.sdSelectable || downloadStorageValue === 'sd'" class="text-xs text-fg-muted pb-1">{{ $strings.MessageDownloadStorageHint }}</p>
+    </template>
 
     <!-- Podcast auto download settings -->
     <template v-if="isAndroid">
@@ -279,6 +289,8 @@
 import { Dialog } from '@capacitor/dialog'
 import jumpLabelMixin from '@/mixins/jumpLabel'
 import diagnosticLogMixin from '@/mixins/diagnosticLog'
+import { AbsDatabase } from '@/plugins/capacitor'
+import { storageStatusView } from '@/utils/downloadStorageView'
 
 export default {
   mixins: [jumpLabelMixin, diagnosticLogMixin],
@@ -291,6 +303,9 @@ export default {
       showAutoSleepTimerRewindLengthModal: false,
       showPodcastEpisodesOrderModal: false,
       moreMenuSetting: '',
+      downloadStorageStatus: null,
+      downloadStorageListener: null,
+      settingDownloadStorage: false,
       settings: {
         disableAutoRewind: false,
         enableAltView: true,
@@ -547,6 +562,21 @@ export default {
       const item = this.androidAutoBrowseSeriesSequenceOrderItems.find((i) => i.value === this.settings.androidAutoBrowseSeriesSequenceOrder)
       return item?.text || 'Error'
     },
+    downloadStorageView() {
+      return storageStatusView(this.downloadStorageStatus, this.$strings, this.$bytesPretty)
+    },
+    downloadStorageValue() {
+      return String(this.downloadStorageStatus?.downloadStorage || '').startsWith('sd:') ? 'sd' : 'internal'
+    },
+    downloadStorageItems() {
+      return [
+        { text: this.$strings.LabelDownloadStorageInternal, value: 'internal' },
+        { text: this.downloadStorageView.sdSelectable ? this.$strings.LabelDownloadStorageSdCard : this.$strings.LabelDownloadStorageUnavailable, value: 'sd' }
+      ]
+    },
+    downloadStorageOption() {
+      return this.downloadStorageValue === 'sd' ? this.$strings.LabelDownloadStorageSdCard : this.$strings.LabelDownloadStorageInternal
+    },
     moreMenuItems() {
       if (this.moreMenuSetting === 'shakeSensitivity') return this.shakeSensitivityItems
       else if (this.moreMenuSetting === 'hapticFeedback') return this.hapticFeedbackItems
@@ -554,6 +584,7 @@ export default {
       else if (this.moreMenuSetting === 'theme') return this.themeOptionItems
       else if (this.moreMenuSetting === 'downloadUsingCellular') return this.downloadUsingCellularItems
       else if (this.moreMenuSetting === 'streamingUsingCellular') return this.streamingUsingCellularItems
+      else if (this.moreMenuSetting === 'downloadStorage') return this.downloadStorageItems
       else if (this.moreMenuSetting === 'androidAutoBrowseSeriesSequenceOrder') return this.androidAutoBrowseSeriesSequenceOrderItems
       else if (this.moreMenuSetting === 'diagnosticLevel') return this.diagnosticLevelItems
       else if (this.moreMenuSetting === 'autoDownloadKeepCount') return this.autoDownloadKeepCountItems
@@ -577,6 +608,7 @@ export default {
       if (this.moreMenuSetting === 'theme') return this.theme
       if (this.moreMenuSetting === 'downloadUsingCellular') return this.settings.downloadUsingCellular
       if (this.moreMenuSetting === 'streamingUsingCellular') return this.settings.streamingUsingCellular
+      if (this.moreMenuSetting === 'downloadStorage') return this.downloadStorageValue
       if (this.moreMenuSetting === 'androidAutoBrowseSeriesSequenceOrder') return this.settings.androidAutoBrowseSeriesSequenceOrder
       if (this.moreMenuSetting === 'diagnosticLevel') return this.diagnosticLevel
       if (this.moreMenuSetting === 'shakeSensitivity') return this.settings.shakeSensitivity
@@ -633,6 +665,10 @@ export default {
       this.moreMenuSetting = 'streamingUsingCellular'
       this.showMoreMenuDialog = true
     },
+    showDownloadStorageOptions() {
+      this.moreMenuSetting = 'downloadStorage'
+      this.showMoreMenuDialog = true
+    },
     showAndroidAutoBrowseSeriesSequenceOrderOptions() {
       this.moreMenuSetting = 'androidAutoBrowseSeriesSequenceOrder'
       this.showMoreMenuDialog = true
@@ -669,6 +705,8 @@ export default {
       } else if (this.moreMenuSetting === 'streamingUsingCellular') {
         this.settings.streamingUsingCellular = action
         this.saveSettings()
+      } else if (this.moreMenuSetting === 'downloadStorage') {
+        this.selectDownloadStorage(action)
       } else if (this.moreMenuSetting === 'androidAutoBrowseSeriesSequenceOrder') {
         this.settings.androidAutoBrowseSeriesSequenceOrder = action
         this.saveSettings()
@@ -687,6 +725,54 @@ export default {
         this.settings.jumpBackwardsTime = action
         this.saveSettings()
       }
+    },
+    async selectDownloadStorage(target) {
+      if (this.settingDownloadStorage) return
+      const status = this.downloadStorageStatus
+      if (target === 'internal' && this.downloadStorageValue === 'internal') return
+      // Another card in the slot is a new target even though the setting already says SD
+      if (target === 'sd' && status?.sd?.uuid && status.downloadStorage === `sd:${status.sd.uuid}`) return
+      if (target === 'sd' && !this.downloadStorageView.sdSelectable) {
+        this.$toast.error(this.$strings.LabelDownloadStorageUnavailable)
+        return
+      }
+      this.settingDownloadStorage = true
+      try {
+        const res = await this.$db.setDownloadStorage(target)
+        if (res?.errorCode === 'noSpace') {
+          this.$toast.error(this.$getString('MessageDownloadStorageNoSpace', [this.$bytesPretty(res.requiredBytes), this.$bytesPretty(res.freeBytes)]))
+        } else if (res?.errorCode === 'noSdCard') {
+          this.$toast.error(this.$strings.LabelDownloadStorageUnavailable)
+        } else if (res?.error) {
+          this.$toast.error(res.error)
+        } else {
+          await this.refreshDownloadStorageStatus()
+        }
+      } catch (error) {
+        console.error('[settings] Failed to set download storage', error)
+        this.$toast.error(error?.message || String(error))
+      } finally {
+        this.settingDownloadStorage = false
+      }
+    },
+    async refreshDownloadStorageStatus() {
+      try {
+        this.downloadStorageStatus = await this.$db.getDownloadStorageStatus()
+      } catch (error) {
+        console.error('[settings] Failed to read download storage status', error)
+      }
+    },
+    async initDownloadStorage() {
+      const listener = await AbsDatabase.addListener('onDownloadStorageStatus', (status) => {
+        this.downloadStorageStatus = status
+      })
+      // Left the page before the listener was registered
+      if (this._isDestroyed) {
+        listener?.remove()
+        return
+      }
+      this.downloadStorageListener = listener
+      this.refreshDownloadStorageStatus()
     },
     async saveTheme(theme) {
       this.theme = await this.$theme.select(theme)
@@ -849,6 +935,10 @@ export default {
   mounted() {
     this.init()
     if (!this.isiOS) this.loadDiagnosticState()
+    if (this.isAndroid) this.initDownloadStorage()
+  },
+  beforeDestroy() {
+    this.downloadStorageListener?.remove()
   }
 }
 </script>

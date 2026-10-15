@@ -6,14 +6,18 @@ import android.os.StatFs
 import androidx.documentfile.provider.DocumentFile
 import com.anggrayudi.storage.SimpleStorage
 import com.anggrayudi.storage.file.fullName
+import app.absplus.android.device.AndroidVolumeProbe
+import app.absplus.android.device.AppStorage
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.FolderAccess
 import app.absplus.android.device.FolderScanner
+import app.absplus.android.device.VolumeProbe
 import app.absplus.android.models.DownloadItem
 import app.absplus.android.models.DownloadItemPart
 import app.absplus.android.plugins.AbsLogger
 import app.absplus.android.server.ApiHandler
 import app.absplus.android.server.RefreshResult
+import app.absplus.android.services.StorageMoveService
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.getcapacitor.JSObject
@@ -32,7 +36,8 @@ import kotlinx.coroutines.launch
 class DownloadItemManager(
         private val folderScanner: FolderScanner,
         private val context: Context,
-        private var clientEventEmitter: DownloadEventEmitter
+        private var clientEventEmitter: DownloadEventEmitter,
+        private val volumes: VolumeProbe = AndroidVolumeProbe(context)
 ) {
   private val tag = "DownloadItemManager"
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -42,6 +47,7 @@ class DownloadItemManager(
   private val reservations = mutableMapOf<String, Long>()
   private val lastPersistTime = mutableMapOf<String, Long>()
   private val finalizingItems = mutableSetOf<String>()
+  private val awaitingStorage = mutableSetOf<String>()
   private val refreshingServerIds = mutableSetOf<String>()
   // Lazy: only token refresh needs it, and building it opens the Android keystore
   private val apiHandler by lazy { ApiHandler(context) }
@@ -55,7 +61,7 @@ class DownloadItemManager(
   var currentDownloadItemParts: MutableList<DownloadItemPart> = mutableListOf()
     private set
 
-  enum class QueuedState { NOT_QUEUED, PENDING, FAILED }
+  enum class QueuedState { NOT_QUEUED, PENDING, FAILED, STORAGE_UNAVAILABLE }
 
   /** Auto-owned transfers follow the auto download network/charging settings (tests replace it). */
   var autoGate: AutoTransferGate = AutoTransferGate.forContext(context)
@@ -84,7 +90,11 @@ class DownloadItemManager(
   @Synchronized
   fun queuedState(downloadItemId: String): QueuedState {
     val item = downloadItemQueue.find { it.id == downloadItemId } ?: return QueuedState.NOT_QUEUED
-    return if (item.terminalFailureAt != null) QueuedState.FAILED else QueuedState.PENDING
+    return when {
+      item.terminalFailureAt == null -> QueuedState.PENDING
+      item.downloadItemParts.any { it.storageUnavailable } -> QueuedState.STORAGE_UNAVAILABLE
+      else -> QueuedState.FAILED
+    }
   }
 
   // Ownership stays with the episode on failure; only the failed attempt is counted, so the next check retries an
@@ -138,7 +148,9 @@ class DownloadItemManager(
         clientEventEmitter.onDownloadItem(item)
         return@forEach
       }
-      item.downloadItemParts.filter { it.moved }.forEach { part ->
+      val volumeMissing = storageUnavailable(item)
+      // Files on a missing SD card are not gone, so they must not be reset as missing
+      item.downloadItemParts.filter { it.moved && !volumeMissing }.forEach { part ->
         if (!finalizedFileExists(part)) {
           AbsLogger.error(tag, "Finalized file is missing; resetting ${part.filename}")
           part.moved = false
@@ -147,6 +159,14 @@ class DownloadItemManager(
           part.downloadId = null
           part.reusedExistingFile = false
         }
+      }
+      if (item.isDownloadFinished && volumeMissing) {
+        // Scanning now would find no files and drop the item, orphaning its files on the card
+        awaitingStorage.add(item.id)
+        downloadItemQueue.add(item)
+        clientEventEmitter.onDownloadItem(item)
+        AbsLogger.info(tag, "Download ${item.id} is complete; finalizing waits for the SD card")
+        return@forEach
       }
       if (item.isDownloadFinished) {
         downloadItemQueue.add(item)
@@ -161,11 +181,31 @@ class DownloadItemManager(
         clientEventEmitter.onDownloadItem(item)
         return@forEach
       }
+      if (volumeMissing && item.downloadItemParts.any { !it.moved }) {
+        // Staging on a missing card can't be reset; the card comes back, so keep the auto-download record
+        item.downloadItemParts.filter { !it.moved }.forEach { part ->
+          part.failed = true
+          part.storageUnavailable = true
+          part.permissionLost = false
+          part.failureReason = LibraryItemDownloadStarter.STORAGE_UNAVAILABLE_MESSAGE
+          part.completed = false
+          part.isMoving = false
+          part.downloadId = null
+        }
+        item.terminalFailureAt = item.terminalFailureAt ?: System.currentTimeMillis()
+        item.stagingCleanupAt = null
+        persist(item, force = true)
+        downloadItemQueue.add(item)
+        IncompleteDownloadCleanup.schedule(context, item)
+        clientEventEmitter.onDownloadItem(item)
+        AbsLogger.info(tag, "Download ${item.id} is unfinished; waiting for the SD card")
+        return@forEach
+      }
       var resetFailed = false
       // A terminal failure keeps its reason after a restart (e.g. lost folder access), so the
       // Downloads screen still offers the right recovery instead of a generic failure
       // (by part id: parts are data classes whose hash changes when they are reset)
-      val failures = item.downloadItemParts.associate { it.id to (it.permissionLost to it.failureReason) }
+      val failures = item.downloadItemParts.associate { it.id to RestoredFailure(it.permissionLost, it.storageUnavailable, it.failureReason) }
       item.downloadItemParts.forEach { part ->
         if (part.moved) return@forEach
         if (!resetPartForFreshDownload(part)) resetFailed = true
@@ -179,9 +219,10 @@ class DownloadItemManager(
       if (item.terminalFailureAt != null) {
         item.downloadItemParts.filter { !it.moved }.forEach { part ->
           part.failed = true
-          failures[part.id]?.let { (permissionLost, reason) ->
-            part.permissionLost = permissionLost
-            part.failureReason = reason
+          failures[part.id]?.let { failure ->
+            part.permissionLost = failure.permissionLost
+            part.storageUnavailable = failure.storageUnavailable
+            part.failureReason = failure.reason
           }
         }
       }
@@ -191,6 +232,8 @@ class DownloadItemManager(
     }
     notifyQueueChanged()
   }
+
+  private data class RestoredFailure(val permissionLost: Boolean, val storageUnavailable: Boolean, val reason: String?)
 
   @Synchronized
   fun addDownloadItem(newItem: DownloadItem) {
@@ -247,7 +290,7 @@ class DownloadItemManager(
             } +
             DownloadDestinationGuard.recordedOwners(path, locals)
     // App storage only: a device-folder path is not a readable File (its finalization guard handles existing files)
-    val onDisk = part.isInternalStorage && File(path).exists()
+    val onDisk = part.isAppStorage && File(path).exists()
     val verdict = DownloadDestinationGuard.verdict(owner, others, onDisk)
     // An existing cover of the same podcast or book is reused as before
     return verdict == DownloadDestinationGuard.Verdict.OTHER_OWNER ||
@@ -294,6 +337,10 @@ class DownloadItemManager(
   @Synchronized
   fun retryDownloadItem(downloadItemId: String): Boolean {
     val item = downloadItemQueue.find { it.id == downloadItemId } ?: return false
+    if (DownloadControls.storageUnavailable(item) { storageUnavailable(item) }) {
+      AbsLogger.info(tag, "Retry of ${item.id} refused: SD card not available")
+      return false
+    }
     if (!DownloadControls.canRetry(item) { it in currentDownloadItemParts }) return false
     if (item.downloadItemParts.any { !it.moved && downloadToken(it, item) == null }) {
       holdForDownloadAuthorization(item)
@@ -327,9 +374,21 @@ class DownloadItemManager(
   }
 
   @Synchronized
+  fun isStorageUnavailable(downloadItemId: String): Boolean {
+    val item = downloadItemQueue.find { it.id == downloadItemId } ?: return false
+    return DownloadControls.storageUnavailable(item) { storageUnavailable(item) }
+  }
+
+  @Synchronized
   fun resumeWork() {
     checkUpdateDownloadQueue()
     notifyQueueChanged()
+  }
+
+  /** Finalizes downloads that waited for their SD card, which nothing else wakes when no other download runs. */
+  @Synchronized
+  fun resumeAwaitingStorage() {
+    if (awaitingStorage.isNotEmpty()) resumeWork()
   }
 
   enum class RemoveResult { REMOVED, NOT_FOUND, FINISHING, MOVING }
@@ -353,22 +412,28 @@ class DownloadItemManager(
       reservations.remove(part.destinationPath)
     }
     val plan = DownloadControls.removalPlan(item, ::isUsedByLocalItem)
+    val appRoots = AppStorage.appOwnedRoots(volumes)
     var deleted = 0
-    plan.delete.forEach { path ->
+    // Paths on a card that is out or is not the registered card are not this download's files to delete
+    val cardUnverified = item.localFolder.id.startsWith(AppStorage.APPSD_PREFIX) && !AppStorage.isVerified(item.localFolder.id, volumes)
+    if (cardUnverified) AbsLogger.info(tag, "Removing ${item.id} without deleting its files: its SD card is not available")
+    plan.delete.filter { !cardUnverified }.forEach { path ->
       val file = File(path)
       if (file.exists()) {
         if (file.delete()) deleted++ else AbsLogger.error(tag, "Could not delete ${file.name} of removed download ${item.id}")
       }
       // Its now-empty item folder in app storage goes too (never a folder outside the app's own files)
-      file.parentFile?.takeIf {
-        it.path.startsWith(context.filesDir.path) && it != context.filesDir && it.list()?.isEmpty() == true
+      file.parentFile?.takeIf { dir ->
+        appRoots.any { AppStorage.isUnder(dir, it) } &&
+                appRoots.none { it.absoluteFile == dir.absoluteFile } &&
+                dir.list()?.isEmpty() == true
       }?.delete()
     }
     IncompleteDownloadCleanup.cancel(context, item.id)
     downloadItemQueue.remove(item)
     lastPersistTime.remove(item.id)
     DeviceManager.dbManager.removeDownloadItem(item.id)
-    val state = if (item.downloadItemParts.any { it.permissionLost }) "folder access lost" else if (item.terminalFailureAt != null) "failed" else "in progress"
+    val state = if (item.downloadItemParts.any { it.permissionLost }) "folder access lost" else if (item.downloadItemParts.any { it.storageUnavailable }) "SD card not available" else if (item.terminalFailureAt != null) "failed" else "in progress"
     AbsLogger.info(
             tag,
             "$action download ${item.id} \"${item.itemTitle}\" (folder ${item.localFolder.name}, was $state): deleted $deleted app-owned file(s), kept ${plan.keptFinishedFiles.size} finished file(s) in the destination"
@@ -389,7 +454,11 @@ class DownloadItemManager(
    * Local Folders permission check).
    */
   private fun hasFolderAccess(item: DownloadItem): Boolean =
-          item.isInternalStorage || FolderAccess.canWrite(context, item.localFolder)
+          FolderAccess.canWrite(context, item.localFolder, volumes)
+
+  /** The item's SD card is not mounted and writable; internal storage is always available. */
+  private fun storageUnavailable(item: DownloadItem): Boolean =
+          item.isAppStorage && !AppStorage.isAvailable(item.localFolder, volumes)
 
   /** Whether a saved local item already uses this part's finished file. */
   private fun isUsedByLocalItem(part: DownloadItemPart): Boolean =
@@ -418,6 +487,14 @@ class DownloadItemManager(
     val allowed by lazy { autoGate.allowedNow() }
     // Manual downloads first: auto-owned items never hold up something the user asked for
     downloadItemQueue.toList().sortedBy { autoGate.isAuto(it) }.forEach { item ->
+      // Picks up a finalization that waited for the SD card to come back
+      if (item.id in awaitingStorage) {
+        if (!storageUnavailable(item)) {
+          awaitingStorage.remove(item.id)
+          checkDownloadItemFinished(item)
+        }
+        return@forEach
+      }
       var slots = MAX_SIMULTANEOUS_DOWNLOADS - currentDownloadItemParts.size
       if (slots <= 0) return@forEach
       item.downloadItemParts
@@ -456,8 +533,8 @@ class DownloadItemManager(
           return@forEach
         }
         if (completeFromExistingInternalCover(item, part)) return@forEach
-        if (!part.isInternalStorage && !hasFolderAccess(item)) {
-          failPermissionLost(item, part)
+        if (!hasFolderAccess(item)) {
+          if (item.isAppStorage) failStorageUnavailable(item, part) else failPermissionLost(item, part)
           return@forEach
         }
         if (hasActiveDestinationConflict(part)) {
@@ -623,7 +700,7 @@ class DownloadItemManager(
       failOrRetry(item, part, "Downloaded file is empty")
       return
     }
-    if (part.isInternalStorage) finalizeInternalFile(item, part) else moveDownloadedFile(item, part)
+    if (part.isAppStorage) finalizeInternalFile(item, part) else moveDownloadedFile(item, part)
   }
 
   @Synchronized
@@ -724,8 +801,16 @@ class DownloadItemManager(
     )
   }
 
+  // The card will come back with the files intact: automatic retries can't succeed meanwhile, and the
+  // episode must not be auto-downloaded again
+  private fun failStorageUnavailable(item: DownloadItem, part: DownloadItemPart) {
+    part.isMoving = false
+    part.storageUnavailable = true
+    markTerminalFailure(item, part, LibraryItemDownloadStarter.STORAGE_UNAVAILABLE_MESSAGE, countsAsAutoFailure = false)
+  }
+
   @Synchronized
-  private fun markTerminalFailure(item: DownloadItem, part: DownloadItemPart, reason: String) {
+  private fun markTerminalFailure(item: DownloadItem, part: DownloadItemPart, reason: String, countsAsAutoFailure: Boolean = true) {
     AbsLogger.error(tag, "$reason: ${part.filename}")
     removeActivePart(part)
     reservations.remove(part.destinationPath)
@@ -737,7 +822,8 @@ class DownloadItemManager(
     item.terminalFailureAt = item.terminalFailureAt ?: System.currentTimeMillis()
     item.stagingCleanupAt = null
     persist(item, force = true)
-    recordAutoOutcome(item, failed = true)
+    // A missing SD card is no failed attempt: the download waits for the card and keeps its auto ownership
+    if (countsAsAutoFailure) recordAutoOutcome(item, failed = true)
     IncompleteDownloadCleanup.schedule(context, item)
     clientEventEmitter.onDownloadItemPartUpdate(part)
     notifyQueueChanged()
@@ -747,6 +833,10 @@ class DownloadItemManager(
   @Synchronized
   private fun finalizeInternalFile(item: DownloadItem, part: DownloadItemPart) {
     if (part.moved || part.isMoving) return
+    if (storageUnavailable(item)) {
+      failStorageUnavailable(item, part)
+      return
+    }
     part.isMoving = true
     val stagingFile = File(part.destinationPath)
     val finalFile = File(part.finalDestinationPath)
@@ -905,10 +995,17 @@ class DownloadItemManager(
     if (!item.isDownloadFinished || !finalizingItems.add(item.id)) return
     IncompleteDownloadCleanup.cancel(context, item.id)
     scope.launch {
+      var waitForCard = false
       try {
         val scanLock = scanLocks.computeIfAbsent(scanDestinationKey(item)) { Any() }
         synchronized(scanLock) {
-          folderScanner.scanDownloadItem(item) { scanResult ->
+          var incomplete = false
+          folderScanner.scanDownloadItem(item, onIncomplete = { incomplete = true }) { scanResult ->
+            if (DownloadFinalizationPolicy.waitInsteadOfDropping(scanResult?.localLibraryItem != null, storageUnavailable(item), incomplete)) {
+              waitForCard = true
+              AbsLogger.info(tag, "Download ${item.id} is complete; finalizing waits for the SD card")
+              return@scanDownloadItem
+            }
             val event =
                     JSObject().apply {
                       put("libraryItemId", item.id)
@@ -926,6 +1023,7 @@ class DownloadItemManager(
               downloadItemQueue.remove(item)
               DeviceManager.dbManager.removeDownloadItem(item.id)
             }
+            StorageMoveService.requestReconcile(context)
           }
         }
       } catch (e: Exception) {
@@ -934,6 +1032,8 @@ class DownloadItemManager(
       } finally {
         synchronized(this@DownloadItemManager) {
           finalizingItems.remove(item.id)
+          // Together with leaving finalizingItems: a queue check in between would drop the wait and find it still finalizing
+          if (waitForCard) awaitingStorage.add(item.id)
           notifyQueueChanged()
         }
       }
@@ -946,11 +1046,11 @@ class DownloadItemManager(
     val expectedSize = if (part.fileSize > 0L) part.fileSize else UNKNOWN_PART_RESERVATION_BYTES
     val remaining =
             (expectedSize - (staging.takeIf(File::exists)?.length() ?: 0L)).coerceAtLeast(0L)
-    val required = if (part.isInternalStorage) remaining else remaining + expectedSize
-    val key = storageKey(staging)
+    val required = if (part.isAppStorage) remaining else remaining + expectedSize
+    val key = AppStorage.storageKey(staging, volumes)
     val fs = statFsFor(staging)
     val headroom = max(MIN_FREE_SPACE_BYTES, fs.totalBytes / 20L)
-    val alreadyReserved = reservations.filterKeys { storageKey(File(it)) == key }.values.sum()
+    val alreadyReserved = reservations.filterKeys { AppStorage.storageKey(File(it), volumes) == key }.values.sum()
     if (fs.availableBytes - alreadyReserved < required + headroom) return false
     reservations[part.destinationPath] = required
     return true
@@ -968,10 +1068,6 @@ class DownloadItemManager(
     while (!directory.exists()) directory = directory.parentFile ?: context.filesDir
     return StatFs(directory.absolutePath)
   }
-
-  private fun storageKey(file: File): String =
-          if (file.absolutePath.startsWith(context.filesDir.absolutePath)) "internal"
-          else "external"
 
   @Synchronized
   private fun removeActivePart(part: DownloadItemPart) {
@@ -1006,7 +1102,7 @@ class DownloadItemManager(
   }
 
   private fun findSharedStorageFile(part: DownloadItemPart): DocumentFile? {
-    if (part.isInternalStorage) return null
+    if (part.isAppStorage) return null
     val root = DocumentFile.fromTreeUri(context, Uri.parse(part.localFolderUrl)) ?: return null
     var folder = root
     part.finalDestinationSubfolder.split('/').filter { it.isNotBlank() }.forEach { segment ->
@@ -1024,7 +1120,7 @@ class DownloadItemManager(
           item: DownloadItem,
           part: DownloadItemPart
   ): Boolean {
-    if (!part.isInternalStorage || !part.serverPath.endsWith("/cover")) return false
+    if (!part.isAppStorage || !part.serverPath.endsWith("/cover")) return false
     val file = File(part.finalDestinationPath)
     if (!file.isFile || file.length() <= 0L) return false
     if (part.fileSize > 0L && file.length() != part.fileSize) return false
@@ -1057,7 +1153,7 @@ class DownloadItemManager(
           "${item.localFolder.id}:${item.itemFolderPath}"
 
   private fun finalizedFileExists(part: DownloadItemPart): Boolean {
-    if (part.isInternalStorage) {
+    if (part.isAppStorage) {
       val file = File(part.finalDestinationPath)
       return file.isFile &&
               if (part.fileSize > 0L) file.length() == part.fileSize else file.length() > 0L
@@ -1095,6 +1191,7 @@ class DownloadItemManager(
     // Clear any terminal-failure state from a prior attempt (e.g. a lost SAF permission the
     // user has since fixed) so a stale reason/flag doesn't linger and mislead the Downloads UI.
     part.permissionLost = false
+    part.storageUnavailable = false
     part.failureReason = null
     return true
   }
@@ -1138,4 +1235,14 @@ class DownloadItemManager(
     const val MIN_FREE_SPACE_BYTES = 100L * 1024L * 1024L
     const val UNKNOWN_PART_RESERVATION_BYTES = 100L * 1024L * 1024L
   }
+}
+
+object DownloadFinalizationPolicy {
+  /**
+   * A finished download whose scan saved nothing stays queued instead of being dropped when its SD card went away, or
+   * when the scan refused to save a partial item because some files could not be read (FolderScanner.scanParts is all
+   * or nothing on removable storage). Its files are not gone, and dropping it would orphan them (H02).
+   */
+  fun waitInsteadOfDropping(saved: Boolean, storageUnavailable: Boolean, incomplete: Boolean): Boolean =
+          !saved && (storageUnavailable || incomplete)
 }

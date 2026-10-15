@@ -80,7 +80,9 @@ class AbsDownloader : Plugin() {
             call.getString("downloadingFile") ?: "Downloading {0}",
             call.getString("waitingForStorage") ?: "Waiting for available storage",
             call.getString("downloads") ?: "Downloads",
-            call.getString("cancel") ?: "Cancel")
+            call.getString("cancel") ?: "Cancel",
+            call.getString("moveToSd") ?: DownloadServiceHost.DEFAULT_MOVE_TO_SD,
+            call.getString("moveToInternal") ?: DownloadServiceHost.DEFAULT_MOVE_TO_INTERNAL)
     call.resolve()
   }
 
@@ -106,6 +108,7 @@ class AbsDownloader : Plugin() {
                 DownloadServiceHost.ExistingDownloadResult.NOT_FOUND -> "notFound"
                 DownloadServiceHost.ExistingDownloadResult.ACTIVE -> "active"
                 DownloadServiceHost.ExistingDownloadResult.FOLDER_ACCESS -> "folderAccess"
+                DownloadServiceHost.ExistingDownloadResult.STORAGE_UNAVAILABLE -> "storageUnavailable"
                 DownloadServiceHost.ExistingDownloadResult.SERVICE_START_FAILED -> "service"
               }
       call.resolve(if (errorCode == null) JSObject() else JSObject().put("errorCode", errorCode))
@@ -154,7 +157,7 @@ class AbsDownloader : Plugin() {
       resolveDownloadCall(call, "Invalid download identifier")
       return
     }
-    var localFolderId = call.data.getString("localFolderId", "").toString()
+    val localFolderId = call.data.getString("localFolderId", "").toString()
     AbsLogger.info(tag, "Requested download for item $libraryItemId${if (episodeId.isEmpty()) "" else " / episode $episodeId"}")
     // A request from the user makes the episode the user's own, also when auto download already queued or started
     // it: automatic retention never removes it and the auto download network rules no longer hold it back
@@ -179,6 +182,8 @@ class AbsDownloader : Plugin() {
                 call.resolve(JSObject().put("error", DownloadServiceHost.SERVICE_START_FAILED_MESSAGE))
         DownloadServiceHost.ExistingDownloadResult.FOLDER_ACCESS ->
                 call.resolve(JSObject().put("error", "Folder access lost: re-select the download folder to retry").put("errorCode", "folderAccess"))
+        DownloadServiceHost.ExistingDownloadResult.STORAGE_UNAVAILABLE ->
+                call.resolve(JSObject().put("error", LibraryItemDownloadStarter.STORAGE_UNAVAILABLE_MESSAGE).put("errorCode", "storageUnavailable"))
         DownloadServiceHost.ExistingDownloadResult.NOT_FOUND -> {
           apiHandler.getLibraryItemWithProgress(libraryItemId, episodeId) { libraryItem ->
             if (libraryItem == null) {
@@ -189,12 +194,8 @@ class AbsDownloader : Plugin() {
             } else {
               AbsLogger.info(tag, "Preparing download for ${libraryItem.id}")
 
-              if (localFolderId == "") localFolderId = "internal-${libraryItem.mediaType}"
-              val localFolder = LibraryItemDownloadStarter.getOrCreateLocalFolder(localFolderId, libraryItem.mediaType)
-
-              if (localFolder == null) {
-                call.resolve(JSObject("{\"error\":\"Local Folder Not Found\"}"))
-              } else if (episodeId.isNotEmpty() && libraryItem.mediaType != "podcast") {
+              val explicitFolderId = localFolderId.takeUnless { it.isEmpty() || it == "null" }
+              if (episodeId.isNotEmpty() && libraryItem.mediaType != "podcast") {
                 call.resolve(JSObject("{\"error\":\"Invalid library item not a podcast\"}"))
               } else if (episodeId.isNotEmpty()) {
                 val podcast = libraryItem.media as Podcast
@@ -202,10 +203,10 @@ class AbsDownloader : Plugin() {
                 if (episode == null) {
                   call.resolve(JSObject("{\"error\":\"Invalid podcast episode not found\"}"))
                 } else {
-                  LibraryItemDownloadStarter.startLibraryItemDownload(mainActivity, libraryItem, localFolder, episode) { error -> resolveDownloadCall(call, error) }
+                  LibraryItemDownloadStarter.startLibraryItemDownload(mainActivity, libraryItem, explicitFolderId, episode) { error -> resolveDownloadCall(call, error) }
                 }
               } else {
-                LibraryItemDownloadStarter.startLibraryItemDownload(mainActivity, libraryItem, localFolder, null) { error -> resolveDownloadCall(call, error) }
+                LibraryItemDownloadStarter.startLibraryItemDownload(mainActivity, libraryItem, explicitFolderId, null) { error -> resolveDownloadCall(call, error) }
               }
             }
           }
