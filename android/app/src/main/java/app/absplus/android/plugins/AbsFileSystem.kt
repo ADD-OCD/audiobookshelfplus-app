@@ -23,6 +23,7 @@ import app.absplus.android.device.RescanOutcome
 import app.absplus.android.device.RescanPhase
 import app.absplus.android.device.RescanProgress
 import app.absplus.android.device.loadRescanCatalog
+import app.absplus.android.managers.LocalTrackDeletion
 import app.absplus.android.server.ApiHandler
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -416,15 +417,21 @@ class AbsFileSystem : Plugin() {
       return call.resolve(JSObject("{\"success\":false}"))
     }
 
-    val docfile = DocumentFileCompat.fromUri(mainActivity, Uri.parse(contentUrl))
-    val success = docfile?.delete() == true
-    if (success) {
-      localLibraryItem.media.removeAudioTrack(trackLocalFileId)
-      localLibraryItem.removeLocalFile(trackLocalFileId)
-      DeviceManager.dbManager.saveLocalLibraryItem(localLibraryItem)
-      call.resolve(JSObject(jacksonMapper.writeValueAsString(localLibraryItem)))
-    } else {
-      call.resolve(JSObject("{\"success\":false}"))
+    // Optional: which local episode the user is removing (a file shared by two episodes then keeps its audio, R29-N02)
+    val localEpisodeId = call.data.getString("localEpisodeId")
+    val outcome = LocalTrackDeletion.delete(localLibraryItem, trackLocalFileId, localEpisodeId) {
+      DocumentFileCompat.fromUri(mainActivity, Uri.parse(contentUrl))?.delete() == true
+    }
+    when (outcome) {
+      LocalTrackDeletion.Outcome.DELETED, LocalTrackDeletion.Outcome.RECORD_ONLY -> {
+        DeviceManager.dbManager.saveLocalLibraryItem(localLibraryItem)
+        call.resolve(JSObject(jacksonMapper.writeValueAsString(localLibraryItem)))
+      }
+      LocalTrackDeletion.Outcome.REFUSED_SHARED -> {
+        Log.e(tag, "deleteTrackFromItem: file is shared with another episode; nothing deleted")
+        call.resolve(JSObject("{\"success\":false,\"reason\":\"shared\"}"))
+      }
+      LocalTrackDeletion.Outcome.FILE_NOT_DELETED -> call.resolve(JSObject("{\"success\":false}"))
     }
   }
 

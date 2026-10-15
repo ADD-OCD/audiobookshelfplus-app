@@ -199,10 +199,85 @@ class DownloadItemManager(
       return
     }
     val downloadItem = newItem.withoutPodcastEpisodes()
+    assignOwnDestinations(downloadItem)
     persist(downloadItem, force = true)
     downloadItemQueue.add(downloadItem)
     clientEventEmitter.onDownloadItem(downloadItem)
     notifyQueueChanged()
+  }
+
+  /**
+   * R29-N02 admission: a part whose destination belongs to another download (another episode, file, item or server,
+   * on record or already queued, or an unaccounted file on disk) gets a stable owner-specific name instead, so nothing
+   * downloaded later can replace it. A recorded episode keeps the name its earlier copy uses (re-download / retry).
+   * Called under the queue lock, so concurrent admissions see each other.
+   */
+  private fun assignOwnDestinations(item: DownloadItem) {
+    val locals = DeviceManager.dbManager.getLocalLibraryItems()
+    val claimed = mutableListOf<Pair<String, DownloadDestinationGuard.Owner>>()
+    val parts = item.downloadItemParts.map { part ->
+      val owner = DownloadDestinationGuard.ownerOf(item, part)
+      val finalFile = File(part.finalDestinationPath)
+      val existingName = DownloadDestinationGuard.recordedEpisodeFile(owner, finalFile.parent ?: "", locals)
+      var chosen = if (existingName != null && existingName != part.filename) withFilename(item, part, existingName) else part
+      if (existingName == null && admissionConflict(item, chosen, owner, locals, claimed)) {
+        val alternate = withFilename(item, part, DownloadDestinationGuard.alternateFilename(part.filename, owner))
+        AbsLogger.info(tag, "Destination of ${part.filename} belongs to another download; using ${alternate.filename}")
+        chosen = alternate
+      }
+      claimed += DownloadDestinationGuard.canonical(chosen.finalDestinationPath) to owner
+      chosen
+    }
+    item.downloadItemParts.clear()
+    item.downloadItemParts.addAll(parts)
+  }
+
+  private fun admissionConflict(
+          item: DownloadItem,
+          part: DownloadItemPart,
+          owner: DownloadDestinationGuard.Owner,
+          locals: List<app.absplus.android.data.LocalLibraryItem>,
+          claimed: List<Pair<String, DownloadDestinationGuard.Owner>>
+  ): Boolean {
+    val path = DownloadDestinationGuard.canonical(part.finalDestinationPath)
+    val others = claimed.filter { it.first == path }.map { it.second } +
+            downloadItemQueue.filter { it.id != item.id }.flatMap { queued ->
+              queued.downloadItemParts.filter { DownloadDestinationGuard.canonical(it.finalDestinationPath) == path }
+                      .map { DownloadDestinationGuard.ownerOf(queued, it) }
+            } +
+            DownloadDestinationGuard.recordedOwners(path, locals)
+    // App storage only: a device-folder path is not a readable File (its finalization guard handles existing files)
+    val onDisk = part.isInternalStorage && File(path).exists()
+    val verdict = DownloadDestinationGuard.verdict(owner, others, onDisk)
+    // An existing cover of the same podcast or book is reused as before
+    return verdict == DownloadDestinationGuard.Verdict.OTHER_OWNER ||
+            (verdict == DownloadDestinationGuard.Verdict.UNKNOWN_FILE && owner.resource != "cover")
+  }
+
+  private fun withFilename(item: DownloadItem, part: DownloadItemPart, filename: String): DownloadItemPart =
+          DownloadItemPart.make(
+                  item.id,
+                  filename,
+                  part.fileSize,
+                  File(File(part.destinationPath).parentFile, "$filename.part"),
+                  File(File(part.finalDestinationPath).parentFile, filename),
+                  part.finalDestinationSubfolder,
+                  part.serverPath,
+                  item.localFolder,
+                  part.ebookFile,
+                  part.audioTrack,
+                  part.episode
+          )
+
+  /** Owners of [path] other than [part]: local records, and queued parts already placed there but not yet registered. */
+  private fun finalizationOwners(item: DownloadItem, part: DownloadItemPart, path: String): List<DownloadDestinationGuard.Owner> {
+    val target = DownloadDestinationGuard.canonical(path)
+    return DownloadDestinationGuard.recordedOwners(target, DeviceManager.dbManager.getLocalLibraryItems()).toList() +
+            downloadItemQueue.flatMap { queued ->
+              queued.downloadItemParts.filter {
+                it !== part && (it.moved || it.isMoving) && DownloadDestinationGuard.canonical(it.finalDestinationPath) == target
+              }.map { DownloadDestinationGuard.ownerOf(queued, it) }
+            }
   }
 
   /** The queued item with this id. Under the queue's lock: download threads add and remove items concurrently. */
@@ -365,7 +440,11 @@ class DownloadItemManager(
       // Staged parts above may finish (no network); new transfers of a blocked auto item wait, untouched
       if (!allowed && autoGate.isAuto(item)) return@forEach
       item.getNextDownloadItemParts(slots).forEach { part ->
-        val existingFile = findSharedStorageFile(part)
+        // A same-named file in the device folder is only reused when no other download owns it (R29-N02)
+        val existingFile = findSharedStorageFile(part)?.takeIf {
+          finalizationOwners(item, part, part.finalDestinationPath)
+                  .all { other -> DownloadDestinationGuard.sameOwner(DownloadDestinationGuard.ownerOf(item, part), other) }
+        }
         if (existingFile != null) {
           part.bytesDownloaded = existingFile.length()
           part.progress = 100L
@@ -664,6 +743,8 @@ class DownloadItemManager(
     notifyQueueChanged()
   }
 
+  // Under the queue lock: the ownership decision and the renames are one step for every finalization (R29-N02)
+  @Synchronized
   private fun finalizeInternalFile(item: DownloadItem, part: DownloadItemPart) {
     if (part.moved || part.isMoving) return
     part.isMoving = true
@@ -672,7 +753,33 @@ class DownloadItemManager(
     finalFile.parentFile?.mkdirs()
     val backup = File(finalFile.parentFile, ".${finalFile.name}.abs-backup")
     try {
-      if (backup.exists() && !backup.delete()) throw IllegalStateException("Could not clear backup")
+      // A backup left by an interrupted finalization may be the only copy: restore it, or keep it aside, never delete it
+      if (backup.exists()) {
+        if (!finalFile.exists()) {
+          if (!backup.renameTo(finalFile)) {
+            markTerminalFailure(item, part, "Could not restore the previous copy of this download location")
+            return
+          }
+          AbsLogger.info(tag, "Restored the previous copy of ${part.filename} left by an interrupted finalization")
+        } else if (!DownloadDestinationGuard.preserve(backup)) {
+          markTerminalFailure(item, part, "Could not set aside an earlier backup of this download location")
+          return
+        }
+      }
+      val owner = DownloadDestinationGuard.ownerOf(item, part)
+      when (DownloadDestinationGuard.verdict(owner, finalizationOwners(item, part, finalFile.path), finalFile.exists())) {
+        DownloadDestinationGuard.Verdict.OTHER_OWNER -> {
+          markTerminalFailure(item, part, "Download location is used by another download; nothing was replaced")
+          return
+        }
+        // Unaccounted bytes (e.g. a crash before registration) are kept aside, never deleted
+        DownloadDestinationGuard.Verdict.UNKNOWN_FILE ->
+                if (!DownloadDestinationGuard.preserve(finalFile)) {
+                  markTerminalFailure(item, part, "Could not set aside an unrecognized file at the download location")
+                  return
+                }
+        else -> {}
+      }
       if (finalFile.exists() && !finalFile.renameTo(backup))
               throw IllegalStateException("Could not protect existing file")
       if (!stagingFile.renameTo(finalFile)) {
@@ -721,14 +828,46 @@ class DownloadItemManager(
         }
         if (temporary.length() != staging.length())
                 throw IllegalStateException("SAF copy size mismatch")
-        val existing = findDocumentByFilename(folder, part)
-        if (existing != null && !existing.delete())
-                throw IllegalStateException("Could not replace existing file")
-        if (!temporary.renameTo(part.filename))
-                throw IllegalStateException("Could not finalize SAF temporary file")
-        val destination =
-                findDocumentByFilename(folder, part)
-                        ?: throw IllegalStateException("Could not reopen finalized SAF file")
+        // R29-N02: the ownership decision, the replacement and the rename are one step per destination folder
+        val destination = synchronized(folderLock) {
+          val backupName = ".${part.filename}.abs-backup"
+          // A backup left by an interrupted finalization may be the only copy: restore it, or keep it aside
+          folder.findFile(backupName)?.let { left ->
+            if (findDocumentByFilename(folder, part) == null) {
+              if (!left.renameTo(part.filename))
+                      throw IllegalStateException("Could not restore the previous copy of this download location")
+            } else if (!left.renameTo(".${part.filename}.abs-preserved-${System.currentTimeMillis()}"))
+                    throw IllegalStateException("Could not set aside an earlier backup of this download location")
+          }
+          val existing = findDocumentByFilename(folder, part)
+          val owner = DownloadDestinationGuard.ownerOf(item, part)
+          val others = synchronized(this@DownloadItemManager) { finalizationOwners(item, part, part.finalDestinationPath) }
+          val verdict = DownloadDestinationGuard.verdict(owner, others, existing != null)
+          // Another download's file, or a file in the user's folder nobody accounts for: never delete it
+          if (verdict == DownloadDestinationGuard.Verdict.OTHER_OWNER || verdict == DownloadDestinationGuard.Verdict.UNKNOWN_FILE) {
+            temporary.delete()
+            null
+          } else {
+            // The same owner's previous copy is kept as a backup until the new file is in place
+            if (existing != null && !existing.renameTo(backupName))
+                    throw IllegalStateException("Could not protect existing file")
+            if (!temporary.renameTo(part.filename)) {
+              if (existing != null && !existing.renameTo(part.filename))
+                      AbsLogger.error(tag, "Could not restore ${part.filename}; the previous copy is kept as $backupName")
+              throw IllegalStateException("Could not finalize SAF temporary file")
+            }
+            val finalized = findDocumentByFilename(folder, part)
+                    ?: throw IllegalStateException("Could not reopen finalized SAF file")
+            if (existing != null && !existing.delete()) AbsLogger.error(tag, "Could not remove the previous copy $backupName")
+            finalized
+          }
+        }
+        if (destination == null) {
+          synchronized(this@DownloadItemManager) {
+            markTerminalFailure(item, part, "Download location is used by another file; nothing was replaced")
+          }
+          return@launch
+        }
         if (destination.length() != staging.length())
                 throw IllegalStateException("SAF final size mismatch")
         if (!staging.delete()) AbsLogger.error(tag, "Could not remove staging file ${staging.name}")

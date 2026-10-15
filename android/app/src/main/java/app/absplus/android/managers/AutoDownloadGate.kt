@@ -97,6 +97,11 @@ object AutoDownloadRetention {
               var changed = false
               episodes.filter { it.serverEpisodeId in remove }.forEach { ep ->
                 val localFileId = ep.audioTrack?.localFileId ?: return@forEach
+                // Records written before R29-N02 can point two episodes at one file: removing it would take the other one too
+                if (episodes.any { it !== ep && it.audioTrack?.localFileId == localFileId }) {
+                  AbsLogger.error(TAG, "Not removing ${ep.serverEpisodeId}: its file is shared with another episode")
+                  return@forEach
+                }
                 val localFile = local.localFiles.find { it.id == localFileId }
                 val file = localFile?.absolutePath?.let { File(it).canonicalFile }
                 // Only files inside the app's own downloads folder; anything else stays untouched
