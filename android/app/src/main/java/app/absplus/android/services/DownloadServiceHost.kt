@@ -1,6 +1,9 @@
 package app.absplus.android.services
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import androidx.core.content.ContextCompat
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.FolderScanner
@@ -47,6 +50,7 @@ object DownloadServiceHost {
       val appContext = context.applicationContext
       DbManager.initialize(appContext)
       manager = DownloadItemManager(FolderScanner(appContext), appContext, ForwardingEmitter)
+      watchNetwork(appContext)
       restoreJob = scope.launch {
         try {
           if (DeviceManager.dbManager.ensureValidDownloadQueue()) {
@@ -79,6 +83,24 @@ object DownloadServiceHost {
     }
     completions.forEach(bridgeEmitter::onDownloadItemComplete)
     startServiceIfIdle(context)
+  }
+
+  /**
+   * Auto-owned transfers paused for being offline or on a metered network resume as soon as the network allows them
+   * (startServiceIfIdle only starts the service when the queue has work that may run now). Process-wide, registered
+   * once; from the background Android may refuse the service start, then the next worker run or app start resumes.
+   */
+  private fun watchNetwork(appContext: Context) {
+    if (networkWatched) return
+    networkWatched = true
+    try {
+      val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+      cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = startServiceIfIdle(appContext)
+      })
+    } catch (e: RuntimeException) {
+      AbsLogger.error(TAG, "Could not watch the network for paused auto downloads: ${e.message}")
+    }
   }
 
   /** Starts the service for queued work restored or enqueued while the app was in background (e.g. by a worker). */
@@ -291,4 +313,5 @@ object DownloadServiceHost {
   private const val DEFAULT_CANCEL = "Cancel"
   private const val TAG = "DownloadServiceHost"
   private const val WORKER_POLL_MS = 5_000L
+  @Volatile private var networkWatched = false
 }
