@@ -16,6 +16,8 @@ import app.absplus.android.data.LocalFolder
 import app.absplus.android.data.LocalLibraryItem
 import app.absplus.android.device.AndroidVolumeProbe
 import app.absplus.android.device.AppStorage
+import app.absplus.android.device.AndroidStorageIo
+import app.absplus.android.device.NodeKind
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.FolderAccess
 import app.absplus.android.device.FolderScanner
@@ -25,6 +27,7 @@ import app.absplus.android.device.RescanOutcome
 import app.absplus.android.device.RescanPhase
 import app.absplus.android.device.RescanProgress
 import app.absplus.android.device.loadRescanCatalog
+import app.absplus.android.managers.AppStorageItemDeletion
 import app.absplus.android.managers.ItemUpdate
 import app.absplus.android.managers.LocalItemLocks
 import app.absplus.android.managers.LocalTrackDeletion
@@ -353,6 +356,7 @@ class AbsFileSystem : Plugin() {
     Log.d(tag, "deleteItem $localLibraryItemId")
 
     // Paths come from the database under the item lock: what the page sent may predate a move to another storage
+    var storageUnavailable = false
     val success =
             LocalItemLocks.withItem(localLibraryItemId) {
               val localLibraryItem = DeviceManager.dbManager.getLocalLibraryItem(localLibraryItemId)
@@ -363,38 +367,37 @@ class AbsFileSystem : Plugin() {
               }
               val deleted =
                       try {
-                        deleteItemFiles(localLibraryItem)
+                        if (AppStorage.isAppStorage(localLibraryItem.folderId)) {
+                          when (AppStorageItemDeletion.delete(localLibraryItem, AndroidVolumeProbe(context), AndroidStorageIo)) {
+                            AppStorageItemDeletion.Outcome.DELETED -> true
+                            // A card that is out (or another card under its UUID): nothing is deleted and the item
+                            // stays, instead of reporting a deletion whose files remain on the card (L01)
+                            AppStorageItemDeletion.Outcome.STORAGE_UNAVAILABLE -> {
+                              AbsLogger.info(tag, "deleteItem: ${localLibraryItem.id} is on an SD card that is not available; not deleted")
+                              storageUnavailable = true
+                              false
+                            }
+                            AppStorageItemDeletion.Outcome.OUTSIDE_APP_STORAGE -> {
+                              AbsLogger.error(tag, "deleteItem: ${localLibraryItem.id} path is not an app storage download folder; not deleting")
+                              false
+                            }
+                            AppStorageItemDeletion.Outcome.FAILED -> false
+                          }
+                        } else {
+                          deleteItemFiles(localLibraryItem)
+                        }
                       } finally {
                         LocalItemLocks.bump(localLibraryItemId)
                       }
               if (deleted) DeviceManager.dbManager.removeLocalLibraryItem(localLibraryItemId)
               deleted
             }
-    call.resolve(JSObject("{\"success\":$success}"))
+    if (storageUnavailable) call.resolve(JSObject("{\"success\":false,\"reason\":\"storageUnavailable\"}"))
+    else call.resolve(JSObject("{\"success\":$success}"))
   }
 
   private fun deleteItemFiles(localLibraryItem: LocalLibraryItem): Boolean {
     val absolutePath = localLibraryItem.absolutePath
-
-    // App storage items are deleted with the File API
-    if (AppStorage.isAppStorage(localLibraryItem.folderId)) {
-      val probe = AndroidVolumeProbe(context)
-      if (!AppStorage.isAvailable(localLibraryItem.folderId, probe)) {
-        AbsLogger.info(tag, "deleteItem: ${localLibraryItem.id} is on a missing SD card; its files stay on the missing card until orphan cleanup")
-        return true
-      }
-      val file = File(absolutePath)
-      val roots = AppStorage.appOwnedRoots(probe)
-      val inAppStorage =
-              absolutePath.isNotEmpty() &&
-                      roots.any { root -> AppStorage.isUnder(file, root) && !AppStorage.isUnder(root, file) }
-      if (!inAppStorage) {
-        AbsLogger.error(tag, "deleteItem: ${localLibraryItem.id} path $absolutePath is outside app storage; not deleting")
-        return false
-      }
-      Log.d(tag, "Deleting app storage library item at absolutePath $absolutePath")
-      return if (file.exists()) file.deleteRecursively() else true
-    }
 
     val contentUrl = localLibraryItem.contentUrl
     var subfolderPathToDelete = ""
@@ -450,7 +453,10 @@ class AbsFileSystem : Plugin() {
       }
       outcome = LocalTrackDeletion.delete(localLibraryItem, trackLocalFileId, localEpisodeId) {
         if (AppStorage.isAppStorage(localLibraryItem.folderId)) {
-          File(localFile.absolutePath).delete()
+          // Only on the registered card, and only the regular file itself (L01, M01)
+          val file = File(localFile.absolutePath)
+          AppStorage.isVerified(localLibraryItem.folderId, AndroidVolumeProbe(context)) &&
+                  AndroidStorageIo.kind(file) == NodeKind.FILE && AndroidStorageIo.delete(file)
         } else {
           DocumentFileCompat.fromUri(mainActivity, Uri.parse(localFile.contentUrl))?.delete() == true
         }

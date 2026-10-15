@@ -88,6 +88,6 @@ test('nothing to say without an SD card, move or status', () => {
 })
 
 test('every string the view uses exists', () => {
-  assert.equal(DOWNLOAD_STORAGE_VIEW_KEYS.length, 15)
+  assert.equal(DOWNLOAD_STORAGE_VIEW_KEYS.length, 21)
   for (const key of DOWNLOAD_STORAGE_VIEW_KEYS) assert.equal(typeof strings[key], 'string', key)
 })

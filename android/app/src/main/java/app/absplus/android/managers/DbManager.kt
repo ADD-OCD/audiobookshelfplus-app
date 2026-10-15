@@ -255,11 +255,12 @@ class DbManager {
 
   // Make sure all local file ids still exist
   fun cleanLocalLibraryItems(context: Context) {
-    val probe = AndroidVolumeProbe(context)
     Paper.book("localLibraryItems").allKeys.forEach { id ->
       updateLocalLibraryItem(id) { lli ->
-        val volumeMissing = lli.folderId.startsWith(AppStorage.APPSD_PREFIX) && !AppStorage.isAvailable(lli.folderId, probe)
-        LocalItemCleanup.clean(lli, { it.exists(context) }, skip = volumeMissing)
+        // Never on removable storage (H02): a file that looks missing there may be on a card that is out, is being
+        // removed while this runs, or is a different card; the records, episodes and their progress are kept. Only an
+        // explicit user deletion removes them.
+        LocalItemCleanup.clean(lli, { it.exists(context) }, skip = lli.folderId.startsWith(AppStorage.APPSD_PREFIX))
       }
     }
   }

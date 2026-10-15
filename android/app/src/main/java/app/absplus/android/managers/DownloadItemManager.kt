@@ -414,7 +414,10 @@ class DownloadItemManager(
     val plan = DownloadControls.removalPlan(item, ::isUsedByLocalItem)
     val appRoots = AppStorage.appOwnedRoots(volumes)
     var deleted = 0
-    plan.delete.forEach { path ->
+    // Paths on a card that is out or is not the registered card are not this download's files to delete
+    val cardUnverified = item.localFolder.id.startsWith(AppStorage.APPSD_PREFIX) && !AppStorage.isVerified(item.localFolder.id, volumes)
+    if (cardUnverified) AbsLogger.info(tag, "Removing ${item.id} without deleting its files: its SD card is not available")
+    plan.delete.filter { !cardUnverified }.forEach { path ->
       val file = File(path)
       if (file.exists()) {
         if (file.delete()) deleted++ else AbsLogger.error(tag, "Could not delete ${file.name} of removed download ${item.id}")
@@ -996,9 +999,9 @@ class DownloadItemManager(
       try {
         val scanLock = scanLocks.computeIfAbsent(scanDestinationKey(item)) { Any() }
         synchronized(scanLock) {
-          folderScanner.scanDownloadItem(item) { scanResult ->
-            // The card went away before the scan: its files are not gone, so wait for it instead of dropping the download
-            if (scanResult?.localLibraryItem == null && storageUnavailable(item)) {
+          var incomplete = false
+          folderScanner.scanDownloadItem(item, onIncomplete = { incomplete = true }) { scanResult ->
+            if (DownloadFinalizationPolicy.waitInsteadOfDropping(scanResult?.localLibraryItem != null, storageUnavailable(item), incomplete)) {
               waitForCard = true
               AbsLogger.info(tag, "Download ${item.id} is complete; finalizing waits for the SD card")
               return@scanDownloadItem
@@ -1232,4 +1235,14 @@ class DownloadItemManager(
     const val MIN_FREE_SPACE_BYTES = 100L * 1024L * 1024L
     const val UNKNOWN_PART_RESERVATION_BYTES = 100L * 1024L * 1024L
   }
+}
+
+object DownloadFinalizationPolicy {
+  /**
+   * A finished download whose scan saved nothing stays queued instead of being dropped when its SD card went away, or
+   * when the scan refused to save a partial item because some files could not be read (FolderScanner.scanParts is all
+   * or nothing on removable storage). Its files are not gone, and dropping it would orphan them (H02).
+   */
+  fun waitInsteadOfDropping(saved: Boolean, storageUnavailable: Boolean, incomplete: Boolean): Boolean =
+          !saved && (storageUnavailable || incomplete)
 }

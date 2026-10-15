@@ -8,6 +8,7 @@ import app.absplus.android.MainActivity
 import app.absplus.android.data.*
 import app.absplus.android.device.AndroidVolumeProbe
 import app.absplus.android.device.AppStorage
+import app.absplus.android.device.VolumeRegistry
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.DownloadStorageSetting
 import app.absplus.android.device.DownloadStorageSpace
@@ -667,7 +668,9 @@ class AbsDatabase : Plugin() {
         } else {
           val volume = AppStorage.removableVolume(AndroidVolumeProbe(context))
           val uuid = volume?.uuid
-          if (volume == null || uuid == null) {
+          // The card is bound to the app (marker + token) before it becomes a download target, so a different card
+          // under the same UUID is never mistaken for it later
+          if (volume == null || uuid == null || !VolumeRegistry.ensureRegistered(volume)) {
             call.resolve(downloadStorageRefusal("SD card not available", "noSdCard", 0L, 0L))
             return@launch
           }

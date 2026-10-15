@@ -5,7 +5,14 @@ const WAITING_KEYS = [
   ['DOWNLOADING', 'MessageDownloadStorageWaitingDownloading'],
   ['UNAVAILABLE', 'MessageDownloadStorageWaitingUnavailable'],
   ['NO_SPACE', 'MessageDownloadStorageWaitingNoSpace'],
-  ['RETRY', 'MessageDownloadStorageWaitingRetry']
+  ['RETRY', 'MessageDownloadStorageWaitingRetry'],
+  ['FINISHING', 'MessageDownloadStorageWaitingFinishing']
+]
+
+// Moves that keep the old copy until a check after the next restart, and moves that kept both copies
+const JOURNAL_KEYS = [
+  ['cleanupPending', 'MessageDownloadStorageCleanupPending'],
+  ['needsAttention', 'MessageDownloadStorageNeedsAttention']
 ]
 
 function supplant(str, subs) {
@@ -48,6 +55,12 @@ export function storageStatusView(status, strings, bytesPretty) {
     lines.push(count === 1 ? strings[`${key}One`] : supplant(strings[key], [count]))
   }
 
+  for (const [field, key] of JOURNAL_KEYS) {
+    const count = Number(status[field]) || 0
+    if (count <= 0) continue
+    lines.push(count === 1 ? strings[`${key}One`] : supplant(strings[key], [count]))
+  }
+
   if (typeof move?.lastError === 'string' && move.lastError) lines.push(supplant(strings.MessageDownloadStorageMoveFailed, [move.lastError]))
 
   return { lines, sdSelectable }
@@ -59,5 +72,6 @@ export const DOWNLOAD_STORAGE_VIEW_KEYS = [
   'MessageDownloadStorageMoving',
   'MessageDownloadStorageMovingOne',
   'MessageDownloadStorageMoveFailed',
-  ...WAITING_KEYS.flatMap(([, key]) => [key, `${key}One`])
+  ...WAITING_KEYS.flatMap(([, key]) => [key, `${key}One`]),
+  ...JOURNAL_KEYS.flatMap(([, key]) => [key, `${key}One`])
 ]

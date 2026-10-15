@@ -15,22 +15,28 @@ import app.absplus.android.data.PodcastEpisode
 import app.absplus.android.data.PodcastMetadata
 import app.absplus.android.device.AppStorage
 import app.absplus.android.device.AppVolume
+import app.absplus.android.device.NodeKind
+import app.absplus.android.device.StorageHashing
+import app.absplus.android.device.StorageIo
 import app.absplus.android.device.StorageTarget
+import app.absplus.android.device.VolumeIdentity
 import app.absplus.android.device.VolumeProbe
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.NoSuchFileException
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -40,6 +46,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+/**
+ * Moving downloads between internal storage and the SD card (PR #29, H03): the journal, its recovery after a crash at
+ * every step, the restart check before a source is removed, and the coordination with playback, downloads and edits.
+ * Faults are injected deterministically through [FaultIo] and the mover's step hook; there are no timing sleeps.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class StorageMoverTest {
@@ -48,14 +59,62 @@ class StorageMoverTest {
   private val mapper = jacksonObjectMapper()
   private val sdUuid = "79EC-9B33"
 
+  /** Simulates the process dying at a step: an Error, so no `catch (e: Exception)` in the mover can absorb it. */
+  private class SimulatedCrash(step: String) : Error("process died at $step")
+
   private class FakeProbe(val internal: File, val sdDir: File) : VolumeProbe {
     var sdMounted = true
-    var sdWritable = true
-    override fun volumes() = listOf(AppVolume("79EC-9B33", sdDir, removable = true, mounted = sdMounted, writable = sdMounted && sdWritable))
+    var sdIdentity = VolumeIdentity.VERIFIED
+    override fun volumes() = listOf(AppVolume("79EC-9B33", sdDir, removable = true, mounted = sdMounted, writable = sdMounted, identity = sdIdentity))
     override fun internalFilesDir() = internal
   }
 
-  /** Stores serialized copies, so a reader never shares objects with a writer (like Paper). */
+  /** The real filesystem, links never followed, with switches that fail or corrupt chosen operations. */
+  private inner class FaultIo : StorageIo {
+    var failCopyOf: String? = null
+    var corruptCopyOf: String? = null
+    var failRename = false
+    var free = Long.MAX_VALUE / 4
+    var afterCopy: ((File) -> Unit)? = null
+    /** Files on the SD card can't be reached while it is unmounted, like a removed card. */
+    private fun reachable(f: File) = probe.sdMounted || !AppStorage.isUnder(f, probe.sdDir)
+
+    override fun kind(file: File): NodeKind {
+      if (!reachable(file)) return NodeKind.MISSING
+      return try {
+        val a = Files.readAttributes(file.toPath(), BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        when {
+          a.isSymbolicLink -> NodeKind.LINK
+          a.isRegularFile -> NodeKind.FILE
+          a.isDirectory -> NodeKind.DIRECTORY
+          else -> NodeKind.OTHER
+        }
+      } catch (e: NoSuchFileException) {
+        NodeKind.MISSING
+      }
+    }
+    override fun list(dir: File): List<String>? = if (reachable(dir)) dir.list()?.toList() else null
+    override fun mkdirs(dir: File) = reachable(dir) && (dir.isDirectory || dir.mkdirs())
+    override fun copyAndSync(from: File, to: File, cancelled: () -> Boolean): String {
+      if (!reachable(from) || !reachable(to)) throw IOException("storage not available")
+      failCopyOf?.let { if (from.name == it) throw IOException("disk full") }
+      val sha = StorageHashing.copyAndSync(from, to, cancelled)
+      corruptCopyOf?.let { if (from.name == it) flipByte(to) }
+      afterCopy?.invoke(from)
+      return sha
+    }
+    override fun sha256(file: File, cancelled: () -> Boolean): String {
+      if (!reachable(file)) throw IOException("storage not available")
+      return StorageHashing.sha256(file, cancelled)
+    }
+    override fun length(file: File) = if (reachable(file)) file.length() else 0L
+    override fun rename(from: File, to: File) = !failRename && reachable(from) && from.renameTo(to)
+    override fun delete(file: File) = reachable(file) && Files.deleteIfExists(file.toPath()).let { true }
+    override fun syncDir(dir: File) = true
+    override fun freeBytes(dir: File) = free
+  }
+
+  /** Stores serialized copies, like Paper. */
   private inner class MapBook : LocalItemBook {
     val data = ConcurrentHashMap<String, String>()
     override fun read(id: String): LocalLibraryItem? = data[id]?.let { mapper.readValue(it, LocalLibraryItem::class.java) }
@@ -71,18 +130,10 @@ class StorageMoverTest {
     val book = MapBook()
     val store = LocalItemStore(book)
     val queued: MutableSet<String> = ConcurrentHashMap.newKeySet()
-    val queueFolders = CopyOnWriteArrayList<String>()
-    val dirOwnedCalls = AtomicInteger()
-    val ownedDirsCalls = AtomicInteger()
-    /** Replaces [ownedDirs]' result when set. */
-    var ownedSnapshot: Set<String>? = null
-    /** Runs once inside dirOwned, between the item read and the queue read. */
-    var betweenReads: (() -> Unit)? = null
     var session: PlaybackSession? = null
     var sessionSaves = 0
-    /** Runs once, after the read, inside the first getItem call. */
+    var failNextSave = false
     var afterFirstGet: ((String) -> Unit)? = null
-    /** Runs once, before the write, inside the next saveItem call. */
     var beforeSave: ((LocalLibraryItem) -> Unit)? = null
 
     override fun getItem(id: String): LocalLibraryItem? {
@@ -93,49 +144,50 @@ class StorageMoverTest {
       }
       return item
     }
-
     override fun saveItem(item: LocalLibraryItem) {
+      if (failNextSave) {
+        failNextSave = false
+        throw IOException("database write failed")
+      }
       beforeSave?.let {
         beforeSave = null
         it(item)
       }
       store.save(item)
     }
-
     override fun hasQueuedDownload(libraryItemId: String) = libraryItemId in queued
-
-    private fun itemDirs() = book.data.keys.mapNotNull { book.read(it) }.map { it.absolutePath }.filter { it.isNotEmpty() }.map { norm(File(it)) }
-
-    override fun dirOwned(dir: File): Boolean {
-      dirOwnedCalls.incrementAndGet()
-      val d = norm(dir)
-      val inItems = d in itemDirs()
-      betweenReads?.let {
-        betweenReads = null
-        it()
-      }
-      return inItems || queueFolders.any { norm(File(it)) == d }
-    }
-
-    override fun ownedDirs(): Set<String> {
-      ownedDirsCalls.incrementAndGet()
-      return ownedSnapshot ?: (itemDirs() + queueFolders.map { norm(File(it)) }).toSet()
-    }
-
     override fun lastSession() = session
-
     override fun saveLastSession(s: PlaybackSession) {
       sessionSaves++
       session = s
     }
-
     fun json(id: String) = book.data[id]
+  }
+
+  /** Serialized like Paper, so a restarted mover reads what was durably written. */
+  private inner class MapJournal : MoveJournal {
+    val data = ConcurrentHashMap<String, String>()
+    override fun all() = data.values.map { mapper.readValue<StorageMoveJournalEntry>(it) }
+    override fun get(itemId: String) = data[itemId]?.let { mapper.readValue<StorageMoveJournalEntry>(it) }
+    override fun put(entry: StorageMoveJournalEntry) {
+      data[entry.itemId] = mapper.writeValueAsString(entry)
+    }
+    override fun remove(itemId: String) {
+      data.remove(itemId)
+    }
   }
 
   private lateinit var probe: FakeProbe
   private lateinit var db: FakeDb
+  private lateinit var journal: MapJournal
+  private lateinit var io: FaultIo
   private lateinit var inRoot: File
   private lateinit var sdRoot: File
+  private var boot = "boot-1"
+  private var cancel = false
+
+  private fun mover(crashAt: String? = null) =
+          StorageMover(probe, db, journal, io, { boot }, { cancel }) { step -> if (step == crashAt) throw SimulatedCrash(step) }
 
   @Before
   fun setUp() {
@@ -143,6 +195,8 @@ class StorageMoverTest {
     inRoot = File(probe.internal, "downloads").apply { mkdirs() }
     sdRoot = File(probe.sdDir, "downloads").apply { mkdirs() }
     db = FakeDb()
+    journal = MapJournal()
+    io = FaultIo()
   }
 
   @After
@@ -150,39 +204,44 @@ class StorageMoverTest {
     LocalItemLocks.clearPlaybackPin()
   }
 
-  private fun norm(f: File) = AppStorage.normalizedPath(f)
+  private fun restart() {
+    boot = "boot-" + UUID.randomUUID()
+  }
 
   private fun uniq() = "li_" + UUID.randomUUID().toString().take(8)
 
   private fun sdFolder(mediaType: String) = AppStorage.folderFor(StorageTarget.Sd(sdUuid), mediaType)
+  private fun internalFolder(mediaType: String) = AppStorage.folderFor(StorageTarget.Internal, mediaType)
 
-  private fun write(dir: File, name: String, size: Int): File =
-          File(dir, name).apply { writeBytes(ByteArray(size) { (it % 251).toByte() }) }
+  private fun write(dir: File, name: String, size: Int, seed: Int = 0): File =
+          File(dir, name).apply { writeBytes(ByteArray(size) { ((it + seed) % 251).toByte() }) }
+
+  private fun flipByte(f: File) {
+    val b = f.readBytes()
+    b[b.size / 2] = (b[b.size / 2] + 1).toByte()
+    f.writeBytes(b)
+  }
 
   private fun localFile(f: File) =
           LocalFile("lf-${f.name}", f.name, Uri.fromFile(f).toString(), "Internal/${f.parentFile!!.name}", f.absolutePath, "audio/mpeg", f.length())
 
   private fun track(index: Int, lf: LocalFile) =
-          AudioTrack(
-                  index, 0.0, 10.0, lf.filename!!, lf.contentUrl, "audio/mpeg",
-                  FileMetadata(lf.filename!!, "mp3", lf.absolutePath, lf.basePath, lf.size), true, lf.id, index
-          )
+          AudioTrack(index, 0.0, 10.0, lf.filename!!, lf.contentUrl, "audio/mpeg",
+                  FileMetadata(lf.filename!!, "mp3", lf.absolutePath, lf.basePath, lf.size), true, lf.id, index)
 
   private fun bookMeta() =
           BookMetadata("Book", null, null, null, mutableListOf(), null, null, null, null, null, null, null, false, null, null, null, null, null)
 
   private fun item(libId: String, dir: File, folderId: String, mediaType: String, media: app.absplus.android.data.MediaType, files: List<LocalFile>, cover: LocalFile?) =
-          LocalLibraryItem(
-                  "local_$libId", folderId, dir.absolutePath, dir.absolutePath, "", false, mediaType, media,
-                  files.toMutableList(), cover?.contentUrl, cover?.absolutePath, true, "server", "addr", "user", libId
-          )
+          LocalLibraryItem("local_$libId", folderId, dir.absolutePath, dir.absolutePath, "", false, mediaType, media,
+                  files.toMutableList(), cover?.contentUrl, cover?.absolutePath, true, "server", "addr", "user", libId)
 
-  private fun bookItem(libId: String = uniq()): LocalLibraryItem {
-    val dir = File(inRoot, libId).apply { mkdirs() }
-    val files = listOf(write(dir, "01 Chapter.mp3", 1000), write(dir, "02 Глава é.mp3", 1500), write(dir, "book.epub", 300), write(dir, "cover.jpg", 50)).map { localFile(it) }
+  private fun bookItem(libId: String = uniq(), root: File = inRoot, folderId: String = "internal-book"): LocalLibraryItem {
+    val dir = File(root, libId).apply { mkdirs() }
+    val files = listOf(write(dir, "01 Chapter.mp3", 1000), write(dir, "02 Глава é.mp3", 1500, 7), write(dir, "book.epub", 300, 3), write(dir, "cover.jpg", 50, 9)).map { localFile(it) }
     val ebook = EBookFile("ino", FileMetadata("book.epub", "epub", "/server/Book/book.epub", "book.epub", 300), "epub", true, files[2].id, files[2].contentUrl)
     val media = Book(bookMeta(), null, listOf(), null, null, mutableListOf(track(1, files[0]), track(2, files[1])), ebook, null, null, null)
-    return item(libId, dir, "internal-book", "book", media, files, files[3])
+    return item(libId, dir, folderId, "book", media, files, files[3])
   }
 
   private fun episode(lf: LocalFile, n: Int) =
@@ -190,16 +249,14 @@ class StorageMoverTest {
 
   private fun podcastItem(libId: String = uniq()): LocalLibraryItem {
     val dir = File(inRoot, libId).apply { mkdirs() }
-    val files = listOf(write(dir, "ep 1.mp3", 800), write(dir, "ép 2.mp3", 900), write(dir, "cover.jpg", 40)).map { localFile(it) }
-    val media =
-            Podcast(PodcastMetadata("Podcast", null, null, mutableListOf(), false), null, mutableListOf(),
-                    mutableListOf(episode(files[0], 1), episode(files[1], 2)), false, 2)
+    val files = listOf(write(dir, "ep 1.mp3", 800), write(dir, "ép 2.mp3", 900, 5), write(dir, "cover.jpg", 40, 2)).map { localFile(it) }
+    val media = Podcast(PodcastMetadata("Podcast", null, null, mutableListOf(), false), null, mutableListOf(),
+            mutableListOf(episode(files[0], 1), episode(files[1], 2)), false, 2)
     return item(libId, dir, "internal-podcast", "podcast", media, files, files[2])
   }
 
-  /** Adds a downloaded episode file to the item's folder and the item. */
   private fun addEpisode(item: LocalLibraryItem, n: Int) {
-    val lf = localFile(write(File(item.absolutePath), "new $n.mp3", 700))
+    val lf = localFile(write(File(item.absolutePath), "new $n.mp3", 700, n))
     item.localFiles.add(lf)
     (item.media as Podcast).episodes!!.add(episode(lf, n))
   }
@@ -210,42 +267,23 @@ class StorageMoverTest {
   }
 
   private fun episodes(item: LocalLibraryItem) = (item.media as Podcast).episodes!!
-
   private fun tracks(item: LocalLibraryItem) = item.media.getAudioTracks()
 
-  /** Every path field relocate rewrites. */
-  private fun paths(item: LocalLibraryItem): List<String> {
-    val out = mutableListOf(item.absolutePath, item.basePath)
-    item.coverAbsolutePath?.let { out.add(it) }
-    item.coverContentUrl?.let { out.add(it) }
-    item.localFiles.forEach {
-      out.add(it.absolutePath)
-      out.add(it.contentUrl)
-    }
-    tracks(item).forEach {
-      out.add(it.contentUrl)
-      out.add(it.metadata!!.path)
-    }
-    (item.media as? Book)?.ebookFile?.contentUrl?.let { out.add(it) }
-    return out
+  /** Relative path -> SHA-256 of every file below [dir]. */
+  private fun hashes(dir: File): Map<String, String> =
+          dir.walkTopDown().filter { it.isFile }.associate { it.relativeTo(dir).path.replace('\\', '/') to StorageHashing.sha256(it) { false } }
+
+  private fun noTmp() = listOf(inRoot, sdRoot).forEach { r -> assertTrue("no move copy is left in $r", r.listFiles()!!.none { it.name.startsWith(".moving-") }) }
+
+  /** The record's every file exists and matches [expected]; returns the record. */
+  private fun assertRecordComplete(id: String, expected: Map<String, String>): LocalLibraryItem {
+    val rec = db.getItem(id)!!
+    assertEquals("the folder the record uses holds every file intact", expected, hashes(File(rec.absolutePath)))
+    rec.localFiles.forEach { assertTrue("${it.absolutePath} exists", File(it.absolutePath).isFile) }
+    return rec
   }
 
-  private fun treeOf(dir: File): Map<String, Long> =
-          dir.walkTopDown().filter { it.isFile }.associate { it.relativeTo(dir).path to it.length() }
-
-  private fun noTmp() = assertTrue("no move copy is left", sdRoot.listFiles()!!.none { it.name.startsWith(".moving-") })
-
-  private fun assertMovedPaths(moved: LocalLibraryItem, libId: String) {
-    val dest = File(sdRoot, libId)
-    paths(moved).forEach {
-      assertFalse("$it still points at the old root", it.contains(inRoot.absolutePath))
-      assertTrue("$it points at the new root", it.contains(sdRoot.absolutePath))
-    }
-    moved.localFiles.forEach {
-      assertEquals(File(dest, it.filename!!).absolutePath, it.absolutePath)
-      assertEquals(Uri.fromFile(File(dest, it.filename!!)).toString(), it.contentUrl)
-    }
-  }
+  // ---- Paths
 
   @Test
   fun relocateRewritesAllPaths() {
@@ -259,168 +297,237 @@ class StorageMoverTest {
     assertEquals("the input is not changed", before, mapper.writeValueAsString(book))
     assertEquals(sdFolder("book").id, moved.folderId)
     assertEquals(File(sdRoot, libId).absolutePath, moved.absolutePath)
-    assertEquals(File(sdRoot, libId).absolutePath, moved.basePath)
-    assertEquals("", moved.contentUrl)
-    val movedSaf = moved.localFiles.last()
-    assertEquals("a path outside the old root stays", saf, movedSaf)
-    moved.localFiles.removeAt(moved.localFiles.size - 1)
-    assertMovedPaths(moved, libId)
+    assertEquals("a path outside the old root stays", saf, moved.localFiles.last())
     assertEquals(Uri.fromFile(File(sdRoot, "$libId/02 Глава é.mp3")).toString(), tracks(moved)[1].contentUrl)
-    assertTrue("non-ASCII names are percent-encoded like Uri.fromFile", tracks(moved)[1].contentUrl.contains("%"))
     assertEquals(File(sdRoot, "$libId/02 Глава é.mp3").absolutePath, tracks(moved)[1].metadata!!.path)
     assertEquals(Uri.fromFile(File(sdRoot, "$libId/book.epub")).toString(), (moved.media as Book).ebookFile!!.contentUrl)
     assertEquals(File(sdRoot, "$libId/cover.jpg").absolutePath, moved.coverAbsolutePath)
-    assertEquals(Uri.fromFile(File(sdRoot, "$libId/cover.jpg")).toString(), moved.coverContentUrl)
-    assertEquals(book.id, moved.id)
-    assertEquals(book.localFiles.dropLast(1).map { it.id }, moved.localFiles.map { it.id })
-    assertEquals(tracks(book).map { it.localFileId }, tracks(moved).map { it.localFileId })
-    assertEquals(tracks(book).map { it.metadata!!.relPath }, tracks(moved).map { it.metadata!!.relPath })
-    assertEquals(book.localFiles.map { it.basePath }.dropLast(1), moved.localFiles.map { it.basePath })
-
-    val podId = uniq()
-    val pod = podcastItem(podId)
-    val podBefore = mapper.writeValueAsString(pod)
-    val movedPod = StorageMover.relocate(pod, inRoot, sdRoot, sdFolder("podcast"))
-    assertEquals(podBefore, mapper.writeValueAsString(pod))
-    assertTrue("still a podcast", movedPod.media is Podcast)
-    assertEquals(sdFolder("podcast").id, movedPod.folderId)
-    assertMovedPaths(movedPod, podId)
-    assertEquals(episodes(pod).map { it.id }, episodes(movedPod).map { it.id })
-    assertEquals(tracks(pod).map { it.localFileId }, tracks(movedPod).map { it.localFileId })
-    assertEquals(Uri.fromFile(File(sdRoot, "$podId/ép 2.mp3")).toString(), episodes(movedPod)[1].audioTrack!!.contentUrl)
+    assertEquals(book.localFiles.map { it.id }, moved.localFiles.map { it.id })
   }
 
+  // ---- Normal moves keep the source until the copy is checked after a restart
+
   @Test
-  fun movesFilesAndDb() {
-    val item = seed(bookItem())
+  fun internalToSdKeepsTheSourceUntilTheCopyIsCheckedAfterARestart() {
+    val item = seed(podcastItem())
     val libId = item.libraryItemId!!
-    val tree = treeOf(File(item.absolutePath))
+    val original = hashes(File(item.absolutePath))
 
-    assertEquals(MoveResult.Moved, StorageMover.moveOne(item.id, sdFolder("book"), probe, db))
-
-    assertEquals(tree, treeOf(File(sdRoot, libId)))
-    assertFalse(File(inRoot, libId).exists())
+    assertEquals(MoveResult.Moved, mover().moveOne(item.id, sdFolder("podcast")))
+    val rec = assertRecordComplete(item.id, original)
+    assertEquals(File(sdRoot, libId).absolutePath, rec.absolutePath)
+    assertEquals(sdFolder("podcast").id, rec.folderId)
+    assertEquals("episodes and their ids are kept", episodes(item).map { it.id }, episodes(rec).map { it.id })
+    assertEquals("the source is kept", original, hashes(File(inRoot, libId)))
+    assertEquals(MovePhase.COMMITTED, journal.get(item.id)!!.phase)
+    assertTrue("the manifest has a SHA-256 per file", journal.get(item.id)!!.files.all { it.sha256.length == 64 })
     noTmp()
-    val saved = db.getItem(item.id)!!
-    assertEquals(mapper.writeValueAsString(StorageMover.relocate(item, inRoot, sdRoot, sdFolder("book"))), mapper.writeValueAsString(saved))
+
+    // Same boot: the copy may still be in memory only, so the source stays however often recovery runs
+    repeat(3) { mover().recover() }
+    assertEquals(original, hashes(File(inRoot, libId)))
+
+    restart()
+    val summary = mover().recover()
+    assertEquals(1, summary.retired)
+    assertFalse("the old copy is removed after the restart check", File(inRoot, libId).exists())
+    assertNull(journal.get(item.id))
+    assertRecordComplete(item.id, original)
+    // Idempotent afterwards
+    mover().recover()
+    assertRecordComplete(item.id, original)
   }
 
   @Test
-  fun folderNamedDotDotIsNotMoved() {
+  fun sdToInternalMovesBackTheSameWay() {
+    val item = seed(bookItem(root = sdRoot, folderId = sdFolder("book").id))
+    val libId = item.libraryItemId!!
+    val original = hashes(File(item.absolutePath))
+
+    assertEquals(MoveResult.Moved, mover().moveOne(item.id, internalFolder("book")))
+    assertEquals(File(inRoot, libId).absolutePath, assertRecordComplete(item.id, original).absolutePath)
+    assertEquals(original, hashes(File(sdRoot, libId)))
+    restart()
+    mover().recover()
+    assertFalse(File(sdRoot, libId).exists())
+    assertRecordComplete(item.id, original)
+  }
+
+  @Test
+  fun aSessionSavedForTheOldPathsIsPointedAtTheCopy() {
+    val item = bookItem()
+    val moved = StorageMover.relocate(item, inRoot, sdRoot, sdFolder("book"))
+    seed(moved)
+    db.session = PlaybackSession("s1", "user", item.libraryItemId, null, "book", item.media.metadata, DeviceInfo("d", "m", "m", 35, "1"),
+            listOf(), "Book", "Author", null, 20.0, 3, 0L, 0L, 0L, tracks(item).map { it.copy(metadata = it.metadata!!.copy()) }.toMutableList(),
+            5.0, null, item, null, "server", "addr", "exo-player")
+    StorageMover.healLastSession(db)
+    assertEquals(moved.absolutePath, db.session!!.localLibraryItem!!.absolutePath)
+    assertEquals(tracks(moved).map { it.contentUrl }, db.session!!.audioTracks.map { it.contentUrl })
+    assertEquals(5.0, db.session!!.currentTime, 0.0)
+    StorageMover.healLastSession(db)
+    assertEquals("a healed session is not written again", 1, db.sessionSaves)
+  }
+
+  // ---- Copy faults leave the source and the record untouched
+
+  private fun assertUntouched(item: LocalLibraryItem, before: String?, original: Map<String, String>) {
+    assertEquals("the record is unchanged", before, db.json(item.id))
+    assertEquals("the source is intact", original, hashes(File(item.absolutePath)))
+    assertFalse(File(sdRoot, item.libraryItemId!!).exists())
+    assertNull("no journal entry is left", journal.get(item.id))
+    noTmp()
+  }
+
+  @Test
+  fun notEnoughSpaceStartsNothing() {
+    val item = seed(bookItem())
+    val before = db.json(item.id)
+    val original = hashes(File(item.absolutePath))
+    io.free = 1000L
+    assertEquals(MoveResult.Discarded("no space"), mover().moveOne(item.id, sdFolder("book")))
+    assertUntouched(item, before, original)
+  }
+
+  @Test
+  fun aFailedCopyIsUndone() {
+    val item = seed(bookItem())
+    val before = db.json(item.id)
+    val original = hashes(File(item.absolutePath))
+    io.failCopyOf = "02 Глава é.mp3"
+    val result = mover().moveOne(item.id, sdFolder("book"))
+    assertTrue("$result", result is MoveResult.Failed && result.message.contains("disk full"))
+    assertUntouched(item, before, original)
+  }
+
+  @Test
+  fun aCopyWithTheSameLengthButOtherBytesIsRejected() {
+    val item = seed(bookItem())
+    val before = db.json(item.id)
+    val original = hashes(File(item.absolutePath))
+    io.corruptCopyOf = "01 Chapter.mp3"
+    val result = mover().moveOne(item.id, sdFolder("book"))
+    assertTrue("$result", result is MoveResult.Failed && result.message.contains("SHA-256"))
+    assertUntouched(item, before, original)
+  }
+
+  @Test
+  fun aFailedRenameOrRecordWriteIsUndone() {
+    val item = seed(bookItem())
+    val before = db.json(item.id)
+    val original = hashes(File(item.absolutePath))
+    io.failRename = true
+    assertTrue(mover().moveOne(item.id, sdFolder("book")) is MoveResult.Failed)
+    assertUntouched(item, before, original)
+
+    io.failRename = false
+    db.failNextSave = true
+    assertTrue(mover().moveOne(item.id, sdFolder("book")) is MoveResult.Failed)
+    assertUntouched(item, before, original)
+  }
+
+  @Test
+  fun anExistingDestinationIsNeverReplaced() {
+    val item = seed(bookItem())
+    val before = db.json(item.id)
+    val original = hashes(File(item.absolutePath))
+    val foreign = write(File(sdRoot, item.libraryItemId!!).apply { mkdirs() }, "someone else.bin", 10)
+    assertTrue(mover().moveOne(item.id, sdFolder("book")) is MoveResult.Failed)
+    assertTrue("the existing folder is untouched", foreign.isFile)
+    assertEquals(before, db.json(item.id))
+    assertEquals(original, hashes(File(item.absolutePath)))
+    assertNull(journal.get(item.id))
+  }
+
+  @Test
+  fun aLinkInTheSourceRefusesTheMoveAndNothingOutsideIsTouched() {
+    val item = seed(bookItem())
+    val outside = temp.newFolder("outside")
+    val sentinel = write(outside, "private.bin", 10)
+    val link = File(item.absolutePath, "link")
+    try {
+      Files.createSymbolicLink(link.toPath(), outside.toPath())
+    } catch (e: Exception) {
+      assumeTrue("symbolic links are supported here", false)
+    }
+    val result = mover().moveOne(item.id, sdFolder("book"))
+    assertTrue("$result", result is MoveResult.Failed)
+    assertTrue("the link target is untouched", sentinel.isFile)
+    assertFalse(File(sdRoot, item.libraryItemId!!).exists())
+    assertNull(journal.get(item.id))
+  }
+
+  @Test
+  fun aFolderNamedDotDotIsNotMoved() {
     val item = seed(bookItem().apply { absolutePath = File(inRoot, "..").path })
     val sentinel = write(probe.sdDir, "keep.bin", 10)
-
-    assertTrue(StorageMover.moveOne(item.id, sdFolder("book"), probe, db) is MoveResult.Failed)
-    assertTrue("the SD card's app folder is untouched", sentinel.isFile)
-    assertTrue("internal storage is untouched", inRoot.isDirectory)
+    assertTrue(mover().moveOne(item.id, sdFolder("book")) is MoveResult.Failed)
+    assertTrue(sentinel.isFile)
+    assertTrue(inRoot.isDirectory)
   }
 
-  @Test
-  fun discardWhenEpisodeSavedDuringCopy() {
-    val item = seed(podcastItem())
-    val result =
-            StorageMover.moveOne(item.id, sdFolder("podcast"), probe, db) { s, d ->
-              StorageMover.copyDirVerified(s, d)
-              val updated = db.getItem(item.id)!!
-              addEpisode(updated, 3)
-              db.saveItem(updated)
-            }
+  // ---- Coordination with edits, playback and downloads
 
-    assertEquals(MoveResult.Discarded("changed during copy"), result)
+  @Test
+  fun anItemChangedDuringTheCopyIsNotMoved() {
+    val item = seed(podcastItem())
+    io.afterCopy = { from ->
+      if (from.name == "ep 1.mp3") db.store.update(item.id) {
+        addEpisode(it, 3)
+        ItemUpdate.Save(it)
+      }
+    }
+    assertEquals(MoveResult.Discarded("changed during copy"), mover().moveOne(item.id, sdFolder("podcast")))
     val saved = db.getItem(item.id)!!
     assertEquals("the episode saved during the copy is kept", 3, episodes(saved).size)
     assertEquals(item.absolutePath, saved.absolutePath)
-    assertEquals(item.folderId, saved.folderId)
-    assertTrue("the source keeps the new episode file", File(item.absolutePath, "new 3.mp3").isFile)
-    assertTrue(File(item.absolutePath, "ep 1.mp3").isFile)
+    assertTrue(File(item.absolutePath, "new 3.mp3").isFile)
     assertFalse(File(sdRoot, item.libraryItemId!!).exists())
+    assertNull(journal.get(item.id))
     noTmp()
   }
 
   @Test
-  fun snapshotTakenUnderLock() {
-    val item = seed(podcastItem())
-    val plan = StorageMovePlanner.plan(listOf(db.getItem(item.id)!!), listOf(), StorageTarget.Sd(sdUuid), probe, { false }) { Long.MAX_VALUE / 2 }
-    assertEquals(1, plan.toMove.size)
-    db.store.update(item.id) {
-      addEpisode(it, 3)
-      ItemUpdate.Save(it)
-    }
-    assertEquals(MoveResult.Moved, StorageMover.moveOne(item.id, sdFolder("podcast"), probe, db))
-    val moved = db.getItem(item.id)!!
-    assertEquals("an episode saved after planning moves too", 3, episodes(moved).size)
-    assertMovedPaths(moved, item.libraryItemId!!)
-    assertTrue(File(sdRoot, "${item.libraryItemId}/new 3.mp3").isFile)
+  fun playbackThatStartsDuringTheCopyKeepsTheItemWhereItIs() {
+    val item = seed(bookItem())
+    val before = db.json(item.id)
+    val original = hashes(File(item.absolutePath))
+    io.afterCopy = { LocalItemLocks.pinForPlayback(item.id) }
+    assertEquals(MoveResult.Discarded("playing"), mover().moveOne(item.id, sdFolder("book")))
+    assertUntouched(item, before, original)
+    io.afterCopy = null
+    assertEquals("a playing item is not copied at all", MoveResult.Discarded("playing"), mover().moveOne(item.id, sdFolder("book")))
+  }
 
-    // A write started right after the snapshot read must wait for the version read, or the move would drop it
+  @Test
+  fun aDownloadQueuedDuringTheCopyKeepsTheItemWhereItIs() {
+    val item = seed(bookItem())
+    val before = db.json(item.id)
+    val original = hashes(File(item.absolutePath))
+    io.afterCopy = { db.queued.add(item.libraryItemId!!) }
+    assertEquals(MoveResult.Discarded("downloading"), mover().moveOne(item.id, sdFolder("book")))
+    assertUntouched(item, before, original)
+  }
+
+  @Test
+  fun aWriteRacingTheSnapshotIsNotLost() {
     val raced = seed(podcastItem())
     val writer = AtomicReference<Thread>()
     db.afterFirstGet = { id ->
-      val t = Thread {
-        db.store.update(id) {
-          addEpisode(it, 3)
-          ItemUpdate.Save(it)
-        }
-      }
+      val t = Thread { db.store.update(id) { addEpisode(it, 3); ItemUpdate.Save(it) } }
       writer.set(t)
       t.start()
       t.join(300)
     }
-    val result = StorageMover.moveOne(raced.id, sdFolder("podcast"), probe, db)
+    val result = mover().moveOne(raced.id, sdFolder("podcast"))
     writer.get().join(5000)
-
     val after = db.getItem(raced.id)!!
     assertEquals("the racing episode is not lost ($result)", 3, episodes(after).size)
-    if (result == MoveResult.Moved) assertMovedPaths(after, raced.libraryItemId!!)
-    else assertEquals(raced.absolutePath, after.absolutePath)
-    noTmp()
+    assertTrue("its file is in the folder the record uses", File(after.absolutePath, "new 3.mp3").isFile)
   }
 
   @Test
-  fun discardWhenPinned() {
-    val item = seed(bookItem())
-    val before = db.json(item.id)
-    val tree = treeOf(File(item.absolutePath))
-    val result =
-            StorageMover.moveOne(item.id, sdFolder("book"), probe, db) { s, d ->
-              StorageMover.copyDirVerified(s, d)
-              LocalItemLocks.pinForPlayback(item.id)
-            }
-    assertEquals(MoveResult.Discarded("playing"), result)
-    noTmp()
-    assertEquals(tree, treeOf(File(item.absolutePath)))
-    assertEquals(before, db.json(item.id))
-    assertFalse(File(sdRoot, item.libraryItemId!!).exists())
-
-    val copies = AtomicInteger()
-    val result2 = StorageMover.moveOne(item.id, sdFolder("book"), probe, db) { _, _ -> copies.incrementAndGet() }
-    assertEquals(MoveResult.Discarded("playing"), result2)
-    assertEquals("a pinned item is not copied", 0, copies.get())
-  }
-
-  @Test
-  fun discardWhenQueued() {
-    val item = seed(bookItem())
-    val before = db.json(item.id)
-    val tree = treeOf(File(item.absolutePath))
-    val result =
-            StorageMover.moveOne(item.id, sdFolder("book"), probe, db) { s, d ->
-              StorageMover.copyDirVerified(s, d)
-              db.queued.add(item.libraryItemId!!)
-            }
-    assertEquals(MoveResult.Discarded("downloading"), result)
-    noTmp()
-    assertEquals(tree, treeOf(File(item.absolutePath)))
-    assertEquals(before, db.json(item.id))
-
-    val copies = AtomicInteger()
-    val result2 = StorageMover.moveOne(item.id, sdFolder("book"), probe, db) { _, _ -> copies.incrementAndGet() }
-    assertEquals(MoveResult.Discarded("downloading"), result2)
-    assertEquals("a queued item is not copied", 0, copies.get())
-  }
-
-  @Test
-  fun enqueueDuringFinalStepSeesNewFolder() {
+  fun aReaderWaitsForTheCommitAndSeesTheNewFolder() {
     val item = seed(bookItem())
     val seen = AtomicReference<String>()
     var readerDoneWhileSaving = true
@@ -431,214 +538,217 @@ class StorageMoverTest {
       reader.join(100)
       readerDoneWhileSaving = !reader.isAlive
     }
-    assertEquals(MoveResult.Moved, StorageMover.moveOne(item.id, sdFolder("book"), probe, db))
+    assertEquals(MoveResult.Moved, mover().moveOne(item.id, sdFolder("book")))
     reader.join(5000)
-    assertFalse("a reader waits for the final step to finish", readerDoneWhileSaving)
+    assertFalse("a reader waits for the commit", readerDoneWhileSaving)
     assertEquals(sdFolder("book").id, seen.get())
   }
 
   @Test
-  fun copyFailureLeavesSourceIntact() {
+  fun aSecondMoveOfAnItemWaitsForTheFirstToFinish() {
     val item = seed(bookItem())
-    val before = db.json(item.id)
-    val tree = treeOf(File(item.absolutePath))
-    val result =
-            StorageMover.moveOne(item.id, sdFolder("book"), probe, db) { s, d ->
-              d.mkdirs()
-              s.listFiles()!!.first().copyTo(File(d, "partial"))
-              throw IOException("disk full")
-            }
-    assertTrue(result is MoveResult.Failed)
-    assertTrue((result as MoveResult.Failed).message.contains("disk full"))
-    noTmp()
-    assertEquals(tree, treeOf(File(item.absolutePath)))
-    assertEquals(before, db.json(item.id))
+    assertEquals(MoveResult.Moved, mover().moveOne(item.id, sdFolder("book")))
+    assertEquals(MoveResult.Discarded("previous move not finished"), mover().moveOne(item.id, internalFolder("book")))
+    val plan = StorageMovePlanner.plan(listOf(db.getItem(item.id)!!), listOf(), StorageTarget.Internal, probe, { false },
+            freeBytes = { Long.MAX_VALUE / 2 }, journaled = { journal.get(it) != null })
+    assertEquals(WaitReason.FINISHING, plan.waiting[item.id])
+    restart()
+    mover().recover()
+    assertEquals(MoveResult.Moved, mover().moveOne(item.id, internalFolder("book")))
   }
 
   @Test
-  fun sizeMismatchFails() {
+  fun aTimedOutPassLeavesWorkThatTheNextPassUndoes() {
     val item = seed(bookItem())
     val before = db.json(item.id)
-    val tree = treeOf(File(item.absolutePath))
-    val shortCopy: (File, File) -> Unit = { s, d -> d.writeBytes(s.readBytes().copyOf((s.length() - 3).toInt())) }
-    val result = StorageMover.moveOne(item.id, sdFolder("book"), probe, db) { s, d -> StorageMover.copyDirVerified(s, d, shortCopy) }
-    assertTrue(result is MoveResult.Failed)
-    noTmp()
-    assertEquals(tree, treeOf(File(item.absolutePath)))
+    val original = hashes(File(item.absolutePath))
+    io.afterCopy = { cancel = true }
+    assertEquals(MoveResult.Discarded("cancelled"), mover().moveOne(item.id, sdFolder("book")))
+    assertEquals(MovePhase.COPYING, journal.get(item.id)!!.phase)
+    cancel = false
+    io.afterCopy = null
+    mover().recover()
+    assertUntouched(item, before, original)
+  }
+
+  // ---- Process death at every step
+
+  @Test
+  fun aCrashAtAnyStepNeverLosesTheOnlyGoodCopy() {
+    val steps = listOf("journaled", "copied:01 Chapter.mp3", "copied:cover.jpg", "verified", "installed", "saved", "committed")
+    for (step in steps) {
+      val item = seed(bookItem())
+      val libId = item.libraryItemId!!
+      val original = hashes(File(item.absolutePath))
+      try {
+        mover(crashAt = step).moveOne(item.id, sdFolder("book"))
+        throw AssertionError("expected a crash at $step")
+      } catch (e: SimulatedCrash) {
+        // the process died
+      }
+      // The restarted app: recovery runs first, any number of times
+      repeat(2) { mover().recover() }
+      val rec = assertRecordComplete(item.id, original)
+      val committed = step in listOf("saved", "committed")
+      assertEquals("after a crash at $step the record uses the ${if (committed) "copy" else "source"}",
+              File(if (committed) sdRoot else inRoot, libId).absolutePath, rec.absolutePath)
+      if (committed) assertEquals("the source stays until the restart check ($step)", original, hashes(File(inRoot, libId)))
+      else assertFalse("an unused copy is removed ($step)", File(sdRoot, libId).exists())
+      noTmp()
+
+      restart()
+      repeat(2) { mover().recover() }
+      assertRecordComplete(item.id, original)
+      assertNull("finished after a restart ($step)", journal.get(item.id))
+      assertFalse("exactly one copy is left ($step)", File(if (committed) inRoot else sdRoot, libId).exists())
+    }
+  }
+
+  @Test
+  fun aCrashWhileRemovingTheOldCopyIsFinishedLater() {
+    val item = seed(bookItem())
+    val libId = item.libraryItemId!!
+    val original = hashes(File(item.absolutePath))
+    assertEquals(MoveResult.Moved, mover().moveOne(item.id, sdFolder("book")))
+    restart()
+    try {
+      mover(crashAt = "retired:01 Chapter.mp3").recover()
+      throw AssertionError("expected a crash")
+    } catch (e: SimulatedCrash) {
+      // the process died during the retirement
+    }
+    assertEquals(MovePhase.RETIRING, journal.get(item.id)!!.phase)
+    mover().recover()
+    assertFalse(File(inRoot, libId).exists())
+    assertNull(journal.get(item.id))
+    assertRecordComplete(item.id, original)
+  }
+
+  // ---- The restart check
+
+  @Test
+  fun aCopyThatFailsItsCheckAfterARestartSendsTheItemBackToItsOriginalFiles() {
+    val item = seed(bookItem())
+    val libId = item.libraryItemId!!
+    val original = hashes(File(item.absolutePath))
+    assertEquals(MoveResult.Moved, mover().moveOne(item.id, sdFolder("book")))
+    // Bytes lost on the card (power cut during writeback): same length, other content
+    flipByte(File(sdRoot, "$libId/02 Глава é.mp3"))
+    restart()
+    assertEquals(1, mover().recover().reverted)
+    val rec = assertRecordComplete(item.id, original)
+    assertEquals(File(inRoot, libId).absolutePath, rec.absolutePath)
+    assertEquals("internal-book", rec.folderId)
+    assertFalse("the failed copy is removed", File(sdRoot, libId).exists())
+    assertNull(journal.get(item.id))
+  }
+
+  @Test
+  fun aFailedCheckWithNewerFilesInTheCopyKeepsBothCopies() {
+    val item = seed(podcastItem())
+    val libId = item.libraryItemId!!
+    val original = hashes(File(item.absolutePath))
+    assertEquals(MoveResult.Moved, mover().moveOne(item.id, sdFolder("podcast")))
+    db.store.update(item.id) { addEpisode(it, 3); ItemUpdate.Save(it) }
+    flipByte(File(sdRoot, "$libId/ep 1.mp3"))
+    restart()
+    assertEquals(1, mover().recover().attention)
+    assertEquals(MovePhase.NEEDS_ATTENTION, journal.get(item.id)!!.phase)
+    assertEquals("the original stays", original, hashes(File(inRoot, libId)))
+    assertTrue("the copy and its newer episode stay", File(sdRoot, "$libId/new 3.mp3").isFile)
+    assertEquals(File(sdRoot, libId).absolutePath, db.getItem(item.id)!!.absolutePath)
+    // Nothing more happens to it automatically
+    restart()
+    mover().recover()
+    assertEquals(original, hashes(File(inRoot, libId)))
+  }
+
+  @Test
+  fun noBootIdentityMeansTheOldCopyIsNeverRemoved() {
+    val item = seed(bookItem())
+    val libId = item.libraryItemId!!
+    val unknown = StorageMover(probe, db, journal, io, { null })
+    assertEquals(MoveResult.Moved, unknown.moveOne(item.id, sdFolder("book")))
+    restart()
+    repeat(2) { unknown.recover() }
+    mover().recover()
+    assertTrue("kept: the commit's boot is unknown", File(inRoot, libId).isDirectory)
+    assertFalse(StorageMover.recoveryPending(journal) { boot })
+  }
+
+  // ---- Removable storage during and after a move
+
+  @Test
+  fun aCardRemovedDuringTheCopyLeavesTheItemOnItsSource() {
+    val item = seed(bookItem())
+    val before = db.json(item.id)
+    val original = hashes(File(item.absolutePath))
+    io.afterCopy = { probe.sdMounted = false }
+    val result = mover().moveOne(item.id, sdFolder("book"))
+    assertTrue("$result", result !is MoveResult.Moved)
     assertEquals(before, db.json(item.id))
+    assertEquals(original, hashes(File(item.absolutePath)))
+    // The card comes back: recovery removes the partial copy
+    probe.sdMounted = true
+    io.afterCopy = null
+    mover().recover()
     assertFalse(File(sdRoot, item.libraryItemId!!).exists())
+    assertNull(journal.get(item.id))
+    noTmp()
   }
 
   @Test
-  fun crashAfterRenameBeforeDbWrite() {
+  fun aCardMissingAfterTheMoveDelaysTheCleanupUntilItIsBack() {
     val item = seed(bookItem())
     val libId = item.libraryItemId!!
-    val tree = treeOf(File(item.absolutePath))
-    File(sdRoot, libId).mkdirs()
-    write(File(sdRoot, libId), "junk.bin", 10)
+    val original = hashes(File(item.absolutePath))
+    assertEquals(MoveResult.Moved, mover().moveOne(item.id, sdFolder("book")))
+    probe.sdMounted = false
+    restart()
+    repeat(2) { mover().recover() }
+    assertEquals("the source stays while the copy can't be checked", original, hashes(File(inRoot, libId)))
+    assertEquals(MovePhase.COMMITTED, journal.get(item.id)!!.phase)
 
-    StorageMover.cleanOrphans(listOf(inRoot, sdRoot), db)
-    assertTrue("the source is owned and stays", File(item.absolutePath).isDirectory)
-    assertEquals(MoveResult.Moved, StorageMover.moveOne(item.id, sdFolder("book"), probe, db))
-    assertEquals(tree, treeOf(File(sdRoot, libId)))
+    // Another card under the same UUID (no matching marker) is not the copy's card
+    probe.sdMounted = true
+    probe.sdIdentity = VolumeIdentity.MISMATCH
+    mover().recover()
+    assertEquals(original, hashes(File(inRoot, libId)))
+    assertEquals(MoveResult.Discarded("unavailable"), mover().moveOne(seed(bookItem()).id, sdFolder("book")))
 
-    val other = seed(bookItem())
-    val otherId = other.libraryItemId!!
-    val otherTree = treeOf(File(other.absolutePath))
-    write(File(sdRoot, otherId).apply { mkdirs() }, "junk.bin", 10)
-    assertEquals(MoveResult.Moved, StorageMover.moveOne(other.id, sdFolder("book"), probe, db))
-    assertEquals("an unowned leftover at the destination is replaced", otherTree, treeOf(File(sdRoot, otherId)))
+    probe.sdIdentity = VolumeIdentity.VERIFIED
+    mover().recover()
+    assertFalse(File(inRoot, libId).exists())
+    assertRecordComplete(item.id, original)
   }
 
   @Test
-  fun crashAfterDbWriteBeforeSourceDelete() {
+  fun aDeletedItemsOldCopyIsRemovedAfterTheRestart() {
     val item = seed(bookItem())
     val libId = item.libraryItemId!!
-    val tree = treeOf(File(item.absolutePath))
-    StorageMover.copyDirVerified(File(item.absolutePath), File(sdRoot, libId))
-    db.saveItem(StorageMover.relocate(item, inRoot, sdRoot, sdFolder("book")))
-
-    StorageMover.cleanOrphans(listOf(inRoot, sdRoot), db)
-
-    assertFalse("the old source is an orphan", File(inRoot, libId).exists())
-    assertEquals(tree, treeOf(File(sdRoot, libId)))
+    assertEquals(MoveResult.Moved, mover().moveOne(item.id, sdFolder("book")))
+    // The user deletes the moved item (its current folder) before the restart
+    File(sdRoot, libId).deleteRecursively()
+    db.store.remove(item.id)
+    restart()
+    mover().recover()
+    assertFalse(File(inRoot, libId).exists())
+    assertNull(journal.get(item.id))
   }
 
-  @Test
-  fun crashBeforeSessionHeal() {
-    val item = bookItem()
-    val moved = StorageMover.relocate(item, inRoot, sdRoot, sdFolder("book"))
-    seed(moved)
-    val sessionTracks = tracks(item).map { it.copy(metadata = it.metadata!!.copy()) }.toMutableList()
-    db.session =
-            PlaybackSession(
-                    "s1", "user", item.libraryItemId, null, "book", item.media.metadata, DeviceInfo("d", "m", "m", 35, "1"),
-                    listOf(), "Book", "Author", null, 20.0, 3, 0L, 0L, 0L, sessionTracks, 5.0, null, item, null, "server", "addr", "exo-player"
-            )
-
-    StorageMover.healLastSession(db)
-
-    val s = db.session!!
-    assertEquals(1, db.sessionSaves)
-    assertEquals(moved.absolutePath, s.localLibraryItem!!.absolutePath)
-    assertEquals(moved.folderId, s.localLibraryItem!!.folderId)
-    assertEquals(tracks(moved).map { it.contentUrl }, s.audioTracks.map { it.contentUrl })
-    assertEquals(tracks(moved).map { it.metadata!!.path }, s.audioTracks.map { it.metadata!!.path })
-    assertEquals(5.0, s.currentTime, 0.0)
-
-    StorageMover.healLastSession(db)
-    assertEquals("a healed session is not written again", 1, db.sessionSaves)
-  }
+  // ---- Leftovers
 
   @Test
-  fun orphansRespectOwnership() {
-    val failedDownload = File(sdRoot, "li_failed").apply { mkdirs() }
-    write(failedDownload, "part.mp3", 10)
-    db.queueFolders.add(failedDownload.absolutePath)
-    val owned = seed(bookItem())
+  fun onlyUnusedTemporaryCopiesAreSweptAndUnreferencedFoldersStay() {
+    val stray = File(sdRoot, ".moving-old").apply { mkdirs() }
+    write(stray, "a.mp3", 10)
+    // A folder no record refers to (a record lost elsewhere, a failed download) is not deleted for that reason
     val nobody = File(inRoot, "li_nobody").apply { mkdirs() }
     write(nobody, "a.mp3", 10)
-    val moving = File(inRoot, ".moving-x").apply { mkdirs() }
-    write(moving, "a.mp3", 10)
     val rootFile = write(inRoot, "stray.bin", 10)
-
-    StorageMover.cleanOrphans(listOf(inRoot, sdRoot, File(temp.root, "missing/downloads")), db)
-
-    assertTrue("a failed download's folder stays", File(failedDownload, "part.mp3").isFile)
-    assertTrue("another item's folder stays", File(owned.absolutePath).isDirectory)
-    assertNotNull(File(owned.absolutePath).listFiles()?.firstOrNull())
-    assertFalse("a folder nobody owns is deleted", nobody.exists())
-    assertFalse("a move copy is deleted", moving.exists())
-    assertTrue("files in the root stay", rootFile.isFile)
-  }
-
-  @Test
-  fun orphanCleanupReadsOwnershipOnce() {
-    val owned = List(3) { seed(bookItem()) }
-    val nobody = File(sdRoot, "li_nobody").apply { mkdirs() }
-
-    StorageMover.cleanOrphans(listOf(inRoot, sdRoot), db)
-
-    assertEquals("one ownership snapshot per cleanup", 1, db.ownedDirsCalls.get())
-    assertEquals("only the folder missing from the snapshot is rechecked", 1, db.dirOwnedCalls.get())
-    owned.forEach { assertTrue(File(it.absolutePath).isDirectory) }
-    assertFalse(nobody.exists())
-  }
-
-  @Test
-  fun orphanCleanupWaitsForAFinishingDownload() {
-    val libId = "li_race"
-    val dir = File(sdRoot, libId).apply { mkdirs() }
-    write(dir, "01.mp3", 10)
-    db.queueFolders.add(dir.absolutePath)
-    // A snapshot without the folder, so the decision falls to the locked recheck
-    db.ownedSnapshot = emptySet()
-    val finisher = AtomicReference<Thread>()
-    db.betweenReads = {
-      // Like a finishing download: save the item under its lock, then drop the queue entry
-      val t = Thread {
-        val media = Book(bookMeta(), null, listOf(), null, null, mutableListOf(), null, null, null, null)
-        LocalItemLocks.withItem("local_$libId") { db.saveItem(item(libId, dir, sdFolder("book").id, "book", media, listOf(), null)) }
-        db.queueFolders.remove(dir.absolutePath)
-      }
-      finisher.set(t)
-      t.start()
-      t.join(400)
-    }
-
-    StorageMover.cleanOrphans(listOf(inRoot, sdRoot), db)
-    finisher.get().join(5000)
-
-    assertFalse("the download finished", finisher.get().isAlive)
-    assertNotNull(db.getItem("local_$libId"))
-    assertTrue("a download finishing during cleanup keeps its folder", File(dir, "01.mp3").isFile)
-  }
-
-  private fun assertCopyFailsWhileUnreadable(src: File, unreadable: File) {
-    assertTrue(unreadable.setReadable(false))
-    try {
-      assumeTrue("this file system lists directories without read permission", unreadable.listFiles() == null)
-      try {
-        StorageMover.copyDirVerified(src, File(temp.root, "dst-" + uniq()))
-        fail("a copy that could not list ${unreadable.name} passed as complete")
-      } catch (e: IOException) {
-        assertTrue(e.message, e.message!!.contains("could not list"))
-      }
-    } finally {
-      unreadable.setReadable(true)
-    }
-  }
-
-  @Test
-  fun unreadableSourceFailsTheCopy() {
-    val src = File(temp.root, "src").apply { mkdirs() }
-    write(src, "a.mp3", 10)
-    val sub = File(src, "sub").apply { mkdirs() }
-    write(sub, "b.mp3", 10)
-
-    assertCopyFailsWhileUnreadable(src, src)
-    assertCopyFailsWhileUnreadable(src, sub)
-  }
-
-  @Test
-  fun unreadableSourceFailsTheMove() {
-    val item = seed(bookItem())
-    val src = File(item.absolutePath)
-    val before = db.json(item.id)
-    val tree = treeOf(src)
-    assertTrue(src.setReadable(false))
-    val result =
-            try {
-              assumeTrue("this file system lists directories without read permission", src.listFiles() == null)
-              StorageMover.moveOne(item.id, sdFolder("book"), probe, db)
-            } finally {
-              src.setReadable(true)
-            }
-
-    assertTrue("$result", result is MoveResult.Failed)
-    assertEquals(tree, treeOf(src))
-    assertEquals("the database still points at the source", before, db.json(item.id))
-    assertFalse(File(sdRoot, item.libraryItemId!!).exists())
-    noTmp()
+    mover().recover()
+    assertFalse("an unused temporary copy is removed", stray.exists())
+    assertTrue("an unreferenced folder is kept", File(nobody, "a.mp3").isFile)
+    assertTrue(rootFile.isFile)
   }
 }

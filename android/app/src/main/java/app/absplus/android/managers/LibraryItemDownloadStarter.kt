@@ -105,6 +105,8 @@ object LibraryItemDownloadStarter {
     var appItemFolderPath = ""
     val tempFolderPath: String
     if (isAppStorage) {
+      // An SD card is bound to the app (marker + token) before its first download; another card is never written to
+      if (!AppStorage.ensureRegistered(localFolder.id, probe)) return null to STORAGE_UNAVAILABLE_MESSAGE
       val downloadsRoot = AppStorage.downloadsRoot(localFolder, probe)
       val stagingRoot = AppStorage.stagingRoot(localFolder, probe)
       if (downloadsRoot == null || stagingRoot == null) {

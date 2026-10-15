@@ -423,7 +423,8 @@ export default {
         if (res && res.success) {
           this.$toast.success('Deleted Successfully')
           this.$router.replace(this.isIos ? '/downloads' : `/localMedia/folders/${this.folderId}`)
-        } else this.$toast.error('Failed to delete')
+        } else if (res?.reason === 'storageUnavailable') this.$toast.error(this.$strings.LabelDownloadStorageUnavailable)
+        else this.$toast.error('Failed to delete')
       }
     },
     async init() {

@@ -482,7 +482,8 @@ export default {
             // Remove localLibraryItem
             this.$delete(this.libraryItem, 'localLibraryItem')
           }
-        } else this.$toast.error('Failed to delete')
+        } else if (res?.reason === 'storageUnavailable') this.$toast.error(this.$strings.LabelDownloadStorageUnavailable)
+        else this.$toast.error('Failed to delete')
       }
     },
     clickRSSFeed() {

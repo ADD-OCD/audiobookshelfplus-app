@@ -6,7 +6,8 @@ import app.absplus.android.data.LocalLibraryItem
 object StorageMovePass {
   private const val DISCARDS_BEFORE_RETRY = 2
 
-  fun shouldStart(reconcileNeeded: Boolean, toMoveEmpty: Boolean): Boolean = reconcileNeeded || !toMoveEmpty
+  fun shouldStart(reconcileNeeded: Boolean, toMoveEmpty: Boolean, recoveryPending: Boolean = false): Boolean =
+          reconcileNeeded || !toMoveEmpty || recoveryPending
 
   fun itemSize(item: LocalLibraryItem): Long = item.localFiles.sumOf { it.size }
 
@@ -70,11 +71,15 @@ object StorageMovePass {
     }
   }
 
-  /** Whole pass: flag on, heal, orphan cleanup, moves, flag off only if everything above returned normally. */
+  /**
+   * Whole pass: flag on, heal, journal recovery, moves, flag off only if everything above returned normally. Recovery
+   * runs first, so an interrupted move is finished or undone before anything new starts; there is no orphan-folder
+   * deletion: a folder nothing refers to is never deleted for that reason alone (H03).
+   */
   fun reconcile(
           setReconcileNeeded: (Boolean) -> Unit,
           heal: () -> Unit,
-          cleanOrphans: () -> Unit,
+          recover: () -> Unit,
           planFn: () -> MovePlan,
           move: (LocalLibraryItem) -> MoveResult,
           onMoved: (String) -> Unit,
@@ -82,7 +87,7 @@ object StorageMovePass {
   ): MoveStatus {
     setReconcileNeeded(true)
     heal()
-    cleanOrphans()
+    recover()
     val status = run(planFn, move, onMoved, onStatus)
     setReconcileNeeded(false)
     return status

@@ -28,6 +28,11 @@ import app.absplus.android.managers.MovePlan
 import app.absplus.android.managers.MoveResult
 import app.absplus.android.managers.MoveStatus
 import app.absplus.android.managers.MoverDb
+import app.absplus.android.managers.AndroidBootEpoch
+import app.absplus.android.managers.MovePhase
+import app.absplus.android.managers.PaperMoveJournal
+import app.absplus.android.managers.RecoverySummary
+import app.absplus.android.device.AndroidStorageIo
 import app.absplus.android.managers.StorageMovePass
 import app.absplus.android.managers.StorageMovePlanner
 import app.absplus.android.managers.StorageMover
@@ -65,15 +70,30 @@ class StorageMoveService : Service() {
       isRunning = true
       // A previous pass's status must not pass for this one's progress
       lastStatus = null
+      cancelRequested = false
       scope.launch { runPass() }
     }
     return START_NOT_STICKY
   }
 
   override fun onDestroy() {
+    // A blocking copy does not see coroutine cancellation; it checks this flag between buffers
+    cancelRequested = true
     isRunning = false
     scope.cancel()
     super.onDestroy()
+  }
+
+  // Android 15+ limits dataSync foreground services: stop promptly; the journal lets the next pass resume (A01)
+  override fun onTimeout(startId: Int, fgsType: Int) {
+    AbsLogger.info(TAG, "Storage move pass reached the foreground service time limit; stopping, it resumes later")
+    cancelRequested = true
+    stopForeground(STOP_FOREGROUND_REMOVE)
+    stopSelf()
+  }
+
+  override fun onTimeout(startId: Int) {
+    onTimeout(startId, 0)
   }
 
   override fun onBind(intent: Intent?): IBinder? = null
@@ -85,12 +105,13 @@ class StorageMoveService : Service() {
       // Before the queue is restored it looks empty, and orphan cleanup would delete failed downloads' folders
       DownloadServiceHost.awaitRestored(app)
       val db = ProdMoverDb()
+      val mover = StorageMover(probe, db, PaperMoveJournal, AndroidStorageIo, AndroidBootEpoch(app), cancelled = { cancelRequested })
       StorageMovePass.reconcile(
               setReconcileNeeded = ::postReconcileNeeded,
               heal = { StorageMover.healLastSession(db) },
-              cleanOrphans = { StorageMover.cleanOrphans(mountedDownloadRoots(probe), db) },
-              planFn = { planNow(probe) },
-              move = { move(it, probe, db) },
+              recover = { logRecovery(mover.recover()) },
+              planFn = { if (cancelRequested) MovePlan(emptyList(), emptyMap()) else planNow(probe) },
+              move = { move(it, probe, mover) },
               onMoved = { id -> DeviceManager.dbManager.getLocalLibraryItem(id)?.let { movedListener?.invoke(it) } },
               onStatus = { publish(app, it) })
     } catch (e: CancellationException) {
@@ -145,14 +166,6 @@ class StorageMoveService : Service() {
     // Called under the item lock; takes only the download manager's monitor, never the other way round
     override fun hasQueuedDownload(libraryItemId: String): Boolean = DownloadServiceHost.hasQueuedDownload(libraryItemId)
 
-    override fun dirOwned(dir: File): Boolean = AppStorage.normalizedPath(dir) in ownedDirs()
-
-    override fun ownedDirs(): Set<String> {
-      val paths = DeviceManager.dbManager.getLocalLibraryItems().map { it.absolutePath } +
-              DownloadServiceHost.queueSnapshot().map { it.itemFolderPath }
-      return paths.filter { it.isNotEmpty() }.mapTo(HashSet()) { AppStorage.normalizedPath(File(it)) }
-    }
-
     // healLastSession edits the session, so it gets a copy, tracks included, not the live DeviceData object
     override fun lastSession(): PlaybackSession? =
             DeviceManager.deviceData.lastPlaybackSession?.clone()?.also { s ->
@@ -179,6 +192,7 @@ class StorageMoveService : Service() {
     @Volatile var movedListener: ((LocalLibraryItem) -> Unit)? = null
     @Volatile var lastStatus: MoveStatus? = null
     @Volatile var isRunning = false
+    @Volatile private var cancelRequested = false
     // Main-confined: a request during a pass may come after that pass's last plan, so finishPass runs another
     private var rerunRequested = false
 
@@ -209,7 +223,8 @@ class StorageMoveService : Service() {
           DownloadServiceHost.awaitRestored(app)
           val flag = DeviceManager.deviceData.reconcileNeeded
           val toMoveEmpty = flag || planNow(AndroidVolumeProbe(app)).toMove.isEmpty()
-          if (!StorageMovePass.shouldStart(flag, toMoveEmpty)) return@launch
+          val recovery = StorageMover.recoveryPending(PaperMoveJournal, AndroidBootEpoch(app))
+          if (!StorageMovePass.shouldStart(flag, toMoveEmpty, recovery)) return@launch
           // From the background Android 12+ refuses the foreground start; the flag brings it back on resume
           if (!MainActivity.isForeground) {
             AbsLogger.info(TAG, "Storage move pass deferred: app is in background")
@@ -259,6 +274,10 @@ class StorageMoveService : Service() {
         })
       }
       result.put("move", JSObject(mapper.writeValueAsString(move)))
+      // Old copies kept until they are checked after a restart, and moves that keep both copies for the user
+      val journal = PaperMoveJournal.all()
+      result.put("cleanupPending", journal.count { it.phase == MovePhase.COMMITTED || it.phase == MovePhase.RETIRING })
+      result.put("needsAttention", journal.count { it.phase == MovePhase.NEEDS_ATTENTION })
       return result
     }
 
@@ -281,15 +300,22 @@ class StorageMoveService : Service() {
                     currentTarget(),
                     probe,
                     LocalItemLocks::isPinned,
-                    ::freeBytes)
+                    journaled = { PaperMoveJournal.get(it) != null },
+                    freeBytes = ::freeBytes)
 
-    private fun move(item: LocalLibraryItem, probe: VolumeProbe, db: MoverDb): MoveResult {
+    private fun move(item: LocalLibraryItem, probe: VolumeProbe, mover: StorageMover): MoveResult {
       val folder = AppStorage.folderFor(currentTarget(), item.mediaType)
+      // The card is bound to the app before anything is written to it
+      if (!AppStorage.ensureRegistered(folder.id, probe)) return MoveResult.Discarded("unavailable")
       // App-storage folders are saved lazily, and moveOne does not save them
       if (AppStorage.isAvailable(folder, probe) && DeviceManager.dbManager.getLocalFolder(folder.id) == null) {
         DeviceManager.dbManager.saveLocalFolder(folder)
       }
-      return StorageMover.moveOne(item.id, folder, probe, db)
+      return mover.moveOne(item.id, folder)
+    }
+
+    private fun logRecovery(summary: RecoverySummary) {
+      if (summary != RecoverySummary(0, 0, 0, 0, 0, 0)) AbsLogger.info(TAG, "Storage move recovery: $summary")
     }
 
     // The target downloads directory may not exist yet
@@ -303,17 +329,6 @@ class StorageMoveService : Service() {
               0L
             }
 
-    // Only removable volumes carry app storage folders; the primary external volume is never a target
-    private fun mountedDownloadRoots(probe: VolumeProbe): List<File> {
-      val roots = mutableListOf(File(probe.internalFilesDir(), "downloads"))
-      probe.volumes().forEach { v ->
-        val uuid = v.uuid
-        if (v.removable && v.mounted && v.writable && uuid != null) {
-          AppStorage.downloadsRoot(AppStorage.appsdFolderId(uuid, "book"), probe)?.let { roots += it }
-        }
-      }
-      return roots
-    }
 
     private fun notification(context: Context, status: MoveStatus?): Notification {
       val strings = DownloadServiceHost.notificationStrings(context)

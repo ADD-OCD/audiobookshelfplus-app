@@ -13,7 +13,9 @@ data class AppVolume(
         val filesDir: File,
         val removable: Boolean,
         val mounted: Boolean,
-        val writable: Boolean
+        val writable: Boolean,
+        /** Removable volumes only: whether this is the card the app's records were written to ([VolumeRegistry]). */
+        val identity: VolumeIdentity = VolumeIdentity.VERIFIED
 )
 
 /** The Android storage lookups, behind an interface so the rules can be tested without devices. */
@@ -33,7 +35,8 @@ class AndroidVolumeProbe(private val context: Context) : VolumeProbe {
         val sv = storageManager.getStorageVolume(dir) ?: return@mapNotNull null
         val mounted = sv.state == Environment.MEDIA_MOUNTED
         val writable = mounted && (dir.mkdirs() || dir.isDirectory) && dir.canWrite()
-        AppVolume(sv.uuid, dir, sv.isRemovable, mounted, writable)
+        val identity = if (sv.isRemovable && mounted) VolumeRegistry.identity(sv.uuid, dir) else VolumeIdentity.VERIFIED
+        AppVolume(sv.uuid, dir, sv.isRemovable, mounted, writable, identity)
       } catch (e: Exception) {
         AbsLogger.error("AppStorage", "Could not read storage volume for ${dir.absolutePath}: ${e.message}")
         null
@@ -91,13 +94,35 @@ object AppStorage {
   /** SAF folders are judged by [FolderAccess], not here. */
   fun isAvailable(folder: LocalFolder, probe: VolumeProbe): Boolean = isAvailable(folder.id, probe)
 
+  /**
+   * Whether the folder can be read and written now. An SD card counts only while it is mounted, writable and not a
+   * different card under the same UUID; anything uncertain is unavailable, which every caller treats as "keep".
+   */
   fun isAvailable(folderId: String, probe: VolumeProbe): Boolean {
     if (folderId.startsWith(INTERNAL_PREFIX)) return true
-    return mountedVolumeFor(folderId, probe)?.writable == true
+    val volume = mountedVolumeFor(folderId, probe) ?: return false
+    return volume.writable && volume.identity != VolumeIdentity.MISMATCH
+  }
+
+  /**
+   * Stronger than [isAvailable], for anything that deletes or reconciles existing files: the card must be the very one
+   * the records were written to (H02).
+   */
+  fun isVerified(folderId: String, probe: VolumeProbe): Boolean {
+    if (folderId.startsWith(INTERNAL_PREFIX)) return true
+    val volume = mountedVolumeFor(folderId, probe) ?: return false
+    return volume.writable && volume.identity == VolumeIdentity.VERIFIED
+  }
+
+  /** Registers the folder's card before the first write to it; internal storage needs nothing. */
+  fun ensureRegistered(folderId: String, probe: VolumeProbe): Boolean {
+    if (folderId.startsWith(INTERNAL_PREFIX)) return true
+    val volume = mountedVolumeFor(folderId, probe) ?: return false
+    return volume.writable && VolumeRegistry.ensureRegistered(volume)
   }
 
   fun removableVolume(probe: VolumeProbe): AppVolume? =
-          probe.volumes().firstOrNull { it.removable && it.mounted && it.writable }
+          probe.volumes().firstOrNull { it.removable && it.mounted && it.writable && it.identity != VolumeIdentity.MISMATCH }
 
   /**
    * The SD card the settings page describes: the configured card, else any inserted one (choosing it makes it the

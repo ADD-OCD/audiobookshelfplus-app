@@ -7,6 +7,7 @@ import app.absplus.android.data.LocalLibraryItem
 import app.absplus.android.data.MediaProgress
 import app.absplus.android.data.Podcast
 import app.absplus.android.data.PodcastAutoDownloadEntry
+import app.absplus.android.device.AppStorage
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.models.User
 import app.absplus.android.plugins.AbsLogger
@@ -249,8 +250,8 @@ object AutoDownloadManager {
       // Local copies are stored per library item (one folder, one local item), whichever saved server downloaded
       // them, so any copy counts as on the device; retention, by contrast, only ever touches this server's own copy
       val podcastLocals = localItems.filter { it.libraryItemId == id }
-      // Auto download writes to internal app storage only; a podcast kept in a device folder is left to the user
-      if (podcastLocals.any { !it.folderId.startsWith("internal-") }) {
+      // Auto download writes to app storage (internal or the SD card setting); a podcast kept in a device folder is left to the user
+      if (podcastLocals.any { !AppStorage.isAppStorage(it.folderId) }) {
         AbsLogger.info(TAG, "Podcast $id is downloaded to a device folder; auto download skips it")
         continue
       }

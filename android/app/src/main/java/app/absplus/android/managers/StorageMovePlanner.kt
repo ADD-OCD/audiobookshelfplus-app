@@ -13,7 +13,9 @@ enum class WaitReason {
   DOWNLOADING,
   UNAVAILABLE,
   NO_SPACE,
-  RETRY
+  RETRY,
+  /** Its previous move keeps the old copy until it is checked after the next device restart. */
+  FINISHING
 }
 
 data class MoveStatus(
@@ -38,6 +40,17 @@ object StorageMovePlanner {
           probe: VolumeProbe,
           pinned: (String) -> Boolean,
           freeBytes: (File) -> Long
+  ): MovePlan = plan(items, queue, target, probe, pinned, { false }, freeBytes)
+
+  /** [journaled]: items with an unfinished move ([MoveJournal]); they wait until it has finished or been undone. */
+  fun plan(
+          items: List<LocalLibraryItem>,
+          queue: List<DownloadItem>,
+          target: StorageTarget,
+          probe: VolumeProbe,
+          pinned: (String) -> Boolean,
+          journaled: (String) -> Boolean,
+          freeBytes: (File) -> Long
   ): MovePlan {
     val toMove = mutableListOf<LocalLibraryItem>()
     val waiting = linkedMapOf<String, WaitReason>()
@@ -58,6 +71,8 @@ object StorageMovePlanner {
 
       val reason =
               when {
+                // One journaled move per item: the next starts only after the previous one finished or was undone
+                journaled(item.id) -> WaitReason.FINISHING
                 pinned(item.id) -> WaitReason.PLAYING
                 item.libraryItemId != null && item.libraryItemId in queuedServerIds -> WaitReason.DOWNLOADING
                 !AppStorage.isAvailable(item.folderId, probe) || !AppStorage.isAvailable(targetFolder, probe) ->

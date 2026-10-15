@@ -144,6 +144,21 @@ class DownloadControlsTest {
 
   private fun manager() = DownloadItemManager(FolderScanner(context), context, emitter)
 
+  // Auto-owned transfers run only while plus's AutoTransferGate allows them; these tests are about the SD card
+  private fun allowAutoTransfers(manager: DownloadItemManager) {
+    val real = AutoTransferGate.forContext(context)
+    manager.autoGate = object : AutoTransferGate {
+      override fun isAuto(item: DownloadItem) = real.isAuto(item)
+      override fun allowedNow() = true
+    }
+  }
+
+  // The registered card in the slot: finished SD files are deleted only on it (never on a missing or other card)
+  private val verifiedSdProbe = object : VolumeProbe {
+    override fun volumes() = listOf(AppVolume("79EC-9B33", File(root, "sd"), removable = true, mounted = true, writable = true))
+    override fun internalFilesDir(): File = context.filesDir
+  }
+
   private fun saveLocalItemUsing(path: String) =
           DeviceManager.dbManager.saveLocalLibraryItem(
                   LocalLibraryItem(
@@ -227,12 +242,14 @@ class DownloadControlsTest {
     assertFalse(used.finalDestinationPath in plan.delete)
     assertEquals(listOf("02.mp3"), plan.keptFinishedFiles)
 
+    // Queued first, then its files appear (plus's R29-N02 admission renames a part whose destination already holds
+    // a file nobody owns, so files placed before queueing would not be this download's)
+    val manager = DownloadItemManager(FolderScanner(context), context, emitter, verifiedSdProbe)
+    manager.addDownloadItem(item("s", loose, used, pending, sd = true))
     val looseFile = touch(loose.finalDestinationPath)
     val usedFile = touch(used.finalDestinationPath)
     val staging = touch(pending.destinationPath, 4)
     saveLocalItemUsing(used.finalDestinationPath)
-    val manager = manager()
-    manager.addDownloadItem(item("s", loose, used, pending, sd = true))
     assertEquals(DownloadItemManager.RemoveResult.REMOVED, manager.removeDownloadItem("s", "Clear"))
     assertFalse(looseFile.exists())
     assertFalse(staging.exists())
@@ -350,6 +367,7 @@ class DownloadControlsTest {
     AutoDownloadStore.markAutoQueued("server", "sdi", "ep1")
 
     val manager = DownloadItemManager(FolderScanner(context), context, emitter, probe)
+    allowAutoTransfers(manager)
     manager.addDownloadItem(sdItem)
     manager.resumeWork()
     assertTrue("a missing card fails the download as SD card not available", pending.failed && pending.storageUnavailable)
@@ -359,6 +377,7 @@ class DownloadControlsTest {
     assertEquals(DownloadItemManager.QueuedState.STORAGE_UNAVAILABLE, manager.queuedState("sdi"))
 
     val restarted = DownloadItemManager(FolderScanner(context), context, emitter, probe)
+    allowAutoTransfers(restarted)
     restarted.restoreQueue()
     val restored = restarted.downloadItemQueue.single { it.id == "sdi" }
     val restoredPending = restored.downloadItemParts.single { it.filename == "02.mp3" }
@@ -453,10 +472,13 @@ class DownloadControlsTest {
               override fun volumes() = listOf(AppVolume("79EC-9B33", File(root, "sd"), removable = true, mounted = mounted, writable = mounted))
               override fun internalFilesDir(): File = context.filesDir
             }
-    DeviceManager.dbManager.saveDownloadItem(item("fin", part("fin", "01.mp3", moved = true, sd = true), sd = true))
+    val finished = part("fin", "01.mp3", moved = true, sd = true)
+    DeviceManager.dbManager.saveDownloadItem(item("fin", finished, sd = true))
     val manager = DownloadItemManager(FolderScanner(context), context, emitter, probe)
     manager.restoreQueue()
 
+    // The card comes back with the finished file on it (a scan from removable storage is all or nothing)
+    touch(finished.finalDestinationPath)
     probe.mounted = true
     manager.resumeAwaitingStorage()
     awaitFinalized(manager)
