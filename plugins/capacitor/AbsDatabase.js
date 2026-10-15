@@ -96,7 +96,9 @@ class AbsDatabaseWeb extends WebPlugin {
     const refreshToken = localStorage.getItem(`refresh_token_${serverConnectionConfigId}`)
     if (!ssc || !refreshToken) return { status: 'rejected' }
     try {
-      const response = await fetch(`${ssc.address}/auth/refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-refresh-token': refreshToken } })
+      // Match native renewal: never forward a refresh secret through an HTTP redirect.
+      // Fetch rejects before contacting Location; catch returns transient and keeps credentials.
+      const response = await fetch(`${ssc.address}/auth/refresh`, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', 'x-refresh-token': refreshToken } })
       if (response.status === 401 || response.status === 403) {
         if (localStorage.getItem(`refresh_token_${serverConnectionConfigId}`) === refreshToken) localStorage.removeItem(`refresh_token_${serverConnectionConfigId}`)
         return { status: 'rejected' }
