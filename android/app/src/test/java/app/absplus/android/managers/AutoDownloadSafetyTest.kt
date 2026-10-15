@@ -123,6 +123,23 @@ class AutoDownloadSafetyTest {
   }
 
   @Test
+  fun aRecordWrittenByThePrsOriginalCodeOwnsNothing() {
+    // PR #23's original code listed manually downloaded episodes as auto downloaded and had no manual list
+    val legacy = PodcastAutoDownloadEntry("ON", 2, mutableListOf("manual_before", "auto_before"))
+    PodcastAutoDownloadEntry::class.java.getDeclaredField("manualEpisodeIds").apply { isAccessible = true }.set(legacy, null)
+    PodcastAutoDownloadEntry::class.java.getDeclaredField("failedAttempts").apply { isAccessible = true }.set(legacy, null)
+    DeviceManager.dbManager.savePodcastAutoDownloadEntry("$server:$pod", legacy)
+    AutoDownloadStore.clearCacheForTests()
+    val read = AutoDownloadStore.get(server, pod)
+    assertEquals(emptyList<String>(), read.autoDownloadedEpisodeIds)
+    assertEquals("ON", read.enabled)
+    assertEquals(2, read.keepCount)
+    assertFalse(AutoDownloadStore.isAutoOwned(server, pod, "manual_before"))
+    assertEquals(emptyList<String>(), AutoDownloadPolicy.retentionDeletions(read, emptySet(), setOf("manual_before", "auto_before"),
+            listOf(AutoDownloadPolicy.LocalEpisode("manual_before", false, false, false), AutoDownloadPolicy.LocalEpisode("auto_before", false, false, false))))
+  }
+
+  @Test
   fun anEntryListingAnEpisodeInBothListsReadsAsManual() {
     DeviceManager.dbManager.savePodcastAutoDownloadEntry("$server:$pod",
             PodcastAutoDownloadEntry("ON", null, mutableListOf("x"), mutableListOf("x"), mutableMapOf()))

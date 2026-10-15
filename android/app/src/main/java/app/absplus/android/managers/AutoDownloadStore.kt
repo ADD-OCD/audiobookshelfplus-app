@@ -21,8 +21,11 @@ object AutoDownloadStore {
     val ids = (entry.autoDownloadedEpisodeIds as MutableList<String>?) ?: mutableListOf()
     val manual = (entry.manualEpisodeIds as MutableList<String>?) ?: mutableListOf()
     val failed = (entry.failedAttempts as MutableMap<String, Int>?) ?: mutableMapOf()
+    // Records from PR #23's original code have no manual list and also listed episodes that were downloaded manually,
+    // so their auto list is not ownership evidence: such a record owns nothing (nothing of it is ever removed)
+    val legacy = (entry.manualEpisodeIds as MutableList<String>?) == null
     // A manual claim always wins; never keep an episode in both lists
-    val owned = ids.filter { it !in manual }.toMutableList()
+    val owned = if (legacy) mutableListOf() else ids.filter { it !in manual }.toMutableList()
     return PodcastAutoDownloadEntry(enabled, entry.keepCount, owned, manual.toMutableList(), failed.toMutableMap())
   }
 
