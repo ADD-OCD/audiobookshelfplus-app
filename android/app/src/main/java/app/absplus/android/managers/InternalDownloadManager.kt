@@ -153,11 +153,11 @@ class InternalDownloadManager(
                     }
 
                     val downloadedSize = destinationFile.length()
-                    if (serverSize != null && downloadedSize != serverSize) {
-                      AbsLogger.error(
-                              tag,
-                              "Downloaded size for ${destinationFile.name} was $downloadedSize, expected server size $serverSize"
-                      )
+                    // An empty or cut-short body is not the file: never report it complete (the retry resumes
+                    // from the staged bytes, or restarts when there are none)
+                    val incomplete = DownloadIntegrity.incompleteReason(downloadedSize, serverSize, expectedSize)
+                    if (incomplete != null) {
+                      AbsLogger.error(tag, "Incomplete download for ${destinationFile.name}: $incomplete")
                       progressCallback.onComplete(true)
                     } else {
                       AbsLogger.info(

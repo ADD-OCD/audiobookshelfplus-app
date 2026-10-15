@@ -476,6 +476,13 @@ class DownloadItemManager(
       failOrRetry(item, part, "Transfer failed")
       return
     }
+    // Never finalize an empty staged file as the downloaded media (defense in depth for every completion path)
+    if (!part.moved && !part.isMoving && File(part.destinationPath).let { !it.isFile || it.length() <= 0L }) {
+      AbsLogger.error(tag, "Not finalizing ${part.filename}: the staged file is empty")
+      part.completed = false
+      failOrRetry(item, part, "Downloaded file is empty")
+      return
+    }
     if (part.isInternalStorage) finalizeInternalFile(item, part) else moveDownloadedFile(item, part)
   }
 
