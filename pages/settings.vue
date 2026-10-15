@@ -41,6 +41,12 @@
       </span>
       <span class="material-symbols text-xl text-fg-muted" aria-hidden="true">chevron_right</span>
     </nuxt-link>
+    <div class="py-3 flex items-center">
+      <p class="pr-4 w-36">{{ $strings.LabelPodcastEpisodesSort }}</p>
+      <div @click.stop="showPodcastEpisodesOrderModal = true">
+        <ui-text-input :value="podcastEpisodesSortText" readonly append-icon="expand_more" style="max-width: 200px" />
+      </div>
+    </div>
 
     <!-- Playback settings -->
     <p class="uppercase text-xs font-semibold text-fg-muted mb-2 mt-10">{{ $strings.HeaderPlaybackSettings }}</p>
@@ -275,6 +281,7 @@
     <modals-dialog v-model="showMoreMenuDialog" :items="moreMenuItems" :selected="moreMenuSelected" @action="clickMenuAction" />
     <modals-sleep-timer-length-modal v-model="showSleepTimerLengthModal" @change="sleepTimerLengthModalSelection" />
     <modals-auto-sleep-timer-rewind-length-modal v-model="showAutoSleepTimerRewindLengthModal" @change="showAutoSleepTimerRewindLengthModalSelection" />
+    <modals-order-modal v-model="showPodcastEpisodesOrderModal" :order-by.sync="podcastEpisodesOrderBy" :descending.sync="podcastEpisodesOrderDesc" episodes allow-auto />
   </div>
 </template>
 
@@ -294,6 +301,7 @@ export default {
       showMoreMenuDialog: false,
       showSleepTimerLengthModal: false,
       showAutoSleepTimerRewindLengthModal: false,
+      showPodcastEpisodesOrderModal: false,
       moreMenuSetting: '',
       downloadStorageStatus: null,
       downloadStorageListener: null,
@@ -448,6 +456,29 @@ export default {
     }
   },
   computed: {
+    podcastEpisodesOrderBy: {
+      get() {
+        return this.$store.getters['user/getUserSetting']('podcastEpisodesOrderBy') || 'publishedAt'
+      },
+      set(val) {
+        this.$store.dispatch('user/updateUserSettings', { podcastEpisodesOrderBy: val })
+      }
+    },
+    podcastEpisodesOrderDesc: {
+      get() {
+        return this.$store.getters['user/getUserSetting']('podcastEpisodesOrderDesc')
+      },
+      set(val) {
+        this.$store.dispatch('user/updateUserSettings', { podcastEpisodesOrderDesc: val })
+      }
+    },
+    podcastEpisodesSortText() {
+      const item = this.$constants.PodcastEpisodeSortItems.find((i) => i.value === this.podcastEpisodesOrderBy)
+      const keyText = item ? this.$strings[item.labelKey] : ''
+      const desc = this.podcastEpisodesOrderDesc
+      const dirText = desc == null ? this.$strings.LabelAuto : desc ? this.$strings.LabelDescending : this.$strings.LabelAscending
+      return `${keyText} · ${dirText}`
+    },
     // This is flipped because alt view was the default until v0.9.61-beta
     enableBookshelfView: {
       get() {

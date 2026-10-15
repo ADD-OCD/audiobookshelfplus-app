@@ -50,12 +50,13 @@
 
     <modals-podcast-episodes-feed-modal v-model="showPodcastEpisodeFeed" :library-item="libraryItem" :episodes="podcastFeedEpisodes" />
 
-    <modals-order-modal v-model="showSortModal" :order-by.sync="sortKey" :descending.sync="sortDesc" episodes />
+    <modals-order-modal v-model="showSortModal" :order-by.sync="sortKey" :descending.sync="sortDesc" episodes :show-reset="hasSortOverride" @reset="resetSortOverride" />
   </div>
 </template>
 
 <script>
 import { Dialog } from '@capacitor/dialog'
+import { podcastSortOverrideKey, resolvePodcastEpisodeSort, sortPodcastEpisodes } from '@/utils/podcastEpisodes'
 
 export default {
   props: {
@@ -114,28 +115,7 @@ export default {
       return this.episodesFiltered.length !== this.episodesCopy.length
     },
     episodeSortItems() {
-      return [
-        {
-          text: this.$strings.LabelPubDate,
-          value: 'publishedAt'
-        },
-        {
-          text: this.$strings.LabelTitle,
-          value: 'title'
-        },
-        {
-          text: this.$strings.LabelSeason,
-          value: 'season'
-        },
-        {
-          text: this.$strings.LabelEpisode,
-          value: 'episode'
-        },
-        {
-          text: this.$strings.LabelFilename,
-          value: 'audioFile.metadata.filename'
-        }
-      ]
+      return this.$constants.PodcastEpisodeSortItems.map((i) => ({ text: this.$strings[i.labelKey], value: i.value }))
     },
     filterItems() {
       return [
@@ -181,30 +161,7 @@ export default {
       })
     },
     episodesSorted() {
-      return this.episodesFiltered.sort((a, b) => {
-        let aValue
-        let bValue
-
-        if (this.sortKey.includes('.')) {
-          const getNestedValue = (ob, s) => s.split('.').reduce((o, k) => o?.[k], ob)
-          aValue = getNestedValue(a, this.sortKey)
-          bValue = getNestedValue(b, this.sortKey)
-        } else {
-          aValue = a[this.sortKey]
-          bValue = b[this.sortKey]
-        }
-
-        // Sort episodes with no pub date as the oldest
-        if (this.sortKey === 'publishedAt') {
-          if (!aValue) aValue = Number.MAX_VALUE
-          if (!bValue) bValue = Number.MAX_VALUE
-        }
-
-        if (this.sortDesc) {
-          return String(bValue).localeCompare(String(aValue), undefined, { numeric: true, sensitivity: 'base' })
-        }
-        return String(aValue).localeCompare(String(bValue), undefined, { numeric: true, sensitivity: 'base' })
-      })
+      return sortPodcastEpisodes(this.episodesFiltered, this.sortKey, this.sortDesc)
     },
     // Map of local episodes where server episode id is key
     localEpisodeMap() {
@@ -224,26 +181,49 @@ export default {
     filterKey() {
       return this.$store.getters['user/getUserSetting']('podcastEpisodesFilterBy') || 'incomplete'
     },
+    sortOverrideKey() {
+      return podcastSortOverrideKey(this.libraryItem, this.isLocal)
+    },
+    sortOverrides() {
+      return this.$store.getters['user/getUserSetting']('podcastEpisodesOrderOverrides') || {}
+    },
+    effectiveSort() {
+      return resolvePodcastEpisodeSort(this.$store.state.user.settings, this.sortOverrideKey, this.mediaMetadata.type)
+    },
+    hasSortOverride() {
+      return !!this.effectiveSort.override
+    },
     sortKey: {
       get() {
-        return this.$store.getters['user/getUserSetting']('podcastEpisodesOrderBy') || 'publishedAt'
+        return this.effectiveSort.orderBy
       },
       set(val) {
-        this.$store.dispatch('user/updateUserSettings', { podcastEpisodesOrderBy: val })
+        this.saveSortOverride({ orderBy: val, desc: this.sortDesc })
       }
     },
     sortDesc: {
       get() {
-        const desc = this.$store.getters['user/getUserSetting']('podcastEpisodesOrderDesc')
-        if (desc == null) return this.mediaMetadata.type === 'episodic'
-        return desc
+        return this.effectiveSort.desc
       },
       set(val) {
-        this.$store.dispatch('user/updateUserSettings', { podcastEpisodesOrderDesc: val })
+        this.saveSortOverride({ orderBy: this.sortKey, desc: val })
       }
     }
   },
   methods: {
+    saveSortOverride(snapshot) {
+      if (!this.sortOverrideKey) {
+        console.warn('[EpisodesTable] No library item id for sort override')
+        return
+      }
+      this.$store.dispatch('user/updateUserSettings', { podcastEpisodesOrderOverrides: { ...this.sortOverrides, [this.sortOverrideKey]: snapshot } })
+    },
+    resetSortOverride() {
+      if (!this.sortOverrideKey || !this.hasSortOverride) return
+      const overrides = { ...this.sortOverrides }
+      delete overrides[this.sortOverrideKey]
+      this.$store.dispatch('user/updateUserSettings', { podcastEpisodesOrderOverrides: overrides })
+    },
     async clearDownloadQueue() {
       const { value } = await Dialog.confirm({
         title: this.$strings.HeaderConfirm,

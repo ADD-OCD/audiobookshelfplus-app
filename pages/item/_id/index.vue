@@ -178,6 +178,7 @@
 import { Dialog } from '@capacitor/dialog'
 import { AbsFileSystem, AbsDownloader } from '@/plugins/capacitor'
 import { getAverageColorFromCoverUrl } from '@/utils/coverAverageColor'
+import { podcastSortOverrideKey, resolvePodcastEpisodeSort, sortPodcastEpisodes } from '@/utils/podcastEpisodes'
 import coverPresentation from '@/theme/coverPresentation'
 import cellularPermissionHelpers from '@/mixins/cellularPermissionHelpers'
 import { downloadState, DownloadState } from '@/utils/downloadState'
@@ -547,15 +548,11 @@ export default {
       if (this.playerIsStartingPlayback) return
 
       if (this.isPodcast) {
-        this.episodes.sort((a, b) => {
-          if (this.podcastType === 'serial') {
-            return String(a.publishedAt).localeCompare(String(b.publishedAt), undefined, { numeric: true, sensitivity: 'base' })
-          } else {
-            return String(b.publishedAt).localeCompare(String(a.publishedAt), undefined, { numeric: true, sensitivity: 'base' })
-          }
-        })
+        // Next episode and the auto-advance queue follow the same order as the episode list
+        const { orderBy, desc } = resolvePodcastEpisodeSort(this.$store.state.user.settings, podcastSortOverrideKey(this.libraryItem, this.isLocal), this.podcastType)
+        const episodes = sortPodcastEpisodes(this.episodes, orderBy, desc)
 
-        const startIndex = this.episodes.findIndex((ep) => {
+        const startIndex = episodes.findIndex((ep) => {
           var podcastProgress = null
           if (!this.isLocal) {
             podcastProgress = this.$store.getters['user/getUserMediaProgress'](this.libraryItemId, ep.id)
@@ -565,9 +562,9 @@ export default {
           return !podcastProgress?.isFinished
         })
 
-        const episode = startIndex >= 0 ? this.episodes[startIndex] : this.episodes[0]
+        const episode = startIndex >= 0 ? episodes[startIndex] : episodes[0]
         // All caught up (or nothing has progress yet) - just play this one episode, no queue.
-        const remainingEpisodes = startIndex >= 0 ? this.episodes.slice(startIndex) : [episode]
+        const remainingEpisodes = startIndex >= 0 ? episodes.slice(startIndex) : [episode]
 
         const episodeId = episode.id
 

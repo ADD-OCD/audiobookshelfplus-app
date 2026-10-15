@@ -108,6 +108,14 @@ class DownloadItemManager(
   fun restoreQueue() {
     if (downloadItemQueue.isNotEmpty()) return
     DeviceManager.dbManager.getDownloadItems().forEach { item ->
+      // Validate before restore resets (and deletes) partial files. Missing ownership is a hold,
+      // not a terminal transfer failure and must not schedule the 24-hour staging cleanup.
+      if (item.downloadItemParts.any { !it.moved && downloadToken(it, item) == null }) {
+        holdForDownloadAuthorization(item)
+        downloadItemQueue.add(item)
+        clientEventEmitter.onDownloadItem(item)
+        return@forEach
+      }
       val volumeMissing = storageUnavailable(item)
       // Files on a missing SD card are not gone, so they must not be reset as missing
       item.downloadItemParts.filter { it.moved && !volumeMissing }.forEach { part ->
@@ -131,6 +139,14 @@ class DownloadItemManager(
       if (item.isDownloadFinished) {
         downloadItemQueue.add(item)
         checkDownloadItemFinished(item)
+        return@forEach
+      }
+      // A missing finalized file above can make a previously moved part unfinished. Recheck
+      // before resetting its retained staging copy; the initial guard only saw moved parts.
+      if (item.downloadItemParts.any { !it.moved && downloadToken(it, item) == null }) {
+        holdForDownloadAuthorization(item)
+        downloadItemQueue.add(item)
+        clientEventEmitter.onDownloadItem(item)
         return@forEach
       }
       if (volumeMissing && item.downloadItemParts.any { !it.moved }) {
@@ -219,6 +235,12 @@ class DownloadItemManager(
       return false
     }
     if (!DownloadControls.canRetry(item) { it in currentDownloadItemParts }) return false
+    if (item.downloadItemParts.any { !it.moved && downloadToken(it, item) == null }) {
+      holdForDownloadAuthorization(item)
+      clientEventEmitter.onDownloadItem(item)
+      notifyQueueChanged()
+      return false
+    }
     val unfinished = item.downloadItemParts.count { !it.moved }
     AbsLogger.info(
             tag,
@@ -410,6 +432,12 @@ class DownloadItemManager(
   }
 
   private fun startDownload(item: DownloadItem, part: DownloadItemPart) {
+    val token = downloadToken(part, item)
+    if (token == null) {
+      holdForDownloadAuthorization(item)
+      clientEventEmitter.onDownloadItem(item)
+      return
+    }
     val stagingFile = File(part.destinationPath)
     stagingFile.parentFile?.mkdirs()
     part.downloadId = APP_MANAGED_DOWNLOAD_ID
@@ -418,12 +446,6 @@ class DownloadItemManager(
     currentDownloadItemParts.add(part)
     persist(item, force = true)
     AbsLogger.info(tag, "Starting download for ${part.filename}")
-    val activeConfig = DeviceManager.serverConnectionConfig
-    val token =
-            if (activeConfig?.id == item.serverConnectionConfigId) activeConfig.token
-            else
-                    DeviceManager.getServerConnectionConfig(item.serverConnectionConfigId)?.token
-                            ?: DeviceManager.token
     val handle =
             InternalDownloadManager(
                             stagingFile,
@@ -477,6 +499,31 @@ class DownloadItemManager(
                     .download(serverUrl(item, part), token)
     if (part in currentDownloadItemParts && !part.completed && !part.failed) {
       activeCalls[part.id] = handle
+    }
+  }
+
+  private fun downloadToken(part: DownloadItemPart, item: DownloadItem): String? {
+    val saved = DeviceManager.getServerConnectionConfig(item.serverConnectionConfigId)?.copy()
+    return DownloadAuthorization.tokenFor(
+            item.serverConnectionConfigId, item.serverAddress, item.serverUserId,
+            saved?.id, saved?.address, saved?.userId, saved?.token, serverUrl(item, part))
+  }
+
+  /** Retain media and queue ownership when credentials cannot be safely selected. */
+  private fun holdForDownloadAuthorization(item: DownloadItem) {
+    synchronized(IncompleteDownloadCleanup) {
+      item.downloadItemParts.filter { !it.moved && !it.isMoving }.forEach { part ->
+        activeCalls.remove(part.id)?.cancel()
+        currentDownloadItemParts.remove(part)
+        reservations.remove(part.destinationPath)
+        part.downloadId = null
+        part.failed = true
+        part.waitingForSpace = false
+        part.failureReason = "Download authorization changed: reconnect the original server before retrying"
+      }
+      item.terminalFailureAt = null
+      IncompleteDownloadCleanup.cancel(context, item.id)
+      persist(item, force = true)
     }
   }
 

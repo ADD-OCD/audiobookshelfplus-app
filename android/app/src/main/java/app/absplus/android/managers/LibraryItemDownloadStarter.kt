@@ -53,6 +53,11 @@ object LibraryItemDownloadStarter {
           episode: PodcastEpisode?,
           callback: (String?) -> Unit
   ) {
+    if (!DownloadIdentifiers.isSafe(libraryItem.id) ||
+            (episode != null && !DownloadIdentifiers.isSafe(episode.id))) {
+      callback("Invalid download identifier")
+      return
+    }
     DownloadServiceHost.enqueueResolved(context, "local_${libraryItem.id}", { buildDownloadItem(context, libraryItem, explicitFolderId, episode) }, callback)
   }
 

@@ -47,6 +47,15 @@ object IncompleteDownloadCleanup {
   }
 
   private fun isEligible(item: DownloadItem, now: Long): Boolean {
+    // An authorization hold is not permission to discard the owner's partial media. This also
+    // covers already-scheduled cleanup that runs before the download service restores its queue.
+    val saved = DeviceManager.getServerConnectionConfig(item.serverConnectionConfigId)?.copy()
+    if (item.downloadItemParts.any { part ->
+          !part.moved && DownloadAuthorization.tokenFor(
+                  item.serverConnectionConfigId, item.serverAddress, item.serverUserId,
+                  saved?.id, saved?.address, saved?.userId, saved?.token,
+                  "${item.serverAddress}${part.serverPath}") == null
+        }) return false
     val failedAt = item.terminalFailureAt ?: return false
     if (item.stagingCleanupAt != null) return false
     if (now - failedAt < RETENTION_MS) return false
