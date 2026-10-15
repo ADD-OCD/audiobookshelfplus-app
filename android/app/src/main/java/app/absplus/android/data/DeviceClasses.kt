@@ -173,7 +173,14 @@ data class DeviceSettings(
         var streamingUsingCellular: StreamingUsingCellularSetting,
         var androidAutoBrowseLimitForGrouping: Int,
         var androidAutoBrowseSeriesSequenceOrder: AndroidAutoBrowseSeriesSequenceOrderSetting,
-        var askBeforeStreamingIncomplete: Boolean = false
+        var askBeforeStreamingIncomplete: Boolean = false,
+        // Defaults cover JS payloads without these keys; Paper skips the constructor, see DeviceManager backfill
+        var autoDownloadEnabled: Boolean = false,
+        var autoDownloadAllPodcasts: Boolean = false,
+        var autoDownloadKeepCount: Int = 3,
+        var autoDownloadWifiOnly: Boolean = true,
+        var autoDownloadChargingOnly: Boolean = false,
+        var autoDownloadIntervalHours: Int = 6
 ) {
   companion object {
     // Static method to get default device settings
@@ -203,7 +210,13 @@ data class DeviceSettings(
               streamingUsingCellular = StreamingUsingCellularSetting.ALWAYS,
               androidAutoBrowseLimitForGrouping = 100,
               androidAutoBrowseSeriesSequenceOrder = AndroidAutoBrowseSeriesSequenceOrderSetting.ASC,
-              askBeforeStreamingIncomplete = false
+              askBeforeStreamingIncomplete = false,
+              autoDownloadEnabled = false,
+              autoDownloadAllPodcasts = false,
+              autoDownloadKeepCount = 3,
+              autoDownloadWifiOnly = true,
+              autoDownloadChargingOnly = false,
+              autoDownloadIntervalHours = 6
       )
     }
   }

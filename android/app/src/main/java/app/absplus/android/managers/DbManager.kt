@@ -391,5 +391,16 @@ class DbManager {
     }
     return sessions
   }
+
+  fun getPodcastAutoDownloadEntry(key: String): PodcastAutoDownloadEntry? {
+    return Paper.book("autoDownload").read(key)
+  }
+  fun savePodcastAutoDownloadEntry(key: String, entry: PodcastAutoDownloadEntry) {
+    Paper.book("autoDownload").write(key, entry)
+  }
+  fun getPodcastAutoDownloadKeys(): List<String> {
+    return Paper.book("autoDownload").allKeys
+  }
+
   // App logs now live in the rolling diagnostic log (DiagnosticLog), which migrates the old "log" book once
 }

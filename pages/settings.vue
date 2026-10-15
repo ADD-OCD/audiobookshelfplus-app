@@ -179,6 +179,50 @@
       </div>
     </div>
 
+    <!-- Podcast auto download settings -->
+    <template v-if="isAndroid">
+      <p class="uppercase text-xs font-semibold text-fg-muted mb-2 mt-10">{{ $strings.HeaderAutoDownloadSettings }}</p>
+      <div class="flex items-center py-3">
+        <div class="w-10 flex justify-center">
+          <ui-toggle-switch v-model="settings.autoDownloadEnabled" @input="saveSettings" />
+        </div>
+        <p class="pl-4">{{ $strings.LabelAutoDownloadEpisodesToDevice }}</p>
+      </div>
+      <template v-if="settings.autoDownloadEnabled">
+        <div class="flex items-center py-3">
+          <div class="w-10 flex justify-center">
+            <ui-toggle-switch v-model="settings.autoDownloadAllPodcasts" @input="saveSettings" />
+          </div>
+          <p class="pl-4">{{ $strings.LabelAutoDownloadAllPodcasts }}</p>
+        </div>
+        <div class="py-3 flex items-center">
+          <p class="pr-4 w-36">{{ $strings.LabelAutoDownloadKeepCount }}</p>
+          <div @click.stop="showAutoDownloadKeepCountOptions">
+            <ui-text-input :value="autoDownloadKeepCountOption" readonly append-icon="expand_more" style="width: 145px; max-width: 145px" />
+          </div>
+        </div>
+        <div class="flex items-center py-3">
+          <div class="w-10 flex justify-center">
+            <ui-toggle-switch v-model="settings.autoDownloadWifiOnly" @input="saveSettings" />
+          </div>
+          <p class="pl-4">{{ $strings.LabelAutoDownloadOnlyWifi }}</p>
+        </div>
+        <div class="flex items-center py-3">
+          <div class="w-10 flex justify-center">
+            <ui-toggle-switch v-model="settings.autoDownloadChargingOnly" @input="saveSettings" />
+          </div>
+          <p class="pl-4">{{ $strings.LabelAutoDownloadOnlyCharging }}</p>
+        </div>
+        <div class="py-3 flex items-center">
+          <p class="pr-4 w-36">{{ $strings.LabelAutoDownloadCheckInterval }}</p>
+          <div @click.stop="showAutoDownloadIntervalOptions">
+            <ui-text-input :value="autoDownloadIntervalOption" readonly append-icon="expand_more" style="width: 145px; max-width: 145px" />
+          </div>
+        </div>
+      </template>
+      <p class="text-xs text-fg-muted pt-1">{{ $strings.MessageAutoDownloadSettingsHelp }}</p>
+    </template>
+
     <!-- Android Auto settings -->
     <template v-if="!isiOS">
       <p class="uppercase text-xs font-semibold text-fg-muted mb-2 mt-10">{{ $strings.HeaderAndroidAutoSettings }}</p>
@@ -272,7 +316,13 @@ export default {
         streamingUsingCellular: 'ALWAYS',
         androidAutoBrowseLimitForGrouping: 100,
         androidAutoBrowseSeriesSequenceOrder: 'ASC',
-        askBeforeStreamingIncomplete: false
+        askBeforeStreamingIncomplete: false,
+        autoDownloadEnabled: false,
+        autoDownloadAllPodcasts: false,
+        autoDownloadKeepCount: 3,
+        autoDownloadWifiOnly: true,
+        autoDownloadChargingOnly: false,
+        autoDownloadIntervalHours: 6
       },
       theme: 'dark',
       lockCurrentOrientation: false,
@@ -426,6 +476,21 @@ export default {
     isiOS() {
       return this.$platform === 'ios'
     },
+    isAndroid() {
+      return this.$platform === 'android'
+    },
+    autoDownloadKeepCountItems() {
+      return [1, 2, 3, 5, 10, 15, 20, 30, 50, 100].map((n) => ({ text: String(n), value: n }))
+    },
+    autoDownloadIntervalItems() {
+      return [1, 6, 12, 24].map((h) => ({ text: h === 1 ? this.$strings.LabelEveryHour : this.$getString('LabelEveryHours', [h]), value: h }))
+    },
+    autoDownloadKeepCountOption() {
+      return String(this.settings.autoDownloadKeepCount)
+    },
+    autoDownloadIntervalOption() {
+      return this.autoDownloadIntervalItems.find((i) => i.value === this.settings.autoDownloadIntervalHours)?.text || 'Error'
+    },
     jumpForwardSecondsOptions() {
       return this.$store.state.globals.jumpForwardSecondsOptions || []
     },
@@ -491,6 +556,8 @@ export default {
       else if (this.moreMenuSetting === 'streamingUsingCellular') return this.streamingUsingCellularItems
       else if (this.moreMenuSetting === 'androidAutoBrowseSeriesSequenceOrder') return this.androidAutoBrowseSeriesSequenceOrderItems
       else if (this.moreMenuSetting === 'diagnosticLevel') return this.diagnosticLevelItems
+      else if (this.moreMenuSetting === 'autoDownloadKeepCount') return this.autoDownloadKeepCountItems
+      else if (this.moreMenuSetting === 'autoDownloadIntervalHours') return this.autoDownloadIntervalItems
       else if (this.moreMenuSetting === 'jumpForward')
         return this.jumpForwardSecondsOptions.map((value) => ({
           text: this.getJumpLabel(value),
@@ -514,6 +581,8 @@ export default {
       if (this.moreMenuSetting === 'diagnosticLevel') return this.diagnosticLevel
       if (this.moreMenuSetting === 'shakeSensitivity') return this.settings.shakeSensitivity
       if (this.moreMenuSetting === 'hapticFeedback') return this.settings.hapticFeedback
+      if (this.moreMenuSetting === 'autoDownloadKeepCount') return this.settings.autoDownloadKeepCount
+      if (this.moreMenuSetting === 'autoDownloadIntervalHours') return this.settings.autoDownloadIntervalHours
       return null
     }
   },
@@ -572,6 +641,14 @@ export default {
       this.moreMenuSetting = 'diagnosticLevel'
       this.showMoreMenuDialog = true
     },
+    showAutoDownloadKeepCountOptions() {
+      this.moreMenuSetting = 'autoDownloadKeepCount'
+      this.showMoreMenuDialog = true
+    },
+    showAutoDownloadIntervalOptions() {
+      this.moreMenuSetting = 'autoDownloadIntervalHours'
+      this.showMoreMenuDialog = true
+    },
     clickMenuAction(action) {
       this.showMoreMenuDialog = false
       if (this.moreMenuSetting === 'shakeSensitivity') {
@@ -597,6 +674,12 @@ export default {
         this.saveSettings()
       } else if (this.moreMenuSetting === 'diagnosticLevel') {
         this.setDiagnosticLevel(action)
+      } else if (this.moreMenuSetting === 'autoDownloadKeepCount') {
+        this.settings.autoDownloadKeepCount = action
+        this.saveSettings()
+      } else if (this.moreMenuSetting === 'autoDownloadIntervalHours') {
+        this.settings.autoDownloadIntervalHours = action
+        this.saveSettings()
       } else if (this.moreMenuSetting === 'jumpForward') {
         this.settings.jumpForwardTime = action
         this.saveSettings()
@@ -745,6 +828,13 @@ export default {
 
       this.settings.androidAutoBrowseLimitForGrouping = deviceSettings.androidAutoBrowseLimitForGrouping
       this.settings.androidAutoBrowseSeriesSequenceOrder = deviceSettings.androidAutoBrowseSeriesSequenceOrder || 'ASC'
+
+      this.settings.autoDownloadEnabled = !!deviceSettings.autoDownloadEnabled
+      this.settings.autoDownloadAllPodcasts = !!deviceSettings.autoDownloadAllPodcasts
+      this.settings.autoDownloadKeepCount = Number.isInteger(deviceSettings.autoDownloadKeepCount) && deviceSettings.autoDownloadKeepCount > 0 ? deviceSettings.autoDownloadKeepCount : 3
+      this.settings.autoDownloadWifiOnly = deviceSettings.autoDownloadWifiOnly !== false
+      this.settings.autoDownloadChargingOnly = !!deviceSettings.autoDownloadChargingOnly
+      this.settings.autoDownloadIntervalHours = [1, 6, 12, 24].includes(deviceSettings.autoDownloadIntervalHours) ? deviceSettings.autoDownloadIntervalHours : 6
     },
     async init() {
       this.loading = true
