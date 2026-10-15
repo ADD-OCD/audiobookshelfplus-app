@@ -830,6 +830,15 @@ class DownloadItemManager(
                 throw IllegalStateException("SAF copy size mismatch")
         // R29-N02: the ownership decision, the replacement and the rename are one step per destination folder
         val destination = synchronized(folderLock) {
+          val backupName = ".${part.filename}.abs-backup"
+          // A backup left by an interrupted finalization may be the only copy: restore it, or keep it aside
+          folder.findFile(backupName)?.let { left ->
+            if (findDocumentByFilename(folder, part) == null) {
+              if (!left.renameTo(part.filename))
+                      throw IllegalStateException("Could not restore the previous copy of this download location")
+            } else if (!left.renameTo(".${part.filename}.abs-preserved-${System.currentTimeMillis()}"))
+                    throw IllegalStateException("Could not set aside an earlier backup of this download location")
+          }
           val existing = findDocumentByFilename(folder, part)
           val owner = DownloadDestinationGuard.ownerOf(item, part)
           val others = synchronized(this@DownloadItemManager) { finalizationOwners(item, part, part.finalDestinationPath) }
@@ -839,12 +848,18 @@ class DownloadItemManager(
             temporary.delete()
             null
           } else {
-            if (existing != null && !existing.delete())
-                    throw IllegalStateException("Could not replace existing file")
-            if (!temporary.renameTo(part.filename))
-                    throw IllegalStateException("Could not finalize SAF temporary file")
-            findDocumentByFilename(folder, part)
+            // The same owner's previous copy is kept as a backup until the new file is in place
+            if (existing != null && !existing.renameTo(backupName))
+                    throw IllegalStateException("Could not protect existing file")
+            if (!temporary.renameTo(part.filename)) {
+              if (existing != null && !existing.renameTo(part.filename))
+                      AbsLogger.error(tag, "Could not restore ${part.filename}; the previous copy is kept as $backupName")
+              throw IllegalStateException("Could not finalize SAF temporary file")
+            }
+            val finalized = findDocumentByFilename(folder, part)
                     ?: throw IllegalStateException("Could not reopen finalized SAF file")
+            if (existing != null && !existing.delete()) AbsLogger.error(tag, "Could not remove the previous copy $backupName")
+            finalized
           }
         }
         if (destination == null) {

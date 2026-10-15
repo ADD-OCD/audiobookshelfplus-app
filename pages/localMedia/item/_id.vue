@@ -374,7 +374,7 @@ export default {
         message: confirmMessage
       })
       if (value) {
-        var res = await AbsFileSystem.deleteTrackFromItem({ id: this.localLibraryItem.id, trackLocalFileId: localFile.id, trackContentUrl: this.selectedEpisode.audioTrack.contentUrl })
+        var res = await AbsFileSystem.deleteTrackFromItem({ id: this.localLibraryItem.id, trackLocalFileId: localFile.id, trackContentUrl: this.selectedEpisode.audioTrack.contentUrl, localEpisodeId: this.selectedEpisode.id })
         if (res && res.id) {
           this.$toast.success('Deleted track successfully')
           this.localLibraryItem = res
