@@ -14,6 +14,8 @@ import com.anggrayudi.storage.file.*
 import app.absplus.android.MainActivity
 import app.absplus.android.data.LocalFolder
 import app.absplus.android.data.LocalLibraryItem
+import app.absplus.android.device.AndroidVolumeProbe
+import app.absplus.android.device.AppStorage
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.FolderAccess
 import app.absplus.android.device.FolderScanner
@@ -23,8 +25,11 @@ import app.absplus.android.device.RescanOutcome
 import app.absplus.android.device.RescanPhase
 import app.absplus.android.device.RescanProgress
 import app.absplus.android.device.loadRescanCatalog
+import app.absplus.android.managers.ItemUpdate
+import app.absplus.android.managers.LocalItemLocks
 import app.absplus.android.managers.LocalTrackDeletion
 import app.absplus.android.server.ApiHandler
+import app.absplus.android.services.StorageMoveService
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.getcapacitor.*
@@ -48,6 +53,9 @@ class AbsFileSystem : Plugin() {
     mainActivity = (activity as MainActivity)
     apiHandler = ApiHandler(mainActivity)
     folderScanner = FolderScanner(context)
+    StorageMoveService.movedListener = {
+      notifyListeners("onLocalLibraryItemMoved", JSObject(jacksonMapper.writeValueAsString(it)))
+    }
 
     mainActivity.storage.storageAccessCallback =
             object : StorageAccessCallback {
@@ -342,96 +350,127 @@ class AbsFileSystem : Plugin() {
   @PluginMethod
   fun deleteItem(call: PluginCall) {
     val localLibraryItemId = call.data.getString("id", "").toString()
-    val absolutePath = call.data.getString("absolutePath", "").toString()
-    val contentUrl = call.data.getString("contentUrl", "").toString()
-    Log.d(tag, "deleteItem $absolutePath | $contentUrl")
+    Log.d(tag, "deleteItem $localLibraryItemId")
 
-    // Check if should delete subfolder
-    val localLibraryItem = DeviceManager.dbManager.getLocalLibraryItem(localLibraryItemId)
+    // Paths come from the database under the item lock: what the page sent may predate a move to another storage
+    val success =
+            LocalItemLocks.withItem(localLibraryItemId) {
+              val localLibraryItem = DeviceManager.dbManager.getLocalLibraryItem(localLibraryItemId)
+              if (localLibraryItem == null) {
+                // Already gone (deleted elsewhere); its app-storage folder, if any, is left to orphan cleanup
+                AbsLogger.info(tag, "deleteItem: local item $localLibraryItemId does not exist")
+                return@withItem true
+              }
+              val deleted =
+                      try {
+                        deleteItemFiles(localLibraryItem)
+                      } finally {
+                        LocalItemLocks.bump(localLibraryItemId)
+                      }
+              if (deleted) DeviceManager.dbManager.removeLocalLibraryItem(localLibraryItemId)
+              deleted
+            }
+    call.resolve(JSObject("{\"success\":$success}"))
+  }
+
+  private fun deleteItemFiles(localLibraryItem: LocalLibraryItem): Boolean {
+    val absolutePath = localLibraryItem.absolutePath
+
+    // App storage items are deleted with the File API
+    if (AppStorage.isAppStorage(localLibraryItem.folderId)) {
+      val probe = AndroidVolumeProbe(context)
+      if (!AppStorage.isAvailable(localLibraryItem.folderId, probe)) {
+        AbsLogger.info(tag, "deleteItem: ${localLibraryItem.id} is on a missing SD card; its files stay on the missing card until orphan cleanup")
+        return true
+      }
+      val file = File(absolutePath)
+      val roots = AppStorage.appOwnedRoots(probe)
+      val inAppStorage =
+              absolutePath.isNotEmpty() &&
+                      roots.any { root -> AppStorage.isUnder(file, root) && !AppStorage.isUnder(root, file) }
+      if (!inAppStorage) {
+        AbsLogger.error(tag, "deleteItem: ${localLibraryItem.id} path $absolutePath is outside app storage; not deleting")
+        return false
+      }
+      Log.d(tag, "Deleting app storage library item at absolutePath $absolutePath")
+      return if (file.exists()) file.deleteRecursively() else true
+    }
+
+    val contentUrl = localLibraryItem.contentUrl
+    var subfolderPathToDelete = ""
+    val folder = DeviceManager.dbManager.getLocalFolder(localLibraryItem.folderId)
+    folder?.absolutePath?.let { folderPath ->
+      val splitAbsolutePath = absolutePath.split("/")
+      val fullSubDir = splitAbsolutePath.subList(0, splitAbsolutePath.size - 1).joinToString("/")
+      if (fullSubDir != folderPath) {
+        val subdirHasAnItem =
+                DeviceManager.dbManager.getLocalLibraryItems().any { _localLibraryItem ->
+                  if (_localLibraryItem.id == localLibraryItem.id) {
+                    false
+                  } else {
+                    _localLibraryItem.absolutePath.startsWith(fullSubDir)
+                  }
+                }
+        subfolderPathToDelete = if (subdirHasAnItem) "" else fullSubDir
+      }
+    }
 
     val success: Boolean
-
-    // If internal library item use File to delete
-    if (localLibraryItem?.folderId?.startsWith("internal-") == true) {
-      Log.d(tag, "Deleting internal library item at absolutePath $absolutePath")
-      val file = File(absolutePath)
-      success =
-              if (file.exists()) {
-                file.deleteRecursively()
-              } else {
-                true
-              }
+    val docfile = DocumentFileCompat.fromUri(mainActivity, Uri.parse(contentUrl))
+    if (docfile?.exists() == true) {
+      success = docfile.delete() == true
     } else {
-      var subfolderPathToDelete = ""
-      localLibraryItem?.folderId?.let { folderId ->
-        val folder = DeviceManager.dbManager.getLocalFolder(folderId)
-        folder?.absolutePath?.let { folderPath ->
-          val splitAbsolutePath = absolutePath.split("/")
-          val fullSubDir =
-                  splitAbsolutePath.subList(0, splitAbsolutePath.size - 1).joinToString("/")
-          if (fullSubDir != folderPath) {
-            val subdirHasAnItem =
-                    DeviceManager.dbManager.getLocalLibraryItems().any { _localLibraryItem ->
-                      if (_localLibraryItem.id == localLibraryItemId) {
-                        false
-                      } else {
-                        _localLibraryItem.absolutePath.startsWith(fullSubDir)
-                      }
-                    }
-            subfolderPathToDelete = if (subdirHasAnItem) "" else fullSubDir
-          }
-        }
-      }
-
-      val docfile = DocumentFileCompat.fromUri(mainActivity, Uri.parse(contentUrl))
-      if (docfile?.exists() == true) {
-        success = docfile.delete() == true
-      } else {
-        Log.d(tag, "Folder $contentUrl doesn't exist")
-        success = true
-      }
-
-      if (subfolderPathToDelete != "") {
-        Log.d(tag, "Deleting empty subfolder at $subfolderPathToDelete")
-        val docfilesub = DocumentFileCompat.fromFullPath(mainActivity, subfolderPathToDelete)
-        docfilesub?.delete()
-      }
+      Log.d(tag, "Folder $contentUrl doesn't exist")
+      success = true
     }
 
-    if (success) {
-      DeviceManager.dbManager.removeLocalLibraryItem(localLibraryItemId)
+    if (subfolderPathToDelete != "") {
+      Log.d(tag, "Deleting empty subfolder at $subfolderPathToDelete")
+      val docfilesub = DocumentFileCompat.fromFullPath(mainActivity, subfolderPathToDelete)
+      docfilesub?.delete()
     }
-    call.resolve(JSObject("{\"success\":$success}"))
+    return success
   }
 
   @PluginMethod
   fun deleteTrackFromItem(call: PluginCall) {
     val localLibraryItemId = call.data.getString("id", "").toString()
     val trackLocalFileId = call.data.getString("trackLocalFileId", "").toString()
-    val contentUrl = call.data.getString("trackContentUrl", "").toString()
-    Log.d(tag, "deleteTrackFromItem $contentUrl")
-
-    val localLibraryItem = DeviceManager.dbManager.getLocalLibraryItem(localLibraryItemId)
-    if (localLibraryItem == null) {
-      Log.e(tag, "deleteTrackFromItem: LLI does not exist $localLibraryItemId")
-      return call.resolve(JSObject("{\"success\":false}"))
-    }
-
     // Optional: which local episode the user is removing (a file shared by two episodes then keeps its audio, R29-N02)
     val localEpisodeId = call.data.getString("localEpisodeId")
-    val outcome = LocalTrackDeletion.delete(localLibraryItem, trackLocalFileId, localEpisodeId) {
-      DocumentFileCompat.fromUri(mainActivity, Uri.parse(contentUrl))?.delete() == true
-    }
-    when (outcome) {
-      LocalTrackDeletion.Outcome.DELETED, LocalTrackDeletion.Outcome.RECORD_ONLY -> {
-        DeviceManager.dbManager.saveLocalLibraryItem(localLibraryItem)
-        call.resolve(JSObject(jacksonMapper.writeValueAsString(localLibraryItem)))
+    Log.d(tag, "deleteTrackFromItem $localLibraryItemId $trackLocalFileId")
+
+    // Read, delete and save under the item's lock: the paths come from the database, not from the page
+    var outcome: LocalTrackDeletion.Outcome? = null
+    val result = DeviceManager.dbManager.updateLocalLibraryItem(localLibraryItemId) { localLibraryItem ->
+      val localFile = localLibraryItem.localFiles.find { it.id == trackLocalFileId }
+      if (localFile == null) {
+        Log.e(tag, "deleteTrackFromItem: $localLibraryItemId has no local file $trackLocalFileId")
+        return@updateLocalLibraryItem ItemUpdate.Keep
       }
-      LocalTrackDeletion.Outcome.REFUSED_SHARED -> {
+      outcome = LocalTrackDeletion.delete(localLibraryItem, trackLocalFileId, localEpisodeId) {
+        if (AppStorage.isAppStorage(localLibraryItem.folderId)) {
+          File(localFile.absolutePath).delete()
+        } else {
+          DocumentFileCompat.fromUri(mainActivity, Uri.parse(localFile.contentUrl))?.delete() == true
+        }
+      }
+      when (outcome) {
+        LocalTrackDeletion.Outcome.DELETED, LocalTrackDeletion.Outcome.RECORD_ONLY -> ItemUpdate.Save(localLibraryItem)
+        else -> ItemUpdate.Keep
+      }
+    }
+    when {
+      result == null -> {
+        Log.e(tag, "deleteTrackFromItem: LLI does not exist $localLibraryItemId")
+        call.resolve(JSObject("{\"success\":false}"))
+      }
+      result is ItemUpdate.Save -> call.resolve(JSObject(jacksonMapper.writeValueAsString(result.item)))
+      outcome == LocalTrackDeletion.Outcome.REFUSED_SHARED -> {
         Log.e(tag, "deleteTrackFromItem: file is shared with another episode; nothing deleted")
         call.resolve(JSObject("{\"success\":false,\"reason\":\"shared\"}"))
       }
-      LocalTrackDeletion.Outcome.FILE_NOT_DELETED -> call.resolve(JSObject("{\"success\":false}"))
+      else -> call.resolve(JSObject("{\"success\":false}"))
     }
   }
 

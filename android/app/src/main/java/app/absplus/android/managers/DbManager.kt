@@ -3,12 +3,15 @@ package app.absplus.android.managers
 import android.content.Context
 import android.util.Log
 import app.absplus.android.data.*
+import app.absplus.android.device.AndroidVolumeProbe
+import app.absplus.android.device.AppStorage
 import app.absplus.android.models.DownloadItem
 import app.absplus.android.plugins.AbsLogger
 import io.paperdb.Paper
 
 class DbManager {
   val tag = "DbManager"
+  private val itemStore = LocalItemStore(PaperLocalItemBook)
 
   companion object {
     private var isDbInitialized = false
@@ -85,16 +88,19 @@ class DbManager {
   }
 
   fun removeLocalLibraryItem(localLibraryItemId: String) {
-    Paper.book("localLibraryItems").delete(localLibraryItemId)
+    itemStore.remove(localLibraryItemId)
   }
 
   fun saveLocalLibraryItems(localLibraryItems: List<LocalLibraryItem>) {
-    localLibraryItems.map { Paper.book("localLibraryItems").write(it.id, it) }
+    localLibraryItems.forEach { itemStore.save(it) }
   }
 
   fun saveLocalLibraryItem(localLibraryItem: LocalLibraryItem) {
-    Paper.book("localLibraryItems").write(localLibraryItem.id, localLibraryItem)
+    itemStore.save(localLibraryItem)
   }
+
+  fun updateLocalLibraryItem(id: String, transform: (LocalLibraryItem) -> ItemUpdate): ItemUpdate? =
+          itemStore.update(id, transform)
 
   fun saveLocalFolder(localFolder: LocalFolder) {
     Paper.book("localFolders").write(localFolder.id, localFolder)
@@ -114,7 +120,7 @@ class DbManager {
 
   fun removeLocalFolder(folderId: String) {
     val localLibraryItems = getLocalLibraryItemsInFolder(folderId)
-    localLibraryItems.forEach { Paper.book("localLibraryItems").delete(it.id) }
+    localLibraryItems.forEach { removeLocalLibraryItem(it.id) }
     Paper.book("localFolders").delete(folderId)
   }
 
@@ -249,83 +255,11 @@ class DbManager {
 
   // Make sure all local file ids still exist
   fun cleanLocalLibraryItems(context: Context) {
-    val localLibraryItems = getLocalLibraryItems()
-
-    localLibraryItems.forEach { lli ->
-      var hasUpdates = false
-
-      // Check local files
-      lli.localFiles =
-              lli.localFiles.filter { localFile ->
-                val exists = localFile.exists(context)
-                if (!exists) {
-                  Log.d(
-                          tag,
-                          "cleanLocalLibraryItems: Local file ${localFile.absolutePath} was removed from library item ${lli.media.metadata.title}"
-                  )
-                  hasUpdates = true
-                }
-                exists
-              } as
-                      MutableList<LocalFile>
-
-      // Check audio tracks and episodes
-      if (lli.isPodcast) {
-        val podcast = lli.media as Podcast
-        podcast.episodes =
-                podcast.episodes?.filter { ep ->
-                  if (lli.localFiles.find { lf -> lf.id == ep.audioTrack?.localFileId } == null) {
-                    Log.d(
-                            tag,
-                            "cleanLocalLibraryItems: Podcast episode ${ep.title} was removed from library item ${lli.media.metadata.title}"
-                    )
-                    hasUpdates = true
-                  }
-                  ep.audioTrack != null &&
-                          lli.localFiles.find { lf -> lf.id == ep.audioTrack?.localFileId } != null
-                } as
-                        MutableList<PodcastEpisode>
-      } else {
-        val book = lli.media as Book
-        book.tracks =
-                book.tracks?.filter { track ->
-                  if (lli.localFiles.find { lf -> lf.id == track.localFileId } == null) {
-                    Log.d(
-                            tag,
-                            "cleanLocalLibraryItems: Audio track ${track.title} was removed from library item ${lli.media.metadata.title}"
-                    )
-                    hasUpdates = true
-                  }
-                  lli.localFiles.find { lf -> lf.id == track.localFileId } != null
-                } as
-                        MutableList<AudioTrack>
-      }
-
-      // Check cover still there
-      lli.coverAbsolutePath?.let {
-        val coverExists =
-                lli.localFiles.any { localFile ->
-                  localFile.absolutePath == it && localFile.exists(context)
-                }
-        if (!coverExists) {
-          Log.d(
-                  tag,
-                  "cleanLocalLibraryItems: Cover $it was removed from library item ${lli.media.metadata.title}"
-          )
-          lli.coverAbsolutePath = null
-          lli.coverContentUrl = null
-          hasUpdates = true
-        }
-      }
-
-      if (lli.serverConnectionConfigId == null) {
-        // Local-only item support was removed in app version 0.9.67, remove any remaining local
-        // only items beginning in 0.9.80
-        Log.d(tag, "cleanLocalLibraryItems: Local only item ${lli.id} - removing from ABS")
-        Paper.book("localLibraryItems").delete(lli.id)
-      } else if (hasUpdates) {
-        Log.d(tag, "cleanLocalLibraryItems: Saving local library item ${lli.id}")
-        Paper.book("localLibraryItems").write(lli.id, lli)
+    val probe = AndroidVolumeProbe(context)
+    Paper.book("localLibraryItems").allKeys.forEach { id ->
+      updateLocalLibraryItem(id) { lli ->
+        val volumeMissing = lli.folderId.startsWith(AppStorage.APPSD_PREFIX) && !AppStorage.isAvailable(lli.folderId, probe)
+        LocalItemCleanup.clean(lli, { it.exists(context) }, skip = volumeMissing)
       }
     }
   }

@@ -199,6 +199,7 @@ object AutoDownloadManager {
     val localItems = DeviceManager.dbManager.getLocalLibraryItems()
     var queued = 0
     var retried = 0
+    var skipped = 0
     var failedPodcasts = 0
     var removed = 0
 
@@ -306,6 +307,11 @@ object AutoDownloadManager {
               result.error == null -> queued++
               // The item is already persisted in the queue and resumes when the app opens
               result.error == DownloadServiceHost.SERVICE_START_FAILED_MESSAGE -> queued++
+              // Its SD card is away: not a failed attempt, the episode is tried again once the card is back
+              result.error == LibraryItemDownloadStarter.STORAGE_UNAVAILABLE_MESSAGE -> {
+                skipped++
+                AbsLogger.info(TAG, "Skipped $downloadId: ${result.error}")
+              }
               else -> {
                 AbsLogger.error(TAG, "Could not start download $downloadId: ${result.error}")
                 AutoDownloadStore.recordAutoFailure(serverConfigId, id, episode.id)
@@ -331,6 +337,6 @@ object AutoDownloadManager {
       AutoDownloadStore.forgetEpisodes(serverConfigId, id, owned.autoDownloadedEpisodeIds.filter { it !in serverEpisodeIds })
     }
 
-    AbsLogger.info(TAG, "Auto download check finished: queued $queued, retried $retried, removed $removed, failed podcasts $failedPodcasts")
+    AbsLogger.info(TAG, "Auto download check finished: queued $queued, retried $retried, skipped $skipped, removed $removed, failed podcasts $failedPodcasts")
   }
 }

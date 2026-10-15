@@ -6,7 +6,7 @@ import { downloadState, downloadActions, downloadProgress, lostFolder, DownloadS
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8').then((s) => s.replace(/\r\n/g, '\n'))
 
 // A part as the native downloader serializes it (DownloadItemPart): downloadId is set while transferring
-const part = (over = {}) => ({ id: 'p', filename: '01.mp3', fileSize: 100, bytesDownloaded: 0, progress: 0, completed: false, moved: false, isMoving: false, failed: false, permissionLost: false, waitingForSpace: false, downloadId: null, localFolderId: 'internal-book', localFolderName: 'Internal App Storage', ...over })
+const part = (over = {}) => ({ id: 'p', filename: '01.mp3', fileSize: 100, bytesDownloaded: 0, progress: 0, completed: false, moved: false, isMoving: false, failed: false, permissionLost: false, storageUnavailable: false, waitingForSpace: false, downloadId: null, localFolderId: 'internal-book', localFolderName: 'Internal App Storage', ...over })
 const item = (...parts) => ({ id: 'li', itemTitle: 'Book', downloadItemParts: parts })
 
 test('queued -> downloading -> finishing, with Cancel until the files are in place', () => {
@@ -39,6 +39,13 @@ test('lost folder access asks for the folder instead of a blind Retry', () => {
   assert.equal(downloadState(lost), DownloadState.FOLDER_ACCESS)
   assert.deepEqual(downloadActions(DownloadState.FOLDER_ACCESS), [DownloadAction.CHOOSE_FOLDER, DownloadAction.CLEAR])
   assert.deepEqual(lostFolder(lost), { id: 'saf-abstest', name: 'ABSTEST' })
+})
+
+test('storageUnavailableState', () => {
+  const missing = item(part({ failed: true, storageUnavailable: true, localFolderId: 'appsd-79EC-9B33-book', localFolderName: 'SD card' }))
+  assert.equal(downloadState(missing), DownloadState.STORAGE_UNAVAILABLE)
+  // An SD card can't be re-selected like a device folder: Retry once it is back
+  assert.deepEqual(downloadActions(DownloadState.STORAGE_UNAVAILABLE), [DownloadAction.RETRY, DownloadAction.CLEAR])
 })
 
 test('audio and cover failures are handled alike, and active work wins over a failed sibling', () => {
@@ -89,6 +96,7 @@ test('Downloads screen and item page wire the controls to the native downloader'
     'LabelDownloadFinishing',
     'LabelDownloadFolderAccessLost',
     'LabelDownloadQueued',
+    'LabelDownloadStorageUnavailable',
     'LabelDownloadWaitingForStorage',
     'MessageDownloadBusy',
     'MessageDownloadChooseFolder',

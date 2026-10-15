@@ -177,7 +177,7 @@ class DownloadCollisionSafetyTest {
     val libraryItem = LibraryItem("show-1", "1", "lib", "folder", "/p", "p", 0, 0, 0, 0, 0, null, null, false, false, "podcast",
             Podcast(PodcastMetadata("Synthetic", null, null, mutableListOf(), false), null, mutableListOf(), mutableListOf(episode), false, 1),
             mutableListOf(), null, null, null, null)
-    LibraryItemDownloadStarter.startLibraryItemDownload(context, libraryItem, folder, episode) { refusal = it }
+    LibraryItemDownloadStarter.startLibraryItemDownload(context, libraryItem, null, episode) { refusal = it }
     assertNotNull(refusal)
     assertTrue(refusal!!.contains("another server"))
     assertTrue(DeviceManager.dbManager.getDownloadItems().none { it.serverConnectionConfigId == "synthetic-B" })

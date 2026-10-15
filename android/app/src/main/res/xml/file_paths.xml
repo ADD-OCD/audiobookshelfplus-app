@@ -2,4 +2,5 @@
 <paths>
   <files-path name="downloads" path="downloads/" />
   <cache-path name="diagnostics_export" path="diagnostics-export/" />
+  <root-path name="appsd" path="storage/" />
 </paths>

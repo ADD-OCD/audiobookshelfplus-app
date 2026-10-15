@@ -4,6 +4,7 @@ import app.absplus.android.data.DeviceSettings
 import app.absplus.android.data.DownloadUsingCellularSetting
 import app.absplus.android.data.LibraryItemsPage
 import app.absplus.android.data.PodcastAutoDownloadEntry
+import app.absplus.android.services.DownloadServiceHost
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -65,5 +66,13 @@ class AutoDownloadPolicyTest {
     assertTrue(LibraryItemsPage(emptyList(), total = 250, page = 3, limit = 100, rawCount = 0).isLastPage)
     assertTrue(LibraryItemsPage(emptyList(), total = 0, page = 0, limit = 100, rawCount = 0).isLastPage)
     assertTrue(LibraryItemsPage(emptyList(), total = 10, page = 0, limit = 0, rawCount = 10).isLastPage)
+  }
+
+  @Test
+  fun outcomeFor() {
+    assertEquals(AutoDownloadPolicy.EpisodeOutcome.SKIPPED, AutoDownloadPolicy.outcomeFor(LibraryItemDownloadStarter.STORAGE_UNAVAILABLE_MESSAGE))
+    assertEquals(AutoDownloadPolicy.EpisodeOutcome.QUEUED, AutoDownloadPolicy.outcomeFor(null))
+    assertEquals(AutoDownloadPolicy.EpisodeOutcome.QUEUED, AutoDownloadPolicy.outcomeFor(DownloadServiceHost.SERVICE_START_FAILED_MESSAGE))
+    assertEquals(AutoDownloadPolicy.EpisodeOutcome.FAILED, AutoDownloadPolicy.outcomeFor("Server request failed"))
   }
 }

@@ -3,6 +3,7 @@
 // - a part with a downloadId is being transferred; completed && !moved is a finished transfer still
 //   being saved to its folder; isMoving is that save in progress;
 // - failed is terminal (automatic retries are used up, or the folder can't be written: permissionLost);
+//   storageUnavailable: the SD card is missing; Retry once it is back;
 // - waitingForSpace is queued until storage frees up.
 // Retry restarts unfinished files from byte 0 (finished files are kept), so it is never called Resume.
 
@@ -12,7 +13,8 @@ export const DownloadState = Object.freeze({
   WAITING_FOR_STORAGE: 'waitingForStorage',
   QUEUED: 'queued',
   FAILED: 'failed',
-  FOLDER_ACCESS: 'folderAccess'
+  FOLDER_ACCESS: 'folderAccess',
+  STORAGE_UNAVAILABLE: 'storageUnavailable'
 })
 
 export const DownloadAction = Object.freeze({
@@ -31,6 +33,7 @@ export function downloadState(item) {
   const active = all.some((p) => !p.failed && (p.isMoving || (!p.completed && p.downloadId != null) || (p.completed && !p.moved)))
   if (active) return DownloadState.DOWNLOADING
   if (all.some((p) => p.failed && p.permissionLost)) return DownloadState.FOLDER_ACCESS
+  if (all.some((p) => p.failed && p.storageUnavailable)) return DownloadState.STORAGE_UNAVAILABLE
   if (all.some((p) => p.failed)) return DownloadState.FAILED
   if (all.some((p) => !p.completed && p.waitingForSpace)) return DownloadState.WAITING_FOR_STORAGE
   return DownloadState.QUEUED
@@ -43,6 +46,7 @@ export function downloadActions(state) {
     case DownloadState.WAITING_FOR_STORAGE:
       return [DownloadAction.CANCEL]
     case DownloadState.FAILED:
+    case DownloadState.STORAGE_UNAVAILABLE:
       return [DownloadAction.RETRY, DownloadAction.CLEAR]
     case DownloadState.FOLDER_ACCESS:
       return [DownloadAction.CHOOSE_FOLDER, DownloadAction.CLEAR]

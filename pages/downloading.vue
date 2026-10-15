@@ -10,7 +10,7 @@
         <div class="flex items-center mt-1 text-sm" role="status">
           <span class="material-symbols text-lg mr-1" :class="stateIconClass(item)" aria-hidden="true">{{ stateIcon(item) }}</span>
           <span class="text-fg">{{ stateText(item) }}</span>
-          <span v-if="item.localFolder && !isInternal(item)" class="text-fg-muted truncate ml-2">· {{ item.localFolder.name }}</span>
+          <span v-if="item.localFolder && !isAppStorage(item)" class="text-fg-muted truncate ml-2">· {{ item.localFolder.name }}</span>
         </div>
         <p v-if="stateOf(item) === 'folderAccess'" class="text-xs text-fg-muted mt-1">{{ $getString('MessageDownloadChooseFolder', [lostFolderName(item)]) }}</p>
         <p v-else-if="stateOf(item) === 'failed'" class="text-xs text-fg-muted mt-1">{{ $strings.MessageDownloadRetryRestarts }}</p>
@@ -24,7 +24,7 @@
             </div>
             <div class="flex-grow min-w-0">
               <p class="break-all text-fg-muted">{{ itemPart.filename }}</p>
-              <p v-if="itemPart.failed && !itemPart.permissionLost && itemPart.failureReason" class="text-xs text-error mt-0.5">{{ itemPart.failureReason }}</p>
+              <p v-if="itemPart.failed && !itemPart.permissionLost && !itemPart.storageUnavailable && itemPart.failureReason" class="text-xs text-error mt-0.5">{{ itemPart.failureReason }}</p>
             </div>
           </div>
         </div>
@@ -42,6 +42,7 @@
 <script>
 import { AbsDownloader, AbsFileSystem } from '@/plugins/capacitor'
 import { downloadState, downloadActions, downloadProgress, lostFolder, DownloadAction, DownloadState } from '@/utils/downloadState'
+import { isAppStorageFolderId } from '@/utils/appStorage'
 
 export default {
   data() {
@@ -61,8 +62,8 @@ export default {
     actionsOf(item) {
       return downloadActions(this.stateOf(item))
     },
-    isInternal(item) {
-      return item.localFolder?.id?.startsWith('internal-')
+    isAppStorage(item) {
+      return isAppStorageFolderId(item.localFolder?.id)
     },
     lostFolderName(item) {
       return lostFolder(item)?.name || item.localFolder?.name || ''
@@ -79,20 +80,22 @@ export default {
           return this.$strings.LabelDownloadFailed
         case DownloadState.FOLDER_ACCESS:
           return this.$strings.LabelDownloadFolderAccessLost
+        case DownloadState.STORAGE_UNAVAILABLE:
+          return this.$strings.LabelDownloadStorageUnavailable
         default:
           return this.$strings.LabelDownloadFinishing
       }
     },
     stateIcon(item) {
       const state = this.stateOf(item)
-      if (state === DownloadState.FAILED) return 'error'
+      if (state === DownloadState.FAILED || state === DownloadState.STORAGE_UNAVAILABLE) return 'error'
       if (state === DownloadState.FOLDER_ACCESS) return 'folder_off'
       if (state === DownloadState.QUEUED || state === DownloadState.WAITING_FOR_STORAGE) return 'schedule'
       return 'downloading'
     },
     stateIconClass(item) {
       const state = this.stateOf(item)
-      return state === DownloadState.FAILED || state === DownloadState.FOLDER_ACCESS ? 'text-error' : 'text-fg-muted'
+      return state === DownloadState.FAILED || state === DownloadState.FOLDER_ACCESS || state === DownloadState.STORAGE_UNAVAILABLE ? 'text-error' : 'text-fg-muted'
     },
     actionLabel(action) {
       return {
@@ -124,6 +127,7 @@ export default {
       const result = await AbsDownloader.retryDownload({ downloadItemId: item.id })
       if (result?.errorCode === 'folderAccess') return this.$toast.error(this.$getString('MessageDownloadChooseFolder', [this.lostFolderName(item)]))
       if (result?.errorCode === 'notFound') return this.$store.commit('globals/removeItemDownload', item.id)
+      if (result?.errorCode === 'storageUnavailable') return this.$toast.error(this.$strings.LabelDownloadStorageUnavailable)
       if (result?.errorCode) return this.$toast.error(this.$strings.MessageDownloadBusy)
     },
     async chooseFolder(item) {

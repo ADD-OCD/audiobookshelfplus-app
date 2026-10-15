@@ -4,10 +4,14 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
+import app.absplus.android.BuildConfig
+import app.absplus.android.device.AppVolume
+import app.absplus.android.device.VolumeProbe
 import kotlinx.coroutines.CancellationException
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -142,5 +146,22 @@ class CoverArtTest {
     assertEquals(CoverArt.defaultUri(), CoverArt.localCoverUri(ctx, Uri.fromFile(outside).toString()))
   }
 
+  private val sdFiles = "/storage/79EC-9B33/Android/data/${ctx.packageName}/files"
+  private val sdProbe = object : VolumeProbe {
+    override fun volumes() = listOf(AppVolume("79EC-9B33", File(sdFiles), removable = true, mounted = true, writable = true))
+    override fun internalFilesDir(): File = ctx.filesDir
+  }
+
+  @Test fun sdCoverInAppRootServed() {
+    val uri = CoverArt.localCoverUri(ctx, "file://$sdFiles/downloads/li_1/cover.jpg", sdProbe)
+    assertNotEquals(CoverArt.defaultUri(), uri)
+    assertEquals("content", uri.scheme)
+    assertEquals("${BuildConfig.APPLICATION_ID}.fileprovider", uri.authority)
+  }
+
+  @Test fun sdCoverOutsideAppRootsRejected() {
+    assertEquals(CoverArt.defaultUri(), CoverArt.localCoverUri(ctx, "file:///storage/79EC-9B33/Music/x.jpg", sdProbe))
+    assertEquals(CoverArt.defaultUri(), CoverArt.localCoverUri(ctx, "file://$sdFiles/../../../../Music/x.jpg", sdProbe))
+  }
 
 }

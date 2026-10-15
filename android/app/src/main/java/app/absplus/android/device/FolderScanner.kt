@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import com.anggrayudi.storage.file.*
 import app.absplus.android.data.*
+import app.absplus.android.managers.LocalItemLocks
 import app.absplus.android.models.DownloadItem
 import app.absplus.android.models.DownloadItemPart
 import java.io.File
@@ -26,7 +27,7 @@ class FolderScanner(private val ctx: Context) {
           part: DownloadItemPart,
           externalFile: DocumentFile? = null
   ): LocalFile? {
-    if (part.isInternalStorage) {
+    if (part.isAppStorage) {
       val file = File(part.finalDestinationPath)
       if (!file.exists()) return null
       return LocalFile(
@@ -111,6 +112,20 @@ class FolderScanner(private val ctx: Context) {
                   downloadItem.ino
           )
 
+  /**
+   * Runs [scan] (read the saved item, update it, save it) under the item's lock, so a concurrent
+   * write such as an episode delete is not overwritten; [callback] runs after the lock is released.
+   */
+  private fun scanLocked(
+          id: String,
+          callback: (DownloadItemScanResult?) -> Unit,
+          scan: ((DownloadItemScanResult?) -> Unit) -> Unit
+  ) {
+    var result: DownloadItemScanResult? = null
+    LocalItemLocks.withItem(id) { scan { result = it } }
+    callback(result)
+  }
+
   private fun scanParts(
           item: DownloadItem,
           localItem: LocalLibraryItem,
@@ -124,7 +139,7 @@ class FolderScanner(private val ctx: Context) {
 
     item.downloadItemParts.forEach { part ->
       val externalFile =
-              if (part.isInternalStorage) {
+              if (part.isAppStorage) {
                 null
               } else {
                 part.completedDestinationUri?.let { DocumentFileCompat.fromUri(ctx, Uri.parse(it)) }
@@ -409,28 +424,30 @@ class FolderScanner(private val ctx: Context) {
     }
 
     val id = localLibraryItemId(itemFolder.id)
-    val savedItem = DeviceManager.dbManager.getLocalLibraryItem(id)
-    val localItem =
-            savedItem
-                    ?: newLocalLibraryItem(
-                            id,
-                            downloadItem,
-                            itemFolder.getBasePath(ctx),
-                            itemFolder.getAbsolutePath(ctx),
-                            itemFolder.uri.toString()
-                    )
-    if (savedItem != null && relink) {
-      // Same local item (its id, folder and files are unchanged); only the server link and the media
-      // copy are replaced with those of the item the folder's cover file names
-      Log.i(tag, "rescanFolder: relinking ${savedItem.id} from ${savedItem.libraryItemId} to ${libraryItem.id}")
-      savedItem.libraryItemId = libraryItem.id
-      savedItem.ino = libraryItem.ino
-      savedItem.serverConnectionConfigId = downloadItem.serverConnectionConfigId
-      savedItem.serverAddress = downloadItem.serverAddress
-      savedItem.serverUserId = downloadItem.serverUserId
-      savedItem.media = downloadItem.media.getLocalCopy()
+    scanLocked(id, callback) { done ->
+      val savedItem = DeviceManager.dbManager.getLocalLibraryItem(id)
+      val localItem =
+              savedItem
+                      ?: newLocalLibraryItem(
+                              id,
+                              downloadItem,
+                              itemFolder.getBasePath(ctx),
+                              itemFolder.getAbsolutePath(ctx),
+                              itemFolder.uri.toString()
+                      )
+      if (savedItem != null && relink) {
+        // Same local item (its id, folder and files are unchanged); only the server link and the media
+        // copy are replaced with those of the item the folder's cover file names
+        Log.i(tag, "rescanFolder: relinking ${savedItem.id} from ${savedItem.libraryItemId} to ${libraryItem.id}")
+        savedItem.libraryItemId = libraryItem.id
+        savedItem.ino = libraryItem.ino
+        savedItem.serverConnectionConfigId = downloadItem.serverConnectionConfigId
+        savedItem.serverAddress = downloadItem.serverAddress
+        savedItem.serverUserId = downloadItem.serverUserId
+        savedItem.media = downloadItem.media.getLocalCopy()
+      }
+      scanParts(downloadItem, localItem, itemFolder, keepLocalProgress = relink, callback = done)
     }
-    scanParts(downloadItem, localItem, itemFolder, keepLocalProgress = relink, callback = callback)
   }
 
   /**
@@ -535,12 +552,14 @@ class FolderScanner(private val ctx: Context) {
   }
 
   fun scanDownloadItem(item: DownloadItem, callback: (DownloadItemScanResult?) -> Unit) {
-    if (item.isInternalStorage) {
+    if (item.isAppStorage) {
       val id = "local_${item.libraryItemId}"
-      val localItem =
-              DeviceManager.dbManager.getLocalLibraryItem(id)
-                      ?: newLocalLibraryItem(id, item, item.itemFolderPath, item.itemFolderPath, "")
-      scanParts(item, localItem, callback = callback)
+      scanLocked(id, callback) { done ->
+        val localItem =
+                DeviceManager.dbManager.getLocalLibraryItem(id)
+                        ?: newLocalLibraryItem(id, item, item.itemFolderPath, item.itemFolderPath, "")
+        scanParts(item, localItem, callback = done)
+      }
       return
     }
 
@@ -557,15 +576,17 @@ class FolderScanner(private val ctx: Context) {
       return
     }
     val id = localLibraryItemId(itemFolder.id)
-    val localItem =
-            DeviceManager.dbManager.getLocalLibraryItem(id)
-                    ?: newLocalLibraryItem(
-                            id,
-                            item,
-                            itemFolder.getBasePath(ctx),
-                            itemFolder.getAbsolutePath(ctx),
-                            itemFolder.uri.toString()
-                    )
-    scanParts(item, localItem, itemFolder, callback = callback)
+    scanLocked(id, callback) { done ->
+      val localItem =
+              DeviceManager.dbManager.getLocalLibraryItem(id)
+                      ?: newLocalLibraryItem(
+                              id,
+                              item,
+                              itemFolder.getBasePath(ctx),
+                              itemFolder.getAbsolutePath(ctx),
+                              itemFolder.uri.toString()
+                      )
+      scanParts(item, localItem, itemFolder, callback = done)
+    }
   }
 }
