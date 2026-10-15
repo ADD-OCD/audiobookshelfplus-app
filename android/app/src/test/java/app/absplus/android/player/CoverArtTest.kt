@@ -174,6 +174,17 @@ class CoverArtTest {
     assertEquals(uri, CoverArt.localCoverUri(ctx, Uri.fromFile(cover).toString(), sdProbe))
   }
 
+  @Test fun theFileProviderMapsNoStoragePath() {
+    for (path in listOf("/storage/79EC-9B33/Android/data/${ctx.packageName}/files/downloads/li_1/cover.jpg", "/storage/emulated/0/Music/x.jpg")) {
+      try {
+        androidx.core.content.FileProvider.getUriForFile(ctx, "${BuildConfig.APPLICATION_ID}.fileprovider", File(path))
+        fail("$path must not be representable by the app's FileProvider")
+      } catch (e: IllegalArgumentException) {
+        // expected: no root covers /storage
+      }
+    }
+  }
+
   @Test fun coversOutsideTheCardsAppFolderOrOnAnotherCardGetTheDefaultArtwork() {
     assertEquals(CoverArt.defaultUri(), CoverArt.localCoverUri(ctx, "file:///storage/79EC-9B33/Music/x.jpg", sdProbe))
     assertEquals(CoverArt.defaultUri(), CoverArt.localCoverUri(ctx, "file://${sdFiles.path}/../../../../Music/x.jpg", sdProbe))

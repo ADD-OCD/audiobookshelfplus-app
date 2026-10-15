@@ -1,6 +1,7 @@
 package app.absplus.android.managers
 
 import android.net.Uri
+import androidx.core.net.toUri
 import app.absplus.android.data.Book
 import app.absplus.android.data.LocalFolder
 import app.absplus.android.data.LocalLibraryItem
@@ -208,7 +209,8 @@ class StorageMover(
       if (io.length(from) != f.size) return "${from.absolutePath} changed during the copy"
     }
     // Entries of every copied directory, deepest first; best effort (see the class comment)
-    dirs.reversed().forEach { io.syncDir(it) }
+    // asReversed: LinkedHashSet.reversed() is the Java 21 SequencedCollection method, missing below API 35
+    dirs.toList().asReversed().forEach { io.syncDir(it) }
     for (f in entry.files) {
       val to = File(tmp, f.path)
       if (io.kind(to) != NodeKind.FILE || io.length(to) != f.size) return "copy of ${f.path} is incomplete (${io.length(to)} of ${f.size} bytes)"
@@ -469,7 +471,7 @@ class StorageMover(
 
       fun url(u: String?): String? {
         if (u.isNullOrEmpty()) return u
-        val filePath = if (u.startsWith("file:")) Uri.parse(u).path else null
+        val filePath = if (u.startsWith("file:")) u.toUri().path else null
         val moved = filePath?.let { movedFile(File(it), fromRoot, toRoot) }
         if (moved == null) outside.add(u)
         return moved?.let { Uri.fromFile(it).toString() } ?: u

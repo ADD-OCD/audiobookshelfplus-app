@@ -432,7 +432,12 @@ class StorageMoverTest {
     val before = db.json(item.id)
     val original = hashes(File(item.absolutePath))
     val foreign = write(File(sdRoot, item.libraryItemId!!).apply { mkdirs() }, "someone else.bin", 10)
-    assertTrue(mover().moveOne(item.id, sdFolder("book")) is MoveResult.Failed)
+    var copies = 0
+    io.afterCopy = { copies++ }
+    val result = mover().moveOne(item.id, sdFolder("book"))
+    // Refused before anything is copied, not left to whether a rename onto it happens to fail on this filesystem
+    assertTrue("$result", result is MoveResult.Failed && result.message.contains("already exists"))
+    assertEquals(0, copies)
     assertTrue("the existing folder is untouched", foreign.isFile)
     assertEquals(before, db.json(item.id))
     assertEquals(original, hashes(File(item.absolutePath)))

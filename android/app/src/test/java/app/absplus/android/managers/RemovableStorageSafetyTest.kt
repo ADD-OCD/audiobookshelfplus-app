@@ -263,8 +263,9 @@ class RemovableStorageSafetyTest {
 
   @Test
   fun expiredStagingOnACardThatIsNotThereKeepsItsPendingState() {
-    // A card the device can't see (Robolectric has no removable volume): not inspected, nothing recorded
-    val sdStaging = media(File(sdFiles, "download-staging/li_sd"), "01.mp3.part")
+    // A card the device can't see (Robolectric has no removable volume): not inspected, nothing recorded. The file
+    // sits under an app-owned root, so only the availability check keeps it from being deleted
+    val sdStaging = media(File(context.filesDir, "sd-sim/download-staging/li_sd"), "01.mp3.part")
     DeviceManager.dbManager.saveDownloadItem(failedItem("li_sd", LocalFolder(sdFolderId, "SD card", "", "", "", "appsd", "podcast"), sdStaging))
     // Control: an internal one is cleaned as before
     val inStaging = media(File(context.filesDir, "download-staging/li_in"), "01.mp3.part")
