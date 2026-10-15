@@ -32,7 +32,8 @@ import org.robolectric.shadows.ShadowStatFs
  * PR #23 integration corrections (Claude): auto-owned items in the shared download queue follow the auto download
  * conditions (Wi-Fi only / charging) on every path, manual downloads are never held back by them and go first, a
  * running auto transfer pauses (bytes kept) when conditions stop holding, and restore keeps all of that.
- * The owner server is 127.0.0.1:1, so a transfer that does start is refused locally.
+ * The owner server is a loopback socket that accepts connections and never answers, so a transfer that starts stays
+ * running until the test pauses or removes it (a refused connection could fail it at any moment and race the checks).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -41,7 +42,8 @@ class AutoDownloadQueueGateTest {
   private lateinit var root: File
   private lateinit var previousServers: MutableList<ServerConnectionConfig>
   private var previousActive: ServerConnectionConfig? = null
-  private val owner = "http://127.0.0.1:1"
+  private lateinit var silent: java.net.ServerSocket
+  private lateinit var owner: String
 
   private class FakeGate(val autoIds: Set<String>, var allowed: Boolean) : AutoTransferGate {
     override fun isAuto(item: DownloadItem) = item.id in autoIds
@@ -58,6 +60,8 @@ class AutoDownloadQueueGateTest {
   @Before
   fun setUp() {
     context = ApplicationProvider.getApplicationContext()
+    silent = java.net.ServerSocket(0, 50, java.net.InetAddress.getLoopbackAddress())
+    owner = "http://127.0.0.1:${silent.localPort}"
     Paper.init(context)
     listOf("downloadItems", "localLibraryItems", "autoDownload").forEach { Paper.book(it).destroy() }
     AutoDownloadStore.clearCacheForTests()
@@ -79,6 +83,7 @@ class AutoDownloadQueueGateTest {
     DeviceManager.deviceData.serverConnectionConfigs = previousServers
     DeviceManager.serverConnectionConfig = previousActive
     AutoDownloadStore.clearCacheForTests()
+    silent.close()
   }
 
   private fun part(itemId: String, bytes: Long = 0) = DownloadItemPart(

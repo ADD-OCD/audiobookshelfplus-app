@@ -234,6 +234,10 @@ class AutoDownloadSafetyTest {
     DeviceManager.dbManager.saveLocalMediaProgress(LocalMediaProgress("local_$pod-local_ep_started", "local_$pod", "local_ep_started", 20.0, 0.5, 10.0, false, null, null, 1L, 1L, null, server, null, "alice", pod, "started"))
     DeviceManager.dbManager.saveLocalMediaProgress(LocalMediaProgress("local_$pod-local_ep_auto", "local_$pod", "local_ep_auto", 20.0, 1.0, 20.0, true, null, null, 1L, 1L, 2L, server, null, "alice", pod, "auto"))
     val e = entry(owned = listOf("auto", "started"), manual = listOf("manual"))
+    // the store is the authority at removal time (each removal is rechecked there), so it holds the same ownership
+    AutoDownloadStore.markAutoQueued(server, pod, "auto")
+    AutoDownloadStore.markAutoQueued(server, pod, "started")
+    AutoDownloadStore.claimManual(server, pod, "manual")
 
     val deleted = AutoDownloadRetention.apply(context, server, pod, e, windowIds = emptySet(),
             serverEpisodeIds = setOf("auto", "manual", "pre", "started"), serverProgress = emptyMap<String, MediaProgress>(), queuedEpisodeIds = emptySet())
