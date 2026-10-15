@@ -5,9 +5,11 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import app.absplus.android.data.DeviceSettings
+import app.absplus.android.data.LocalLibraryItem
 import app.absplus.android.data.MediaProgress
 import app.absplus.android.data.Podcast
 import app.absplus.android.data.PodcastAutoDownloadEntry
+import app.absplus.android.data.PodcastEpisode
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.models.DownloadItem
 import app.absplus.android.plugins.AbsLogger
@@ -69,8 +71,9 @@ object AutoDownloadRetention {
           serverProgress: Map<String, MediaProgress>,
           queuedEpisodeIds: Set<String>
   ): List<String> {
+    // Decided with the entry passed in; every removal is checked again at that moment (see deleteIfStillRemovable)
+    if (!AutoDownloadPolicy.cleansUp(entry)) return emptyList()
     val downloadsRoot = File(context.filesDir, "downloads").canonicalFile
-    val last = DeviceManager.deviceData.lastPlaybackSession
     val deleted = mutableListOf<String>()
     DeviceManager.dbManager.getLocalLibraryItems()
             .filter {
@@ -82,14 +85,12 @@ object AutoDownloadRetention {
               val episodes = podcast.episodes ?: return@forEach
               val view = episodes.mapNotNull { ep ->
                 val serverEpisodeId = ep.serverEpisodeId ?: return@mapNotNull null
-                val localProgress = DeviceManager.dbManager.getLocalMediaProgress("${local.id}-${ep.id}")
                 val remote = serverProgress[serverEpisodeId]
-                val inProgress = (localProgress != null && localProgress.currentTime > 0 && !localProgress.isFinished) ||
-                        (remote != null && remote.currentTime > 0 && !remote.isFinished)
-                val lastPlayed = last != null &&
-                        ((last.localLibraryItem?.id == local.id && last.localEpisodeId == ep.id) ||
-                                (last.libraryItemId == libraryItemId && last.episodeId == serverEpisodeId))
-                AutoDownloadPolicy.LocalEpisode(serverEpisodeId, inProgress, lastPlayed, serverEpisodeId in queuedEpisodeIds)
+                val inProgress = startedLocally(local.id, ep.id) || (remote != null && remote.currentTime > 0 && !remote.isFinished)
+                val lastPlayed = isLastPlayed(local.id, ep.id, libraryItemId, serverEpisodeId)
+                val length = fileOf(local, ep)?.let { if (it.isFile) it.length() else 0L }
+                AutoDownloadPolicy.LocalEpisode(serverEpisodeId, inProgress, lastPlayed, serverEpisodeId in queuedEpisodeIds,
+                        emptyFile = AutoDownloadPolicy.localCopyOf(length ?: 0L) != AutoDownloadPolicy.LocalCopy.VALID)
               }
               val remove = AutoDownloadPolicy.retentionDeletions(entry, windowIds, serverEpisodeIds, view).toSet()
               if (remove.isEmpty()) return@forEach
@@ -103,8 +104,20 @@ object AutoDownloadRetention {
                   AbsLogger.error(TAG, "Not removing ${ep.serverEpisodeId}: file is outside app storage")
                   return@forEach
                 }
-                if (file.exists() && !file.delete()) {
-                  AbsLogger.error(TAG, "Could not delete the file of ${ep.serverEpisodeId}")
+                val serverEpisodeId = ep.serverEpisodeId!!
+                // Playback may have started since the plan was made; the store lock covers the setting and ownership
+                val removedFile = AutoDownloadStore.deleteIfStillRemovable(serverConfigId, libraryItemId, serverEpisodeId) {
+                  when {
+                    startedLocally(local.id, ep.id) || isLastPlayed(local.id, ep.id, libraryItemId, serverEpisodeId) -> false
+                    file.exists() && !file.delete() -> {
+                      AbsLogger.error(TAG, "Could not delete the file of $serverEpisodeId")
+                      false
+                    }
+                    else -> true
+                  }
+                }
+                if (!removedFile) {
+                  AbsLogger.info(TAG, "Kept $serverEpisodeId: no longer removable at deletion time")
                   return@forEach
                 }
                 podcast.removeAudioTrack(localFileId)
@@ -116,5 +129,21 @@ object AutoDownloadRetention {
             }
     if (deleted.isNotEmpty()) AbsLogger.info(TAG, "Removed ${deleted.size} auto downloaded episode(s) of $libraryItemId outside the latest window")
     return deleted
+  }
+
+  private fun fileOf(local: LocalLibraryItem, ep: PodcastEpisode): File? {
+    val localFileId = ep.audioTrack?.localFileId ?: return null
+    return local.localFiles.find { it.id == localFileId }?.absolutePath?.let { File(it) }
+  }
+
+  private fun startedLocally(localItemId: String, localEpisodeId: String): Boolean {
+    val progress = DeviceManager.dbManager.getLocalMediaProgress("$localItemId-$localEpisodeId")
+    return progress != null && progress.currentTime > 0 && !progress.isFinished
+  }
+
+  private fun isLastPlayed(localItemId: String, localEpisodeId: String, libraryItemId: String, serverEpisodeId: String): Boolean {
+    val last = DeviceManager.deviceData.lastPlaybackSession ?: return false
+    return (last.localLibraryItem?.id == localItemId && last.localEpisodeId == localEpisodeId) ||
+            (last.libraryItemId == libraryItemId && last.episodeId == serverEpisodeId)
   }
 }

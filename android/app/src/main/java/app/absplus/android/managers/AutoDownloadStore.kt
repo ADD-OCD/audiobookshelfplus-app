@@ -26,7 +26,14 @@ object AutoDownloadStore {
     val legacy = (entry.manualEpisodeIds as MutableList<String>?) == null
     // A manual claim always wins; never keep an episode in both lists
     val owned = if (legacy) mutableListOf() else ids.filter { it !in manual }.toMutableList()
-    return PodcastAutoDownloadEntry(enabled, entry.keepCount, owned, manual.toMutableList(), failed.toMutableMap())
+    // Records saved before the retention choice existed manage downloads (the default); a value this version does not
+    // know never enables deletion
+    val retention = when (val raw = entry.retention as String?) {
+      null, PodcastAutoDownloadEntry.RETENTION_AUTO -> PodcastAutoDownloadEntry.RETENTION_AUTO
+      PodcastAutoDownloadEntry.RETENTION_KEEP_ALL -> PodcastAutoDownloadEntry.RETENTION_KEEP_ALL
+      else -> PodcastAutoDownloadEntry.RETENTION_KEEP_ALL.also { AbsLogger.error("AutoDownloadStore", "Unknown retention \"$raw\", keeping all") }
+    }
+    return PodcastAutoDownloadEntry(enabled, entry.keepCount, owned, manual.toMutableList(), failed.toMutableMap(), retention)
   }
 
   // An unreadable record must not block every check; it reads as OFF so a lost opt-out is never overridden
@@ -56,11 +63,26 @@ object AutoDownloadStore {
   }
 
   @Synchronized
-  fun setSettings(serverConfigId: String, libraryItemId: String, enabled: String, keepCount: Int?) {
+  fun setSettings(serverConfigId: String, libraryItemId: String, enabled: String, keepCount: Int?, retention: String? = null) {
+    // One record write: the choice and the ownership lists are saved together; ownership is never reset here
     val entry = get(serverConfigId, libraryItemId)
     entry.enabled = enabled
     entry.keepCount = keepCount
+    if (retention != null) entry.retention = retention
     write(serverConfigId, libraryItemId, entry)
+  }
+
+  /**
+   * Runs [delete] for one episode only while automatic retention may still remove it: retention is on for the podcast,
+   * the episode is auto-owned and not claimed manually. The store stays locked while [delete] runs, so a concurrent
+   * "Keep all downloads" or manual request lands either before (nothing is deleted) or after the removal.
+   */
+  @Synchronized
+  fun deleteIfStillRemovable(serverConfigId: String, libraryItemId: String, episodeId: String, delete: () -> Boolean): Boolean {
+    val entry = get(serverConfigId, libraryItemId)
+    if (!AutoDownloadPolicy.cleansUp(entry)) return false
+    if (episodeId !in entry.autoDownloadedEpisodeIds || episodeId in entry.manualEpisodeIds) return false
+    return delete()
   }
 
   /**

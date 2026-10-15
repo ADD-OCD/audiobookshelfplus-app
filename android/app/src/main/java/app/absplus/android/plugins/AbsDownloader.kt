@@ -239,7 +239,7 @@ class AbsDownloader : Plugin() {
     GlobalScope.launch(Dispatchers.IO) {
       try {
         val entry = AutoDownloadStore.get(serverConfigId, libraryItemId)
-        call.resolve(JSObject().put("enabled", entry.enabled).put("keepCount", entry.keepCount ?: JSONObject.NULL))
+        call.resolve(JSObject().put("enabled", entry.enabled).put("keepCount", entry.keepCount ?: JSONObject.NULL).put("retention", entry.retention))
       } catch (e: Exception) {
         AbsLogger.error(tag, "getPodcastAutoDownload failed (${e.javaClass.simpleName}: ${e.message})")
         call.reject(e.message ?: "getPodcastAutoDownload failed")
@@ -256,6 +256,11 @@ class AbsDownloader : Plugin() {
     if (enabled != PodcastAutoDownloadEntry.ENABLED_DEFAULT && enabled != PodcastAutoDownloadEntry.ENABLED_ON && enabled != PodcastAutoDownloadEntry.ENABLED_OFF) {
       return call.reject("enabled must be DEFAULT, ON or OFF")
     }
+    // Absent keeps the saved choice (older callers); anything else must be one of the two modes
+    val retention = call.getString("retention")
+    if (retention != null && retention != PodcastAutoDownloadEntry.RETENTION_AUTO && retention != PodcastAutoDownloadEntry.RETENTION_KEEP_ALL) {
+      return call.reject("retention must be AUTO or KEEP_ALL")
+    }
     val rawKeepCount = call.data.opt("keepCount")
     val keepCount: Int? = when {
       rawKeepCount == null || rawKeepCount == JSONObject.NULL -> null
@@ -267,7 +272,7 @@ class AbsDownloader : Plugin() {
     val serverConfigId = DeviceManager.serverConnectionConfig?.id ?: return call.reject("No active server connection")
     GlobalScope.launch(Dispatchers.IO) {
       try {
-        AutoDownloadStore.setSettings(serverConfigId, libraryItemId, enabled, keepCount)
+        AutoDownloadStore.setSettings(serverConfigId, libraryItemId, enabled, keepCount, retention)
         call.resolve()
       } catch (e: Exception) {
         AbsLogger.error(tag, "setPodcastAutoDownload failed (${e.javaClass.simpleName}: ${e.message})")
@@ -279,7 +284,8 @@ class AbsDownloader : Plugin() {
         val applies = enabled == PodcastAutoDownloadEntry.ENABLED_ON ||
                 (enabled == PodcastAutoDownloadEntry.ENABLED_DEFAULT && settings.autoDownloadAllPodcasts)
         if (settings.autoDownloadEnabled && applies) {
-          val status = AutoDownloadManager.startCheck(mainActivity, AutoDownloadManager.Trigger.APP)
+          // Queues newly selected episodes only; removals wait for the next regular check
+          val status = AutoDownloadManager.startCheck(mainActivity, AutoDownloadManager.Trigger.SETTINGS)
           android.util.Log.d(tag, "Auto download check after settings change: ${status.jsValue}")
         }
       } catch (e: Exception) {

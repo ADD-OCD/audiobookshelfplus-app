@@ -3,6 +3,7 @@ package app.absplus.android.managers
 import android.content.Context
 import android.util.Log
 import app.absplus.android.data.DeviceSettings
+import app.absplus.android.data.LocalLibraryItem
 import app.absplus.android.data.MediaProgress
 import app.absplus.android.data.Podcast
 import app.absplus.android.data.PodcastAutoDownloadEntry
@@ -11,6 +12,7 @@ import app.absplus.android.models.User
 import app.absplus.android.plugins.AbsLogger
 import app.absplus.android.server.ApiHandler
 import app.absplus.android.services.DownloadServiceHost
+import java.io.File
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -31,7 +33,12 @@ object AutoDownloadManager {
     NO_SERVER("no-server")
   }
 
-  enum class Trigger { APP, WORKER }
+  /**
+   * APP: app open/foreground; WORKER: periodic background work; SETTINGS: right after a podcast's auto download settings
+   * were saved. A SETTINGS check only queues new episodes; retention waits for the next APP or WORKER check, so changing
+   * a setting never removes downloads by itself.
+   */
+  enum class Trigger { APP, WORKER, SETTINGS }
 
   private const val TAG = "AutoDownloadManager"
   private const val PAGE_LIMIT = 100
@@ -86,7 +93,7 @@ object AutoDownloadManager {
     val settings = DeviceManager.deviceData.deviceSettings ?: DeviceSettings.default()
     if (!settings.autoDownloadEnabled) return Pair(Status.DISABLED, null)
 
-    if (trigger == Trigger.APP && !constraintsMet(appContext, settings)) return Pair(Status.CONSTRAINTS, null)
+    if (trigger != Trigger.WORKER && !constraintsMet(appContext, settings)) return Pair(Status.CONSTRAINTS, null)
 
     if (!mutex.tryLock()) return Pair(Status.BUSY, null)
     return Pair(Status.STARTED, settings)
@@ -115,10 +122,23 @@ object AutoDownloadManager {
     }
   }
 
-  private fun isDownloadedLocally(libraryItemId: String, episodeId: String): Boolean {
-    return DeviceManager.dbManager.getLocalLibraryItems().any { local ->
-      local.libraryItemId == libraryItemId && (local.media as? Podcast)?.episodes?.any { it.serverEpisodeId == episodeId } == true
+  /** The best local copy of an episode across the given local items (any server: storage is per library item). */
+  private fun localCopy(locals: List<LocalLibraryItem>, libraryItemId: String, episodeId: String): AutoDownloadPolicy.LocalCopy {
+    var result = AutoDownloadPolicy.LocalCopy.NONE
+    locals.filter { it.libraryItemId == libraryItemId }.forEach { local ->
+      (local.media as? Podcast)?.episodes?.filter { it.serverEpisodeId == episodeId }?.forEach { ep ->
+        val path = ep.audioTrack?.localFileId?.let { id -> local.localFiles.find { it.id == id } }?.absolutePath
+        // A content URI (device folder) has no file length here; such a copy counts as present
+        val length = when {
+          path == null -> 0L
+          path.startsWith("content://") -> 1L
+          else -> File(path).let { if (it.isFile) it.length() else 0L }
+        }
+        if (AutoDownloadPolicy.localCopyOf(length) == AutoDownloadPolicy.LocalCopy.VALID) return AutoDownloadPolicy.LocalCopy.VALID
+        result = AutoDownloadPolicy.LocalCopy.EMPTY
+      }
     }
+    return result
   }
 
   private suspend fun runCheck(appContext: Context, trigger: Trigger, settings: DeviceSettings) {
@@ -233,9 +253,6 @@ object AutoDownloadManager {
         AbsLogger.info(TAG, "Podcast $id is downloaded to a device folder; auto download skips it")
         continue
       }
-      val downloadedEpisodeIds = podcastLocals
-        .flatMap { local -> (local.media as? Podcast)?.episodes?.mapNotNull { it.serverEpisodeId } ?: emptyList() }
-        .toSet()
       var podcastFailed = false
 
       for (episode in window) {
@@ -260,9 +277,13 @@ object AutoDownloadManager {
           Recheck.OK -> Unit
         }
         // The local snapshot is taken before network calls; a manual download may have finished since
-        val onDevice = episode.id in downloadedEpisodeIds || isDownloadedLocally(id, episode.id)
+        val copy = localCopy(podcastLocals, id, episode.id).takeIf { it == AutoDownloadPolicy.LocalCopy.VALID }
+                ?: localCopy(DeviceManager.dbManager.getLocalLibraryItems(), id, episode.id)
+        if (copy == AutoDownloadPolicy.LocalCopy.EMPTY) {
+          AbsLogger.error(TAG, "Episode ${episode.id} of $id has an empty file on the device; not counted as downloaded and left for the user to delete")
+        }
         // Fresh entry: a manual request may have claimed the episode while this check was waiting
-        when (AutoDownloadPolicy.windowAction(AutoDownloadStore.get(serverConfigId, id), episode.id, state, onDevice)) {
+        when (AutoDownloadPolicy.windowAction(AutoDownloadStore.get(serverConfigId, id), episode.id, state, copy)) {
           AutoDownloadPolicy.WindowAction.SKIP -> Unit
           AutoDownloadPolicy.WindowAction.RETRY -> {
             val result = await<DownloadServiceHost.ExistingDownloadResult> { DownloadServiceHost.retryExisting(appContext, downloadId, it) }
@@ -298,6 +319,8 @@ object AutoDownloadManager {
 
       // Retention: only with this podcast's current server metadata and progress in hand (both loaded above)
       if (recheck(serverConfigId, id) != Recheck.OK) continue
+      val atStart = entries[id] ?: AutoDownloadStore.get(serverConfigId, id)
+      if (!AutoDownloadPolicy.retentionRuns(trigger, atStart, AutoDownloadStore.get(serverConfigId, id))) continue
       val serverEpisodeIds = (podcast.episodes ?: mutableListOf()).map { it.id }.toSet()
       val queuedIds = (await<List<app.absplus.android.models.DownloadItem>> { DownloadServiceHost.snapshot(appContext, it) } ?: continue)
         .filter { it.libraryItemId == id && it.serverConnectionConfigId == serverConfigId }

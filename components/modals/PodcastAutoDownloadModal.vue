@@ -20,6 +20,28 @@
 
           <ui-text-input-with-label v-model="keepCountInput" type="text" inputmode="numeric" :label="$strings.LabelAutoDownloadKeepCount" :placeholder="keepCountPlaceholder" :autofocus="false" class="mb-4" />
 
+          <div class="mb-4">
+            <p id="podcast-auto-download-retention" class="pb-1 text-sm font-semibold">{{ $strings.LabelAutoDownloadRetention }}</p>
+            <div role="radiogroup" aria-labelledby="podcast-auto-download-retention">
+              <button
+                v-for="option in retentionItems"
+                :key="option.value"
+                type="button"
+                role="radio"
+                :aria-checked="String(retention === option.value)"
+                class="w-full flex items-start text-left rounded-md border p-2 mb-2"
+                :class="retention === option.value ? 'border-fg bg-bg-toggle-selected' : 'border-border bg-bg-toggle'"
+                @click="retention = option.value"
+              >
+                <span class="material-symbols text-xl mr-2 leading-6" aria-hidden="true">{{ retention === option.value ? 'radio_button_checked' : 'radio_button_unchecked' }}</span>
+                <span class="flex-grow min-w-0">
+                  <span class="block text-sm">{{ option.text }}</span>
+                  <span class="block text-xs text-fg-muted pt-0.5">{{ option.description }}</span>
+                </span>
+              </button>
+            </div>
+          </div>
+
           <ui-btn class="w-full" :disabled="loading || saving" :loading="saving" @click="save">{{ $strings.ButtonSave }}</ui-btn>
 
           <div v-show="loading" class="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-primary bg-opacity-75">
@@ -45,6 +67,7 @@ export default {
       saving: false,
       enabled: 'DEFAULT',
       keepCountInput: '',
+      retention: 'AUTO',
       deviceSettings: {}
     }
   },
@@ -67,6 +90,12 @@ export default {
         { text: this.$strings.LabelOff, value: 'OFF' }
       ]
     },
+    retentionItems() {
+      return [
+        { value: 'AUTO', text: this.$strings.LabelAutoDownloadRetentionAuto, description: this.$strings.MessageAutoDownloadRetentionAuto },
+        { value: 'KEEP_ALL', text: this.$strings.LabelAutoDownloadRetentionKeepAll, description: this.$strings.MessageAutoDownloadRetentionKeepAll }
+      ]
+    },
     keepCountPlaceholder() {
       const globalKeepCount = Number.isInteger(this.deviceSettings.autoDownloadKeepCount) ? this.deviceSettings.autoDownloadKeepCount : 3
       return this.$getString('LabelDefaultValue', [globalKeepCount])
@@ -82,11 +111,13 @@ export default {
       this.loading = true
       this.enabled = 'DEFAULT'
       this.keepCountInput = ''
+      this.retention = 'AUTO'
       try {
         const [result, deviceData] = await Promise.all([AbsDownloader.getPodcastAutoDownload({ libraryItemId: this.libraryItemId }), this.$db.getDeviceData()])
         this.deviceSettings = deviceData?.deviceSettings || {}
         this.enabled = result?.enabled || 'DEFAULT'
         this.keepCountInput = result?.keepCount == null ? '' : String(result.keepCount)
+        this.retention = result?.retention === 'KEEP_ALL' ? 'KEEP_ALL' : 'AUTO'
       } catch (error) {
         console.error('Failed to load podcast auto download settings', error)
         this.$toast.error(this.$strings.ToastAutoDownloadLoadFailed)
@@ -116,7 +147,7 @@ export default {
       await this.$hapticsImpact()
       this.saving = true
       try {
-        await AbsDownloader.setPodcastAutoDownload({ libraryItemId: this.libraryItemId, enabled: this.enabled, keepCount })
+        await AbsDownloader.setPodcastAutoDownload({ libraryItemId: this.libraryItemId, enabled: this.enabled, keepCount, retention: this.retention })
         this.$toast.success(this.$strings.ToastAutoDownloadSaved)
         this.show = false
       } catch (error) {

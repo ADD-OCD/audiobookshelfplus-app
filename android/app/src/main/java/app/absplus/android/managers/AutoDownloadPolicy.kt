@@ -31,6 +31,17 @@ object AutoDownloadPolicy {
           entry.enabled == PodcastAutoDownloadEntry.ENABLED_ON ||
                   (entry.enabled == PodcastAutoDownloadEntry.ENABLED_DEFAULT && settings.autoDownloadAllPodcasts)
 
+  /** Whether automatic retention may remove anything of this podcast ("Automatically manage downloads"). */
+  fun cleansUp(entry: PodcastAutoDownloadEntry): Boolean = entry.retention == PodcastAutoDownloadEntry.RETENTION_AUTO
+
+  /**
+   * Whether a check runs retention for a podcast: never in the check that follows a settings change, and only when the
+   * podcast was managed both when the check started and now, so switching back from "Keep all downloads" while a check
+   * runs removes nothing until the next regular check. Each removal is checked once more as it happens.
+   */
+  fun retentionRuns(trigger: AutoDownloadManager.Trigger, atCheckStart: PodcastAutoDownloadEntry, now: PodcastAutoDownloadEntry): Boolean =
+          trigger != AutoDownloadManager.Trigger.SETTINGS && cleansUp(atCheckStart) && cleansUp(now)
+
   fun keepCountFor(entry: PodcastAutoDownloadEntry, settings: DeviceSettings): Int =
           entry.keepCount ?: settings.autoDownloadKeepCount
 
@@ -44,13 +55,29 @@ object AutoDownloadPolicy {
   enum class WindowAction { ENQUEUE, RETRY, SKIP }
 
   /**
+   * The device's copy of an episode. An EMPTY copy (0-byte or missing file) is not a valid download. It is still left
+   * alone: downloading it again would add a second local record for the episode, so the user deletes it.
+   */
+  enum class LocalCopy { NONE, VALID, EMPTY }
+
+  fun localCopyOf(fileLength: Long?): LocalCopy = when {
+    fileLength == null -> LocalCopy.NONE
+    fileLength <= 0L -> LocalCopy.EMPTY
+    else -> LocalCopy.VALID
+  }
+
+  /**
    * Decision for an episode inside the window. Only auto-owned work is ever retried, and only below
    * [MAX_AUTO_ATTEMPTS]; manual claims and episodes already on the device are left alone.
    *
    * @param queued the download queue's state for this episode
    * @param onDevice a local copy (any origin) exists for this server
    */
-  fun windowAction(entry: PodcastAutoDownloadEntry, episodeId: String, queued: DownloadItemManager.QueuedState, onDevice: Boolean): WindowAction {
+  fun windowAction(entry: PodcastAutoDownloadEntry, episodeId: String, queued: DownloadItemManager.QueuedState, onDevice: Boolean): WindowAction =
+          windowAction(entry, episodeId, queued, if (onDevice) LocalCopy.VALID else LocalCopy.NONE)
+
+  fun windowAction(entry: PodcastAutoDownloadEntry, episodeId: String, queued: DownloadItemManager.QueuedState, local: LocalCopy): WindowAction {
+    val onDevice = local != LocalCopy.NONE
     if (episodeId in entry.manualEpisodeIds) return WindowAction.SKIP
     val owned = episodeId in entry.autoDownloadedEpisodeIds
     val attempts = entry.failedAttempts[episodeId] ?: 0
@@ -72,13 +99,14 @@ object AutoDownloadPolicy {
           val serverEpisodeId: String,
           val inProgress: Boolean, // started and not finished (local or server progress)
           val isLastPlayed: Boolean, // the session currently loaded in / last used by the player
-          val queued: Boolean
+          val queued: Boolean,
+          val emptyFile: Boolean = false // 0-byte or missing file: left for the user to delete (see LocalCopy)
   )
 
   /**
    * Episodes automatic retention may delete: auto-owned, not claimed manually, no longer in the newest window, still
    * listed by the server (missing metadata never causes deletion), not being listened to, not the player's session
-   * and not in the download queue.
+   * and not in the download queue. Nothing at all under "Keep all downloads", and never an empty file.
    */
   fun retentionDeletions(
           entry: PodcastAutoDownloadEntry,
@@ -86,11 +114,12 @@ object AutoDownloadPolicy {
           serverEpisodeIds: Set<String>,
           local: List<LocalEpisode>
   ): List<String> =
-          local.filter { ep ->
+          if (!cleansUp(entry)) emptyList()
+          else local.filter { ep ->
             ep.serverEpisodeId in entry.autoDownloadedEpisodeIds &&
                     ep.serverEpisodeId !in entry.manualEpisodeIds &&
                     ep.serverEpisodeId !in windowIds &&
                     ep.serverEpisodeId in serverEpisodeIds &&
-                    !ep.inProgress && !ep.isLastPlayed && !ep.queued
+                    !ep.inProgress && !ep.isLastPlayed && !ep.queued && !ep.emptyFile
           }.map { it.serverEpisodeId }
 }
