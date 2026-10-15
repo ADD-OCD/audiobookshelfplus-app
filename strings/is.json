@@ -8,5 +8,7 @@
   "ButtonClearFilter": "Hreinsa síu",
   "ButtonCollections": "Söfn",
   "ButtonCreate": "Stofna",
-  "ButtonDelete": "Eyða"
+  "ButtonDelete": "Eyða",
+  "LabelThemeEink": "E-ink",
+  "LabelUpdatePlayerEveryMinute": "Update once a minute"
 }

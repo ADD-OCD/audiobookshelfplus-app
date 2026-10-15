@@ -54,5 +54,7 @@
   "ButtonSubmit": "ثبت",
   "ButtonSwitchServerUser": "تعویض سرور/کاربر",
   "ButtonUnmaskServerAddress": "نمایش آدرس سرور",
-  "HeaderLocalFolders": "پوشه‌های محلی"
+  "HeaderLocalFolders": "پوشه‌های محلی",
+  "LabelThemeEink": "E-ink",
+  "LabelUpdatePlayerEveryMinute": "Update once a minute"
 }
