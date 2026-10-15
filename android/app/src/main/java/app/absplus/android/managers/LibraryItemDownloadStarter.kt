@@ -37,6 +37,18 @@ object LibraryItemDownloadStarter {
     startLibraryItemDownload(context, libraryItem, localFolder, episode, callback)
   }
 
+  private fun downloadedFromAnotherServer(libraryItemId: String): Boolean {
+    val user = DeviceManager.serverUserId
+    val config = DeviceManager.serverConnectionConfigId
+    val local = DeviceManager.dbManager.getLocalLibraryItem("local_$libraryItemId")
+    if (local != null && local.folderId.startsWith("internal-") &&
+            !DownloadDestinationGuard.sameServer(local.serverUserId, local.serverConnectionConfigId, user, config)) return true
+    return DeviceManager.dbManager.getDownloadItems().any {
+      it.libraryItemId == libraryItemId && it.isInternalStorage &&
+              !DownloadDestinationGuard.sameServer(it.serverUserId, it.serverConnectionConfigId, user, config)
+    }
+  }
+
   // Item filenames could be the same if they are in sub-folders, this will make them unique
   private fun getFilenameFromRelPath(relPath: String): String {
     var cleanedRelPath = relPath.replace("\\", "_").replace("/", "_")
@@ -70,6 +82,12 @@ object LibraryItemDownloadStarter {
       return
     }
     val isInternal = localFolder.id.startsWith("internal-")
+    // App storage keeps one folder and one local item per library item id. The same id from another server would
+    // write into the first server's download (R29-N02): refuse it instead of merging or replacing anything
+    if (isInternal && downloadedFromAnotherServer(libraryItem.id)) {
+      callback("This item is already downloaded from another server. Remove that download first.")
+      return
+    }
 
     val finalInternalFolderPath = "${context.filesDir}/downloads/${libraryItem.id}"
     val tempFolderPath =
