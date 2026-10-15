@@ -2,7 +2,7 @@
 // translucency and draws 1px ink lines instead.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
@@ -40,12 +40,11 @@ test('E-ink is a registered light built-in that defines every token explicitly',
   assert.equal(engine.THEMES.at(-1).id, 'eink')
 })
 
-test('E-ink label exists in every strings file', async () => {
-  const dir = new URL('../strings/', import.meta.url)
-  for (const file of (await readdir(dir)).filter((f) => f.endsWith('.json'))) {
-    const strings = JSON.parse(await read(`../strings/${file}`))
-    assert.equal(typeof strings[eink().labelKey], 'string', file)
-  }
+// Audiobookshelf+ strings live in en-us.json; plugins/i18n.js falls back to it key by key for every other locale
+test('E-ink label exists in en-us, which every locale falls back to', async () => {
+  const strings = JSON.parse(await read('../strings/en-us.json'))
+  assert.equal(strings[eink().labelKey], 'E-ink')
+  assert.match(await read('../plugins/i18n.js'), /strings\[key\] \|\| translations\[defaultCode\]\[key\]/)
 })
 
 test('E-ink palette: paper, ink and at most two grays, far apart; overlays are solid paper', () => {

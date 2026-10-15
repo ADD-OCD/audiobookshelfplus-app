@@ -171,11 +171,9 @@
   "LabelStatsWeekListening": "Nädala keskmine",
   "LabelThemeBlack": "Must",
   "LabelThemeDark": "Pime",
-  "LabelThemeEink": "E-ink",
   "LabelThemeLight": "Hele",
   "LabelTitle": "Pealkiri",
   "LabelTotalSize": "Kogusuurus",
   "LabelType": "Tüüp",
-  "LabelUnknown": "Teadmata",
-  "LabelUpdatePlayerEveryMinute": "Update once a minute"
+  "LabelUnknown": "Teadmata"
 }
