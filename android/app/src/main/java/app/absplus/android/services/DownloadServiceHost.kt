@@ -1,6 +1,9 @@
 package app.absplus.android.services
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import androidx.core.content.ContextCompat
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.FolderScanner
@@ -15,10 +18,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Shared process owner used by the foreground service and the Capacitor bridge. */
 object DownloadServiceHost {
+  const val SERVICE_START_FAILED_MESSAGE = "Unable to start the Android download service"
+
   enum class ExistingDownloadResult { NOT_FOUND, ACTIVE, RETRIED, SERVICE_START_FAILED, FOLDER_ACCESS }
 
   data class NotificationStrings(
@@ -43,6 +50,7 @@ object DownloadServiceHost {
       val appContext = context.applicationContext
       DbManager.initialize(appContext)
       manager = DownloadItemManager(FolderScanner(appContext), appContext, ForwardingEmitter)
+      watchNetwork(appContext)
       restoreJob = scope.launch {
         try {
           if (DeviceManager.dbManager.ensureValidDownloadQueue()) {
@@ -74,6 +82,34 @@ object DownloadServiceHost {
       deferredCompletions.toList().also { deferredCompletions.clear() }
     }
     completions.forEach(bridgeEmitter::onDownloadItemComplete)
+    startServiceIfIdle(context)
+  }
+
+  /**
+   * Auto-owned transfers paused for being offline or on a metered network resume as soon as the network allows them
+   * (startServiceIfIdle only starts the service when the queue has work that may run now). Process-wide, registered
+   * once; from the background Android may refuse the service start, then the next worker run or app start resumes.
+   */
+  private fun watchNetwork(appContext: Context) {
+    if (networkWatched) return
+    networkWatched = true
+    try {
+      val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+      cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = startServiceIfIdle(appContext)
+      })
+    } catch (e: RuntimeException) {
+      AbsLogger.error(TAG, "Could not watch the network for paused auto downloads: ${e.message}")
+    }
+  }
+
+  /** Starts the service for queued work restored or enqueued while the app was in background (e.g. by a worker). */
+  fun startServiceIfIdle(context: Context) {
+    val appContext = context.applicationContext
+    scope.launch {
+      restoreJob?.join()
+      if (service == null && manager?.hasWork() == true) startService(appContext)
+    }
   }
 
   @Synchronized
@@ -88,7 +124,7 @@ object DownloadServiceHost {
       restoreJob?.join()
       queue.addDownloadItem(item)
       if (startService(context)) callback(null)
-      else callback("Unable to start the Android download service")
+      else callback(SERVICE_START_FAILED_MESSAGE)
     }
   }
 
@@ -129,6 +165,32 @@ object DownloadServiceHost {
     scope.launch {
       restoreJob?.join()
       callback(queue.removeDownloadItem(downloadItemId, action))
+    }
+  }
+
+  /**
+   * Runs queued transfers inside a background worker's execution window. From the background on
+   * Android 12+ the foreground service can't be started, so the worker keeps the process alive.
+   */
+  suspend fun runQueueWhileWorking(context: Context, budgetMs: Long) {
+    val queue = ensure(context)
+    restoreJob?.join()
+    if (service != null) return
+    queue.resumeWork()
+    withTimeoutOrNull(budgetMs) {
+      while (service == null && synchronized(queue) { queue.hasWork() }) delay(WORKER_POLL_MS)
+    }
+  }
+
+  fun queuedState(
+          context: Context,
+          downloadItemId: String,
+          callback: (DownloadItemManager.QueuedState) -> Unit
+  ) {
+    val queue = ensure(context)
+    scope.launch {
+      restoreJob?.join()
+      callback(queue.queuedState(downloadItemId))
     }
   }
 
@@ -250,4 +312,6 @@ object DownloadServiceHost {
   private const val DEFAULT_DOWNLOADS = "Downloads"
   private const val DEFAULT_CANCEL = "Cancel"
   private const val TAG = "DownloadServiceHost"
+  private const val WORKER_POLL_MS = 5_000L
+  @Volatile private var networkWatched = false
 }

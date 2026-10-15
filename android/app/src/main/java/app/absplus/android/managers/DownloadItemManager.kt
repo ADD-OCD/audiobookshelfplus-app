@@ -55,6 +55,11 @@ class DownloadItemManager(
   var currentDownloadItemParts: MutableList<DownloadItemPart> = mutableListOf()
     private set
 
+  enum class QueuedState { NOT_QUEUED, PENDING, FAILED }
+
+  /** Auto-owned transfers follow the auto download network/charging settings (tests replace it). */
+  var autoGate: AutoTransferGate = AutoTransferGate.forContext(context)
+
   interface DownloadEventEmitter {
     fun onDownloadItem(downloadItem: DownloadItem)
     fun onDownloadItemPartUpdate(downloadItemPart: DownloadItemPart)
@@ -74,6 +79,51 @@ class DownloadItemManager(
     clientEventEmitter = eventEmitter
     downloadItemQueue.forEach(clientEventEmitter::onDownloadItem)
     notifyQueueChanged()
+  }
+
+  @Synchronized
+  fun queuedState(downloadItemId: String): QueuedState {
+    val item = downloadItemQueue.find { it.id == downloadItemId } ?: return QueuedState.NOT_QUEUED
+    return if (item.terminalFailureAt != null) QueuedState.FAILED else QueuedState.PENDING
+  }
+
+  // Ownership stays with the episode on failure; only the failed attempt is counted, so the next check retries an
+  // auto-owned episode a bounded number of times and never takes over a manual download
+  private fun recordAutoOutcome(item: DownloadItem, failed: Boolean) {
+    val episodeId = item.episodeId
+    if (episodeId.isNullOrBlank() || item.serverConnectionConfigId.isBlank()) return
+    try {
+      if (failed) AutoDownloadStore.recordAutoFailure(item.serverConnectionConfigId, item.libraryItemId, episodeId)
+      else AutoDownloadStore.recordAutoSuccess(item.serverConnectionConfigId, item.libraryItemId, episodeId)
+    } catch (e: Exception) {
+      AbsLogger.error(tag, "Could not update auto download state (${e.javaClass.simpleName}: ${e.message})")
+    }
+  }
+
+  /** A part of an auto-owned item that may not start a network transfer now. */
+  private fun isBlockedTransfer(item: DownloadItem, part: DownloadItemPart, allowed: Boolean): Boolean =
+          !allowed && !part.moved && !part.completed && !part.isMoving && part !in currentDownloadItemParts &&
+                  autoGate.isAuto(item)
+
+  /**
+   * Stops running transfers of auto-owned items when their conditions no longer hold (Wi-Fi lost, metered network,
+   * charger unplugged). Bytes stay in staging and the part resumes from there once allowed again.
+   */
+  @Synchronized
+  fun pauseBlockedAutoTransfers() {
+    if (currentDownloadItemParts.isEmpty() || autoGate.allowedNow()) return
+    downloadItemQueue.filter { autoGate.isAuto(it) }.forEach { item ->
+      item.downloadItemParts.filter { it in currentDownloadItemParts && !it.completed && !it.isMoving }.forEach { part ->
+        activeCalls.remove(part.id)?.cancel()
+        currentDownloadItemParts.remove(part)
+        reservations.remove(part.destinationPath)
+        part.downloadId = null
+        part.bytesDownloaded = File(part.destinationPath).takeIf { it.exists() }?.length() ?: 0L
+        AbsLogger.info(tag, "Paused auto download ${part.filename}: auto download conditions are not met")
+        persist(item, force = true)
+        clientEventEmitter.onDownloadItemPartUpdate(part)
+      }
+    }
   }
 
   @Synchronized
@@ -121,8 +171,10 @@ class DownloadItemManager(
         if (!resetPartForFreshDownload(part)) resetFailed = true
       }
       if (resetFailed) {
+        val newlyFailed = item.terminalFailureAt == null
         item.terminalFailureAt = item.terminalFailureAt ?: System.currentTimeMillis()
         item.stagingCleanupAt = null
+        if (newlyFailed) recordAutoOutcome(item, failed = true)
       }
       if (item.terminalFailureAt != null) {
         item.downloadItemParts.filter { !it.moved }.forEach { part ->
@@ -273,18 +325,24 @@ class DownloadItemManager(
             } || local.coverAbsolutePath == part.finalDestinationPath
           }
 
+  // Auto-owned parts that may not transfer now are not work: the service and a worker must not stay alive (or start)
+  // just to wait for Wi-Fi or a charger; the next allowed check, worker run or app start resumes them
   @Synchronized
-  fun hasWork(): Boolean =
-          finalizingItems.isNotEmpty() ||
-                  downloadItemQueue.any { item ->
-                    item.downloadItemParts.any { part ->
-                      (!part.moved && !part.failed) || part.isMoving
-                    }
-                  }
+  fun hasWork(): Boolean {
+    if (finalizingItems.isNotEmpty()) return true
+    val allowed by lazy { autoGate.allowedNow() }
+    return downloadItemQueue.any { item ->
+      item.downloadItemParts.any { part ->
+        ((!part.moved && !part.failed) || part.isMoving) && !isBlockedTransfer(item, part, allowed)
+      }
+    }
+  }
 
   @Synchronized
   private fun checkUpdateDownloadQueue() {
-    downloadItemQueue.toList().forEach { item ->
+    val allowed by lazy { autoGate.allowedNow() }
+    // Manual downloads first: auto-owned items never hold up something the user asked for
+    downloadItemQueue.toList().sortedBy { autoGate.isAuto(it) }.forEach { item ->
       var slots = MAX_SIMULTANEOUS_DOWNLOADS - currentDownloadItemParts.size
       if (slots <= 0) return@forEach
       item.downloadItemParts
@@ -304,6 +362,8 @@ class DownloadItemManager(
               }
       slots = MAX_SIMULTANEOUS_DOWNLOADS - currentDownloadItemParts.size
       if (slots <= 0) return@forEach
+      // Staged parts above may finish (no network); new transfers of a blocked auto item wait, untouched
+      if (!allowed && autoGate.isAuto(item)) return@forEach
       item.getNextDownloadItemParts(slots).forEach { part ->
         val existingFile = findSharedStorageFile(part)
         if (existingFile != null) {
@@ -442,6 +502,7 @@ class DownloadItemManager(
         val activeParts =
                 synchronized(this@DownloadItemManager) { currentDownloadItemParts.toList() }
         activeParts.forEach(::handlePartUpdate)
+        pauseBlockedAutoTransfers()
         synchronized(this@DownloadItemManager) {
           checkUpdateDownloadQueue()
           if (!hasWork()) {
@@ -597,6 +658,7 @@ class DownloadItemManager(
     item.terminalFailureAt = item.terminalFailureAt ?: System.currentTimeMillis()
     item.stagingCleanupAt = null
     persist(item, force = true)
+    recordAutoOutcome(item, failed = true)
     IncompleteDownloadCleanup.schedule(context, item)
     clientEventEmitter.onDownloadItemPartUpdate(part)
     notifyQueueChanged()
@@ -720,6 +782,7 @@ class DownloadItemManager(
                       }
                     }
             clientEventEmitter.onDownloadItemComplete(event)
+            recordAutoOutcome(item, failed = false)
             synchronized(this@DownloadItemManager) {
               downloadItemQueue.remove(item)
               DeviceManager.dbManager.removeDownloadItem(item.id)

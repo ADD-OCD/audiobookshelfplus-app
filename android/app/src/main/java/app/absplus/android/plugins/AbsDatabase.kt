@@ -11,6 +11,7 @@ import app.absplus.android.server.ApiHandler
 import app.absplus.android.server.RefreshResult
 import app.absplus.android.managers.SecureStorage
 import app.absplus.android.widget.WidgetRenderer
+import app.absplus.android.managers.AutoDownloadScheduler
 import com.fasterxml.jackson.core.json.JsonReadFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
@@ -617,6 +618,14 @@ class AbsDatabase : Plugin() {
     Handler(Looper.getMainLooper()).post {
       DeviceManager.deviceData.deviceSettings = newDeviceSettings
       DeviceManager.dbManager.saveDeviceData(DeviceManager.deviceData)
+
+      GlobalScope.launch(Dispatchers.IO) {
+        try {
+          AutoDownloadScheduler.reschedule(mainActivity)
+        } catch (e: Exception) {
+          Log.e(tag, "Failed to reschedule auto download", e)
+        }
+      }
 
       // Updates playback actions for media notification (handles media control seek locking setting)
       if (mainActivity.isPlayerNotificationServiceInitialized()) {
