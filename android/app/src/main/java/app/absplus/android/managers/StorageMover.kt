@@ -140,6 +140,8 @@ object StorageMover {
       return failed("$id folder ${snapshot.absolutePath} is not directly in ${fromRoot.absolutePath}")
     }
     val name = src.name
+    // Folders are named by server id; anything else (e.g. ".." saved before ids were validated) escapes the roots
+    if (!DownloadIdentifiers.isSafe(name)) return failed("$id folder name is not a safe id")
     val tmp = File(toRoot, "$TMP_PREFIX$name")
 
     try {

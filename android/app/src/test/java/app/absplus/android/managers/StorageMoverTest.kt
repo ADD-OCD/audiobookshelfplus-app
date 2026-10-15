@@ -306,6 +306,16 @@ class StorageMoverTest {
   }
 
   @Test
+  fun folderNamedDotDotIsNotMoved() {
+    val item = seed(bookItem().apply { absolutePath = File(inRoot, "..").path })
+    val sentinel = write(probe.sdDir, "keep.bin", 10)
+
+    assertTrue(StorageMover.moveOne(item.id, sdFolder("book"), probe, db) is MoveResult.Failed)
+    assertTrue("the SD card's app folder is untouched", sentinel.isFile)
+    assertTrue("internal storage is untouched", inRoot.isDirectory)
+  }
+
+  @Test
   fun discardWhenEpisodeSavedDuringCopy() {
     val item = seed(podcastItem())
     val result =
