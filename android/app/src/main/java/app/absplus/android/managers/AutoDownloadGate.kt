@@ -30,8 +30,10 @@ object AutoDownloadConditions {
     return AutoDownloadPolicy.Conditions(connected, unmetered, bm?.isCharging == true)
   }
 
-  fun transfersAllowed(context: Context): Boolean =
-          AutoDownloadPolicy.transfersAllowed(DeviceManager.deviceData.deviceSettings ?: DeviceSettings.default(), current(context))
+  fun transfersAllowed(context: Context): Boolean = blockedReason(context) == null
+
+  fun blockedReason(context: Context): String? =
+          AutoDownloadPolicy.blockedReason(DeviceManager.deviceData.deviceSettings ?: DeviceSettings.default(), current(context))
 }
 
 /**
@@ -42,6 +44,8 @@ object AutoDownloadConditions {
 interface AutoTransferGate {
   fun isAuto(item: DownloadItem): Boolean
   fun allowedNow(): Boolean
+  /** Why auto-owned transfers may not run now (see [AutoDownloadPolicy.blockedReason]), or null. */
+  fun blockedReason(): String? = if (allowedNow()) null else "network"
 
   companion object {
     fun forContext(context: Context): AutoTransferGate = object : AutoTransferGate {
@@ -52,6 +56,7 @@ interface AutoTransferGate {
                 false
               }
       override fun allowedNow(): Boolean = AutoDownloadConditions.transfersAllowed(context)
+      override fun blockedReason(): String? = AutoDownloadConditions.blockedReason(context)
     }
   }
 }

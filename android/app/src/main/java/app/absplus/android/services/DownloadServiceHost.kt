@@ -27,7 +27,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 object DownloadServiceHost {
   const val SERVICE_START_FAILED_MESSAGE = "Unable to start the Android download service"
 
-  enum class ExistingDownloadResult { NOT_FOUND, ACTIVE, RETRIED, SERVICE_START_FAILED, FOLDER_ACCESS, STORAGE_UNAVAILABLE }
+  enum class ExistingDownloadResult { NOT_FOUND, ACTIVE, RETRIED, SERVICE_START_FAILED, FOLDER_ACCESS, STORAGE_UNAVAILABLE, HELD }
 
   data class NotificationStrings(
           val preparing: String,
@@ -85,6 +85,8 @@ object DownloadServiceHost {
       deferredCompletions.toList().also { deferredCompletions.clear() }
     }
     completions.forEach(bridgeEmitter::onDownloadItemComplete)
+    // The app is in front: held auto downloads may run again under the foreground service
+    ensure(context).setAutoTransfersHeld(false)
     startServiceIfIdle(context)
   }
 
@@ -113,6 +115,16 @@ object DownloadServiceHost {
       restoreJob?.join()
       if (service == null && manager?.hasWork() == true) startService(appContext)
     }
+  }
+
+  /**
+   * The app came to the front: auto downloads held when a background window ended may run again, under the foreground
+   * service (a process that survived in the background does not load the bridge again). No-op before the manager exists.
+   */
+  fun releaseAutoHold(context: Context) {
+    val m = synchronized(this) { manager } ?: return
+    m.setAutoTransfersHeld(false)
+    startServiceIfIdle(context)
   }
 
   /** Finalizes downloads that waited for an SD card that may be back now; no-op before the manager exists. */
@@ -193,7 +205,9 @@ object DownloadServiceHost {
         AbsLogger.info(TAG, "Retry of $downloadItemId refused: no access to ${missingFolders.joinToString()}")
         callback(ExistingDownloadResult.FOLDER_ACCESS)
       } else if (!queue.retryDownloadItem(downloadItemId)) {
-        callback(ExistingDownloadResult.ACTIVE)
+        // Still another server than the one the download was started for: it stays held, nothing was deleted
+        val held = queue.findDownloadItem(downloadItemId)?.downloadItemParts?.any { it.authorizationHold } == true
+        callback(if (held) ExistingDownloadResult.HELD else ExistingDownloadResult.ACTIVE)
       } else if (startService(context)) {
         callback(ExistingDownloadResult.RETRIED)
       } else {
@@ -224,9 +238,16 @@ object DownloadServiceHost {
     val queue = ensure(context)
     restoreJob?.join()
     if (service != null) return
+    queue.setAutoTransfersHeld(false)
     queue.resumeWork()
-    withTimeoutOrNull(budgetMs) {
-      while (service == null && synchronized(queue) { queue.hasWork() }) delay(WORKER_POLL_MS)
+    try {
+      withTimeoutOrNull(budgetMs) {
+        while (service == null && synchronized(queue) { queue.hasWork() }) delay(WORKER_POLL_MS)
+      }
+    } finally {
+      // Budget used up or the worker cancelled: nothing keeps the process alive once the worker returns, so auto
+      // transfers stop here and resume (by range) in the next window or when the app is open (M03)
+      if (service == null) queue.setAutoTransfersHeld(true)
     }
   }
 
@@ -239,6 +260,18 @@ object DownloadServiceHost {
     scope.launch {
       restoreJob?.join()
       callback(queue.queuedState(downloadItemId))
+    }
+  }
+
+  /** Each queued item with why it waits ([DownloadItemManager.waitingReason]) and whether auto download queued it. */
+  data class ItemStatus(val item: DownloadItem, val waitingFor: String?, val isAuto: Boolean)
+
+  fun statusSnapshot(context: Context, callback: (List<ItemStatus>) -> Unit) {
+    val queue = ensure(context)
+    scope.launch {
+      restoreJob?.join()
+      val items = synchronized(queue) { queue.downloadItemQueue.toList() }
+      callback(items.map { ItemStatus(it, queue.waitingReason(it), queue.isAutoOwned(it)) })
     }
   }
 
@@ -297,6 +330,7 @@ object DownloadServiceHost {
 
   fun attachService(downloadService: DownloadService) {
     synchronized(this) { service = downloadService }
+    ensure(downloadService).setAutoTransfersHeld(false)
     startWork(downloadService)
   }
 

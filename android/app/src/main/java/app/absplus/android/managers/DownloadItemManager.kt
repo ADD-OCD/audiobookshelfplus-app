@@ -48,6 +48,8 @@ class DownloadItemManager(
   private val lastPersistTime = mutableMapOf<String, Long>()
   private val finalizingItems = mutableSetOf<String>()
   private val awaitingStorage = mutableSetOf<String>()
+  // M03: set when a worker's execution window ended with no foreground service (see setAutoTransfersHeld)
+  @Volatile private var autoTransfersHeld = false
   private val refreshingServerIds = mutableSetOf<String>()
   // Lazy: only token refresh needs it, and building it opens the Android keystore
   private val apiHandler by lazy { ApiHandler(context) }
@@ -78,6 +80,8 @@ class DownloadItemManager(
     fun onProgress(totalBytesWritten: Long, progress: Long)
     fun onComplete(failed: Boolean)
     fun onAuthError()
+    /** What identifies the file a new staged copy comes from (ETag or Last-Modified), for resuming it later. */
+    fun onValidator(validator: String?) {}
   }
 
   @Synchronized
@@ -112,7 +116,7 @@ class DownloadItemManager(
 
   /** A part of an auto-owned item that may not start a network transfer now. */
   private fun isBlockedTransfer(item: DownloadItem, part: DownloadItemPart, allowed: Boolean): Boolean =
-          !allowed && !part.moved && !part.completed && !part.isMoving && part !in currentDownloadItemParts &&
+          (!allowed || autoTransfersHeld) && !part.moved && !part.completed && !part.isMoving && part !in currentDownloadItemParts &&
                   autoGate.isAuto(item)
 
   /**
@@ -121,7 +125,7 @@ class DownloadItemManager(
    */
   @Synchronized
   fun pauseBlockedAutoTransfers() {
-    if (currentDownloadItemParts.isEmpty() || autoGate.allowedNow()) return
+    if (currentDownloadItemParts.isEmpty() || (!autoTransfersHeld && autoGate.allowedNow())) return
     downloadItemQueue.filter { autoGate.isAuto(it) }.forEach { item ->
       item.downloadItemParts.filter { it in currentDownloadItemParts && !it.completed && !it.isMoving }.forEach { part ->
         activeCalls.remove(part.id)?.cancel()
@@ -129,12 +133,47 @@ class DownloadItemManager(
         reservations.remove(part.destinationPath)
         part.downloadId = null
         part.bytesDownloaded = File(part.destinationPath).takeIf { it.exists() }?.length() ?: 0L
-        AbsLogger.info(tag, "Paused auto download ${part.filename}: auto download conditions are not met")
+        AbsLogger.info(tag, "Paused auto download ${part.filename}: ${if (autoTransfersHeld) "the background window ended" else "auto download conditions are not met"}")
         persist(item, force = true)
         clientEventEmitter.onDownloadItemPartUpdate(part)
       }
     }
   }
+
+  /**
+   * The background lease of auto-owned transfers (M03). Held when a worker's execution window ended and no foreground
+   * service keeps the process alive: running auto transfers stop (their staged bytes are kept and resumed by range
+   * later) and none start until the next worker window, the foreground service or the app in front releases it.
+   * Manual downloads always run under the foreground service and are never held.
+   */
+  fun setAutoTransfersHeld(held: Boolean) {
+    synchronized(this) {
+      if (autoTransfersHeld == held) return
+      autoTransfersHeld = held
+    }
+    AbsLogger.info(tag, if (held) "Auto downloads wait for the next background window or the app" else "Auto downloads may run")
+    if (held) pauseBlockedAutoTransfers()
+    notifyQueueChanged()
+  }
+
+  /**
+   * Why a queued item is not transferring, for the Downloads screen: "sdCard" (its finished files wait for the SD card
+   * to be saved), or for an auto download "network", "wifi", "charging" (the auto download conditions) or
+   * "background" (the background window ended; it continues in the next one or when the app is open); else null.
+   */
+  @Synchronized
+  fun waitingReason(item: DownloadItem): String? {
+    if (item.id in awaitingStorage) return "sdCard"
+    val waiting = item.downloadItemParts.any {
+      !it.moved && !it.completed && !it.failed && !it.isMoving && it !in currentDownloadItemParts
+    }
+    if (!waiting || !autoGate.isAuto(item)) return null
+    return autoGate.blockedReason() ?: if (autoTransfersHeld) "background" else null
+  }
+
+  /** Whether the auto download feature queued this item (Downloads screen label). */
+  @Synchronized
+  fun isAutoOwned(item: DownloadItem): Boolean = autoGate.isAuto(item)
 
   @Synchronized
   fun restoreQueue() {
@@ -208,7 +247,7 @@ class DownloadItemManager(
       val failures = item.downloadItemParts.associate { it.id to RestoredFailure(it.permissionLost, it.storageUnavailable, it.failureReason) }
       item.downloadItemParts.forEach { part ->
         if (part.moved) return@forEach
-        if (!resetPartForFreshDownload(part)) resetFailed = true
+        if (!resetPartForRestart(part)) resetFailed = true
       }
       if (resetFailed) {
         val newlyFailed = item.terminalFailureAt == null
@@ -515,7 +554,7 @@ class DownloadItemManager(
       slots = MAX_SIMULTANEOUS_DOWNLOADS - currentDownloadItemParts.size
       if (slots <= 0) return@forEach
       // Staged parts above may finish (no network); new transfers of a blocked auto item wait, untouched
-      if (!allowed && autoGate.isAuto(item)) return@forEach
+      if ((!allowed || autoTransfersHeld) && autoGate.isAuto(item)) return@forEach
       item.getNextDownloadItemParts(slots).forEach { part ->
         // A same-named file in the device folder is only reused when no other download owns it (R29-N02)
         val existingFile = findSharedStorageFile(part)?.takeIf {
@@ -615,7 +654,16 @@ class DownloadItemManager(
                                   handleAuthError(item, part)
                                 }
                               }
+
+                              override fun onValidator(validator: String?) {
+                                synchronized(this@DownloadItemManager) {
+                                  if (part !in currentDownloadItemParts) return
+                                  part.resumeValidator = validator
+                                  persist(item, force = true)
+                                }
+                              }
                             },
+                            part.resumeValidator,
                             { hasAvailableSpace(part) }
                     )
                     .download(serverUrl(item, part), token)
@@ -641,6 +689,7 @@ class DownloadItemManager(
         part.downloadId = null
         part.failed = true
         part.waitingForSpace = false
+        part.authorizationHold = true
         part.failureReason = "Download authorization changed: reconnect the original server before retrying"
       }
       item.terminalFailureAt = null
@@ -1170,10 +1219,27 @@ class DownloadItemManager(
     return findSharedStorageFile(part) != null
   }
 
+  /**
+   * Restart after the process ended: the staged bytes of a transfer whose source file is identified (ETag or
+   * Last-Modified) are kept, minus their last [StagedResume.ROLLBACK_BYTES] that a power loss may have left unwritten,
+   * and resumed with an If-Range request (InternalDownloadManager); anything else restarts from byte zero as before.
+   */
+  private fun resetPartForRestart(part: DownloadItemPart): Boolean {
+    val validator = part.resumeValidator
+    val kept = if (validator.isNullOrBlank()) 0L else StagedResume.keepForResume(File(part.destinationPath))
+    if (kept <= 0L) return resetPartForFreshDownload(part)
+    resetPartForFreshDownload(part, keepStaging = true)
+    part.resumeValidator = validator
+    part.bytesDownloaded = kept
+    part.progress = if (part.fileSize > 0L) (kept * 100L / part.fileSize).coerceAtMost(99L) else 0L
+    AbsLogger.info(tag, "Keeping $kept staged bytes of ${part.filename} to resume after a restart")
+    return true
+  }
+
   /** Resets an unmoved part when recovery crosses a service-session boundary. */
-  private fun resetPartForFreshDownload(part: DownloadItemPart): Boolean {
+  private fun resetPartForFreshDownload(part: DownloadItemPart, keepStaging: Boolean = false): Boolean {
     val stagingFile = File(part.destinationPath)
-    if (stagingFile.exists() && !stagingFile.delete()) {
+    if (!keepStaging && stagingFile.exists() && !stagingFile.delete()) {
       AbsLogger.error(tag, "Could not delete staging file ${part.filename}")
       part.failed = true
       return false
@@ -1193,6 +1259,8 @@ class DownloadItemManager(
     part.permissionLost = false
     part.storageUnavailable = false
     part.failureReason = null
+    part.resumeValidator = null
+    part.authorizationHold = false
     return true
   }
 

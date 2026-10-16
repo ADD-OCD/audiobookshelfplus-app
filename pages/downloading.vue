@@ -6,6 +6,7 @@
     <template v-for="(item, num) in downloadItems">
       <div :key="item.id" class="w-full download-entry" :data-state="stateOf(item)">
         <p class="font-semibold break-words">{{ item.itemTitle }}</p>
+        <p v-if="item.isAuto" class="text-xs text-fg-muted">{{ $strings.LabelDownloadAuto }}</p>
         <!-- State in words and an icon, never color alone -->
         <div class="flex items-center mt-1 text-sm" role="status">
           <span class="material-symbols text-lg mr-1" :class="stateIconClass(item)" aria-hidden="true">{{ stateIcon(item) }}</span>
@@ -14,6 +15,7 @@
         </div>
         <p v-if="stateOf(item) === 'folderAccess'" class="text-xs text-fg-muted mt-1">{{ $getString('MessageDownloadChooseFolder', [lostFolderName(item)]) }}</p>
         <p v-else-if="stateOf(item) === 'failed'" class="text-xs text-fg-muted mt-1">{{ $strings.MessageDownloadRetryRestarts }}</p>
+        <p v-else-if="stateOf(item) === 'held'" class="text-xs text-fg-muted mt-1">{{ $strings.MessageDownloadHeld }}</p>
 
         <div class="mt-2 pl-1">
           <div v-for="itemPart in item.downloadItemParts" :key="itemPart.id" class="flex items-start py-0.5 text-sm">
@@ -24,7 +26,7 @@
             </div>
             <div class="flex-grow min-w-0">
               <p class="break-all text-fg-muted">{{ itemPart.filename }}</p>
-              <p v-if="itemPart.failed && !itemPart.permissionLost && !itemPart.storageUnavailable && itemPart.failureReason" class="text-xs text-error mt-0.5">{{ itemPart.failureReason }}</p>
+              <p v-if="itemPart.failed && !itemPart.permissionLost && !itemPart.storageUnavailable && !itemPart.authorizationHold && itemPart.failureReason" class="text-xs text-error mt-0.5">{{ itemPart.failureReason }}</p>
             </div>
           </div>
         </div>
@@ -41,13 +43,17 @@
 
 <script>
 import { AbsDownloader, AbsFileSystem } from '@/plugins/capacitor'
-import { downloadState, downloadActions, downloadProgress, lostFolder, DownloadAction, DownloadState } from '@/utils/downloadState'
+import { downloadState, downloadActions, downloadProgress, lostFolder, isWaitingState, DownloadAction, DownloadState } from '@/utils/downloadState'
+
+// Why a download waits can change without a queue event (Wi-Fi joins, the charger is plugged in)
+const REFRESH_MS = 10000
 import { isAppStorageFolderId } from '@/utils/appStorage'
 
 export default {
   data() {
     return {
-      busyId: null
+      busyId: null,
+      refreshTimer: null
     }
   },
   computed: {
@@ -82,6 +88,18 @@ export default {
           return this.$strings.LabelDownloadFolderAccessLost
         case DownloadState.STORAGE_UNAVAILABLE:
           return this.$strings.LabelDownloadStorageUnavailable
+        case DownloadState.HELD:
+          return this.$strings.LabelDownloadHeld
+        case DownloadState.WAITING_FOR_CARD:
+          return this.$strings.LabelDownloadWaitingForCard
+        case DownloadState.WAITING_FOR_NETWORK:
+          return this.$strings.LabelDownloadWaitingForNetwork
+        case DownloadState.WAITING_FOR_WIFI:
+          return this.$strings.LabelDownloadWaitingForWifi
+        case DownloadState.WAITING_FOR_CHARGING:
+          return this.$strings.LabelDownloadWaitingForCharging
+        case DownloadState.WAITING_FOR_BACKGROUND:
+          return this.$strings.LabelDownloadWaitingForApp
         default:
           return this.$strings.LabelDownloadFinishing
       }
@@ -90,12 +108,13 @@ export default {
       const state = this.stateOf(item)
       if (state === DownloadState.FAILED || state === DownloadState.STORAGE_UNAVAILABLE) return 'error'
       if (state === DownloadState.FOLDER_ACCESS) return 'folder_off'
-      if (state === DownloadState.QUEUED || state === DownloadState.WAITING_FOR_STORAGE) return 'schedule'
+      if (state === DownloadState.HELD) return 'pause_circle'
+      if (isWaitingState(state)) return 'schedule'
       return 'downloading'
     },
     stateIconClass(item) {
       const state = this.stateOf(item)
-      return state === DownloadState.FAILED || state === DownloadState.FOLDER_ACCESS || state === DownloadState.STORAGE_UNAVAILABLE ? 'text-error' : 'text-fg-muted'
+      return state === DownloadState.FAILED || state === DownloadState.FOLDER_ACCESS || state === DownloadState.STORAGE_UNAVAILABLE || state === DownloadState.HELD ? 'text-error' : 'text-fg-muted'
     },
     actionLabel(action) {
       return {
@@ -104,6 +123,14 @@ export default {
         [DownloadAction.CHOOSE_FOLDER]: this.$strings.ButtonChooseFolder,
         [DownloadAction.CLEAR]: this.$strings.ButtonClear
       }[action]
+    },
+    async refresh() {
+      const result = await AbsDownloader.getDownloadQueue().catch(() => null)
+      if (!result || !Array.isArray(result.items)) return
+      this.$store.commit(
+        'globals/setItemDownloads',
+        result.items.map((downloadItem) => ({ ...downloadItem, itemProgress: downloadProgress(downloadItem), episodes: downloadItem.downloadItemParts.filter((dip) => dip.episode).map((dip) => dip.episode) }))
+      )
     },
     async runAction(item, action) {
       if (this.busyId) return
@@ -128,6 +155,7 @@ export default {
       if (result?.errorCode === 'folderAccess') return this.$toast.error(this.$getString('MessageDownloadChooseFolder', [this.lostFolderName(item)]))
       if (result?.errorCode === 'notFound') return this.$store.commit('globals/removeItemDownload', item.id)
       if (result?.errorCode === 'storageUnavailable') return this.$toast.error(this.$strings.LabelDownloadStorageUnavailable)
+      if (result?.errorCode === 'held') return this.$toast.error(this.$strings.MessageDownloadHeld)
       if (result?.errorCode) return this.$toast.error(this.$strings.MessageDownloadBusy)
     },
     async chooseFolder(item) {
@@ -141,6 +169,13 @@ export default {
       if (lost && folder.id !== lost.id) return this.$toast.error(this.$getString('MessageDownloadWrongFolder', [lost.name]))
       await this.retry(item)
     }
+  },
+  mounted() {
+    this.refresh()
+    this.refreshTimer = setInterval(() => this.refresh(), REFRESH_MS)
+  },
+  beforeDestroy() {
+    clearInterval(this.refreshTimer)
   }
 }
 </script>

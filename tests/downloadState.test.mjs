@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { downloadState, downloadActions, downloadProgress, lostFolder, DownloadState, DownloadAction } from '../utils/downloadState.js'
+import { downloadState, downloadActions, downloadProgress, lostFolder, isWaitingState, WAITING_LABEL_KEYS, DownloadState, DownloadAction } from '../utils/downloadState.js'
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8').then((s) => s.replace(/\r\n/g, '\n'))
 
@@ -60,6 +60,50 @@ test('audio and cover failures are handled alike, and active work wins over a fa
 test('waiting for storage is shown as such', () => {
   assert.equal(downloadState(item(part({ waitingForSpace: true }))), DownloadState.WAITING_FOR_STORAGE)
   assert.deepEqual(downloadActions(DownloadState.WAITING_FOR_STORAGE), [DownloadAction.CANCEL])
+})
+
+test('a queued download says what it waits for, and only Cancel is offered', () => {
+  const withReason = (waitingFor, ...parts) => ({ ...item(...parts), waitingFor })
+  assert.equal(downloadState(withReason('wifi', part())), DownloadState.WAITING_FOR_WIFI)
+  assert.equal(downloadState(withReason('charging', part())), DownloadState.WAITING_FOR_CHARGING)
+  assert.equal(downloadState(withReason('network', part())), DownloadState.WAITING_FOR_NETWORK)
+  assert.equal(downloadState(withReason('background', part())), DownloadState.WAITING_FOR_BACKGROUND)
+  assert.equal(downloadState(withReason(null, part())), DownloadState.QUEUED)
+  for (const state of [DownloadState.WAITING_FOR_WIFI, DownloadState.WAITING_FOR_CHARGING, DownloadState.WAITING_FOR_NETWORK, DownloadState.WAITING_FOR_BACKGROUND]) {
+    assert.deepEqual(downloadActions(state), [DownloadAction.CANCEL], state)
+    assert.ok(isWaitingState(state), state)
+  }
+  // a reason never hides a transfer in progress, a failure or a lack of space
+  assert.equal(downloadState(withReason('wifi', part({ downloadId: -1 }))), DownloadState.DOWNLOADING)
+  assert.equal(downloadState(withReason('wifi', part({ failed: true }))), DownloadState.FAILED)
+  assert.equal(downloadState(withReason('wifi', part({ waitingForSpace: true }))), DownloadState.WAITING_FOR_STORAGE)
+})
+
+test('finished files waiting for the SD card are not shown as finishing, and offer nothing that removes them', () => {
+  const waiting = { ...item(part({ completed: true, moved: true })), waitingFor: 'sdCard' }
+  assert.equal(downloadState(waiting), DownloadState.WAITING_FOR_CARD)
+  assert.deepEqual(downloadActions(DownloadState.WAITING_FOR_CARD), [])
+  assert.ok(isWaitingState(DownloadState.WAITING_FOR_CARD))
+})
+
+test('a download held for another server offers Retry and Clear, and is not a plain failure', () => {
+  const held = item(part({ failed: true, authorizationHold: true, failureReason: 'Download authorization changed: reconnect the original server before retrying' }))
+  assert.equal(downloadState(held), DownloadState.HELD)
+  assert.deepEqual(downloadActions(DownloadState.HELD), [DownloadAction.RETRY, DownloadAction.CLEAR])
+  assert.ok(!isWaitingState(DownloadState.HELD))
+})
+
+test('every waiting reason has a label', async () => {
+  const strings = JSON.parse(await read('../strings/en-us.json'))
+  for (const [reason, key] of Object.entries(WAITING_LABEL_KEYS)) assert.equal(typeof strings[key], 'string', reason)
+  for (const key of ['LabelDownloadAuto', 'LabelDownloadHeld', 'MessageDownloadHeld']) assert.equal(typeof strings[key], 'string', key)
+  const page = await read('../pages/downloading.vue')
+  assert.ok(page.includes("if (result?.errorCode === 'held') return this.$toast.error(this.$strings.MessageDownloadHeld)"))
+  assert.ok(page.includes('this.refreshTimer = setInterval(() => this.refresh(), REFRESH_MS)'))
+  assert.ok(page.includes('clearInterval(this.refreshTimer)'))
+  const row = await read('../components/tables/podcast/EpisodeRow.vue')
+  assert.ok(row.includes('<span v-if="autoDownloaded" class="text-xs text-fg-muted">{{ $strings.LabelDownloadAuto }}</span>'))
+  assert.ok(row.includes('<span v-if="downloadWaitingText" class="text-xs text-fg-muted">{{ downloadWaitingText }}</span>'))
 })
 
 test('progress counts finished files in full and partial bytes as they are', () => {

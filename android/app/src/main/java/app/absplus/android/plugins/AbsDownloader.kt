@@ -89,9 +89,13 @@ class AbsDownloader : Plugin() {
   /** The download queue (active, queued and failed items) for the Downloads screen. */
   @PluginMethod
   fun getDownloadQueue(call: PluginCall) {
-    DownloadServiceHost.snapshot(mainActivity) { items ->
+    DownloadServiceHost.statusSnapshot(mainActivity) { statuses ->
       val array = JSArray()
-      items.forEach { array.put(JSObject(jacksonMapper.writeValueAsString(it))) }
+      statuses.forEach { status ->
+        array.put(JSObject(jacksonMapper.writeValueAsString(status.item))
+                .put("waitingFor", status.waitingFor ?: JSONObject.NULL)
+                .put("isAuto", status.isAuto))
+      }
       call.resolve(JSObject().put("items", array))
     }
   }
@@ -110,6 +114,7 @@ class AbsDownloader : Plugin() {
                 DownloadServiceHost.ExistingDownloadResult.FOLDER_ACCESS -> "folderAccess"
                 DownloadServiceHost.ExistingDownloadResult.STORAGE_UNAVAILABLE -> "storageUnavailable"
                 DownloadServiceHost.ExistingDownloadResult.SERVICE_START_FAILED -> "service"
+                DownloadServiceHost.ExistingDownloadResult.HELD -> "held"
               }
       call.resolve(if (errorCode == null) JSObject() else JSObject().put("errorCode", errorCode))
     }
@@ -184,6 +189,8 @@ class AbsDownloader : Plugin() {
                 call.resolve(JSObject().put("error", "Folder access lost: re-select the download folder to retry").put("errorCode", "folderAccess"))
         DownloadServiceHost.ExistingDownloadResult.STORAGE_UNAVAILABLE ->
                 call.resolve(JSObject().put("error", LibraryItemDownloadStarter.STORAGE_UNAVAILABLE_MESSAGE).put("errorCode", "storageUnavailable"))
+        DownloadServiceHost.ExistingDownloadResult.HELD ->
+                call.resolve(JSObject().put("error", "Download authorization changed: reconnect the original server before retrying").put("errorCode", "held"))
         DownloadServiceHost.ExistingDownloadResult.NOT_FOUND -> {
           apiHandler.getLibraryItemWithProgress(libraryItemId, episodeId) { libraryItem ->
             if (libraryItem == null) {
@@ -245,6 +252,24 @@ class AbsDownloader : Plugin() {
         AbsLogger.error(tag, "getPodcastAutoDownload failed (${e.javaClass.simpleName}: ${e.message})")
         call.reject(e.message ?: "getPodcastAutoDownload failed")
       }
+    }
+  }
+
+  /** Episode ids of the podcast that auto download fetched for the current server, to mark them in the episode list. */
+  @OptIn(DelicateCoroutinesApi::class)
+  @PluginMethod
+  fun getAutoDownloadedEpisodes(call: PluginCall) {
+    val libraryItemId = call.getString("libraryItemId")
+    if (libraryItemId.isNullOrBlank()) return call.reject("libraryItemId is required")
+    val serverConfigId = DeviceManager.serverConnectionConfig?.id ?: return call.resolve(JSObject().put("episodeIds", JSArray()))
+    GlobalScope.launch(Dispatchers.IO) {
+      val ids = try {
+        AutoDownloadStore.get(serverConfigId, libraryItemId).autoDownloadedEpisodeIds.toList()
+      } catch (e: Exception) {
+        AbsLogger.error(tag, "getAutoDownloadedEpisodes failed (${e.javaClass.simpleName}: ${e.message})")
+        emptyList()
+      }
+      call.resolve(JSObject().put("episodeIds", JSArray(ids)))
     }
   }
 

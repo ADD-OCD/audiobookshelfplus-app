@@ -136,6 +136,7 @@ class MainActivity : BridgeActivity() {
     isForeground = true
     StorageMoveService.startIfNeeded(this)
     DownloadServiceHost.resumeAwaitingStorage()
+    DownloadServiceHost.releaseAutoHold(this)
   }
 
   override fun onPause() {

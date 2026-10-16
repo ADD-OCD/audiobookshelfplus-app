@@ -12,7 +12,8 @@ const WAITING_KEYS = [
 // Moves that keep the old copy until a check after the next restart, and moves that kept both copies
 const JOURNAL_KEYS = [
   ['cleanupPending', 'MessageDownloadStorageCleanupPending'],
-  ['needsAttention', 'MessageDownloadStorageNeedsAttention']
+  ['needsAttention', 'MessageDownloadStorageNeedsAttention'],
+  ['recoveryPending', 'MessageDownloadStorageRecoveryPending']
 ]
 
 function supplant(str, subs) {
@@ -48,6 +49,12 @@ export function storageStatusView(status, strings, bytesPretty) {
     }
   }
 
+  // Not running, with items still to move: a pass starts while the app is open (it stops in the background and at the
+  // Android time limit, and continues from its record)
+  if (move && !move.running && move.total > 0) {
+    lines.push(move.total === 1 ? strings.MessageDownloadStorageToMoveOne : supplant(strings.MessageDownloadStorageToMove, [move.total]))
+  }
+
   const waiting = move?.waiting || {}
   for (const [reason, key] of WAITING_KEYS) {
     const count = waiting[reason] || 0
@@ -63,6 +70,11 @@ export function storageStatusView(status, strings, bytesPretty) {
 
   if (typeof move?.lastError === 'string' && move.lastError) lines.push(supplant(strings.MessageDownloadStorageMoveFailed, [move.lastError]))
 
+  // Completed: the last pass moved something and nothing is left to move, waiting or kept for a later check
+  const moved = Number(status.lastPassMoved) || 0
+  const pending = (move?.running ? 1 : 0) + (move?.total || 0) + Object.values(waiting).reduce((a, b) => a + (b || 0), 0) + JOURNAL_KEYS.reduce((a, [field]) => a + (Number(status[field]) || 0), 0)
+  if (moved > 0 && pending === 0) lines.push(moved === 1 ? strings.MessageDownloadStorageMovedOne : supplant(strings.MessageDownloadStorageMoved, [moved]))
+
   return { lines, sdSelectable }
 }
 
@@ -72,6 +84,10 @@ export const DOWNLOAD_STORAGE_VIEW_KEYS = [
   'MessageDownloadStorageMoving',
   'MessageDownloadStorageMovingOne',
   'MessageDownloadStorageMoveFailed',
+  'MessageDownloadStorageToMove',
+  'MessageDownloadStorageToMoveOne',
+  'MessageDownloadStorageMoved',
+  'MessageDownloadStorageMovedOne',
   ...WAITING_KEYS.flatMap(([, key]) => [key, `${key}One`]),
   ...JOURNAL_KEYS.flatMap(([, key]) => [key, `${key}One`])
 ]

@@ -52,8 +52,9 @@ class AbsDatabase : Plugin() {
 
     secureStorage = SecureStorage(mainActivity)
 
-    DeviceManager.dbManager.cleanLocalMediaProgress()
+    // Items first: progress of episodes whose files were found missing now is then cleaned in the same start
     DeviceManager.dbManager.cleanLocalLibraryItems(mainActivity)
+    DeviceManager.dbManager.cleanLocalMediaProgress()
   }
 
   /**

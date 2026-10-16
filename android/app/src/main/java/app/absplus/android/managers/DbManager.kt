@@ -249,6 +249,17 @@ class DbManager {
     Paper.book("localMediaProgress").delete(localMediaProgressId)
   }
 
+  /**
+   * Removes the local progress records of a local item the user deleted (or of one of its episodes). They are this
+   * device's bookkeeping for local media: listening on a server item is kept on the server and in the saved playback
+   * sessions, which are synced separately and not touched here.
+   */
+  fun removeLocalMediaProgressFor(localLibraryItemId: String, localEpisodeId: String? = null) {
+    getAllLocalMediaProgress()
+            .filter { it.localLibraryItemId == localLibraryItemId && (localEpisodeId == null || it.localEpisodeId == localEpisodeId) }
+            .forEach { removeLocalMediaProgress(it.id) }
+  }
+
   fun removeAllLocalMediaProgress() {
     Paper.book("localMediaProgress").destroy()
   }
