@@ -31,11 +31,14 @@ object AutoDownloadPolicy {
    * Whether auto-owned transfers may run now: never offline, never on a metered network while unmetered-only applies,
    * never off the charger while charging-only is set. Manual downloads are not subject to this.
    */
-  fun transfersAllowed(settings: DeviceSettings, conditions: Conditions): Boolean {
-    if (!conditions.connected) return false
-    if (requiresUnmeteredNetwork(settings) && !conditions.unmetered) return false
-    if (settings.autoDownloadChargingOnly && !conditions.charging) return false
-    return true
+  fun transfersAllowed(settings: DeviceSettings, conditions: Conditions): Boolean = blockedReason(settings, conditions) == null
+
+  /** The first condition that stops auto-owned transfers now: "network" (offline), "wifi" (metered network), "charging"; null when none. */
+  fun blockedReason(settings: DeviceSettings, conditions: Conditions): String? {
+    if (!conditions.connected) return "network"
+    if (requiresUnmeteredNetwork(settings) && !conditions.unmetered) return "wifi"
+    if (settings.autoDownloadChargingOnly && !conditions.charging) return "charging"
+    return null
   }
 
   fun isEnabledFor(entry: PodcastAutoDownloadEntry, settings: DeviceSettings): Boolean =

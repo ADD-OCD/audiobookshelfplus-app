@@ -14,6 +14,7 @@ import com.anggrayudi.storage.file.*
 import app.absplus.android.MainActivity
 import app.absplus.android.data.LocalFolder
 import app.absplus.android.data.LocalLibraryItem
+import app.absplus.android.data.Podcast
 import app.absplus.android.device.AndroidVolumeProbe
 import app.absplus.android.device.AppStorage
 import app.absplus.android.device.AndroidStorageIo
@@ -389,7 +390,10 @@ class AbsFileSystem : Plugin() {
                       } finally {
                         LocalItemLocks.bump(localLibraryItemId)
                       }
-              if (deleted) DeviceManager.dbManager.removeLocalLibraryItem(localLibraryItemId)
+              if (deleted) {
+                DeviceManager.dbManager.removeLocalLibraryItem(localLibraryItemId)
+                DeviceManager.dbManager.removeLocalMediaProgressFor(localLibraryItemId)
+              }
               deleted
             }
     if (storageUnavailable) call.resolve(JSObject("{\"success\":false,\"reason\":\"storageUnavailable\"}"))
@@ -471,7 +475,13 @@ class AbsFileSystem : Plugin() {
         Log.e(tag, "deleteTrackFromItem: LLI does not exist $localLibraryItemId")
         call.resolve(JSObject("{\"success\":false}"))
       }
-      result is ItemUpdate.Save -> call.resolve(JSObject(jacksonMapper.writeValueAsString(result.item)))
+      result is ItemUpdate.Save -> {
+        // The episode's record is gone with its file: so is its local progress (not the server's or the saved sessions')
+        val episodeGone = localEpisodeId != null &&
+                (result.item.media as? Podcast)?.episodes?.none { it.id == localEpisodeId } == true
+        if (episodeGone) DeviceManager.dbManager.removeLocalMediaProgressFor(localLibraryItemId, localEpisodeId)
+        call.resolve(JSObject(jacksonMapper.writeValueAsString(result.item)))
+      }
       outcome == LocalTrackDeletion.Outcome.REFUSED_SHARED -> {
         Log.e(tag, "deleteTrackFromItem: file is shared with another episode; nothing deleted")
         call.resolve(JSObject("{\"success\":false,\"reason\":\"shared\"}"))

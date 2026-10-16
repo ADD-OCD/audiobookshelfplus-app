@@ -28,6 +28,10 @@ class AbsDownloaderWeb extends WebPlugin {
   async setPodcastAutoDownload() {
     return {}
   }
+
+  async getAutoDownloadedEpisodes() {
+    return { episodeIds: [] }
+  }
 }
 
 const AbsDownloader = registerPlugin('AbsDownloader', {

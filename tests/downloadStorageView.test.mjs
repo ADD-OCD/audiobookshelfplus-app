@@ -46,7 +46,21 @@ test('running move shows the current item and bytes', () => {
   assert.deepEqual(view({}, { running: true, done: 2, total: 7, bytesDone: 1.2e9, bytesTotal: 2.9e9 }).lines, ['Moving 3 of 7 items · 1.2 GB / 2.9 GB'])
   assert.deepEqual(view({}, { running: true, done: 7, total: 7, bytesDone: 2.9e9, bytesTotal: 2.9e9 }).lines, ['Moving 7 of 7 items · 2.9 GB / 2.9 GB'], 'never past the total')
   assert.deepEqual(view({}, { running: true, done: 0, total: 1, bytesDone: 0.3e9, bytesTotal: 0.5e9 }).lines, ['Moving 1 of 1 item · 0.3 GB / 0.5 GB'])
-  assert.deepEqual(view({}, { running: false, done: 2, total: 7, bytesDone: 1.2e9, bytesTotal: 2.9e9 }).lines, [])
+  // Not running: no progress line; what is left is said once (a pass continues while the app is open)
+  assert.deepEqual(view({}, { running: false, done: 2, total: 7, bytesDone: 1.2e9, bytesTotal: 2.9e9 }).lines, ['7 items still to move: moving continues while the app is open'])
+  assert.deepEqual(view({}, { running: false, total: 1 }).lines, ['1 item still to move: moving continues while the app is open'])
+})
+
+test('interrupted moves, kept copies and a completed move are reported', () => {
+  assert.deepEqual(view({ recoveryPending: 1 }).lines, ['1 interrupted move is finished or undone while the app is open'])
+  assert.deepEqual(view({ recoveryPending: 2 }).lines, ['2 interrupted moves are finished or undone while the app is open'])
+  assert.deepEqual(view({ needsAttention: 1 }).lines, ['1 moved item kept both copies after a failed check'])
+  assert.deepEqual(view({ lastPassMoved: 3 }).lines, ['Moved 3 items'])
+  assert.deepEqual(view({ lastPassMoved: 1 }).lines, ['Moved 1 item'])
+  // never "moved" while anything is still running, left, waiting or kept for a later check
+  assert.deepEqual(view({ lastPassMoved: 3, cleanupPending: 3 }).lines, ['Old copies of 3 moved items are removed after the device restarts'])
+  assert.deepEqual(view({ lastPassMoved: 3 }, { waiting: { PLAYING: 1 } }).lines, ['1 item waiting: currently playing'])
+  assert.deepEqual(view({ lastPassMoved: 3 }, { total: 2 }).lines, ['2 items still to move: moving continues while the app is open'])
 })
 
 test('waiting reasons use singular and plural lines', () => {
@@ -88,6 +102,6 @@ test('nothing to say without an SD card, move or status', () => {
 })
 
 test('every string the view uses exists', () => {
-  assert.equal(DOWNLOAD_STORAGE_VIEW_KEYS.length, 21)
+  assert.equal(DOWNLOAD_STORAGE_VIEW_KEYS.length, 27)
   for (const key of DOWNLOAD_STORAGE_VIEW_KEYS) assert.equal(typeof strings[key], 'string', key)
 })

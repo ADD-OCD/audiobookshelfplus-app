@@ -278,6 +278,10 @@ class StorageMoveService : Service() {
       val journal = PaperMoveJournal.all()
       result.put("cleanupPending", journal.count { it.phase == MovePhase.COMMITTED || it.phase == MovePhase.RETIRING })
       result.put("needsAttention", journal.count { it.phase == MovePhase.NEEDS_ATTENTION })
+      // Moves interrupted before their record pointed at the copy: the next pass finishes or undoes them (no copy is lost)
+      result.put("recoveryPending", if (isRunning) 0 else journal.count { it.phase == MovePhase.COPYING || it.phase == MovePhase.VERIFIED || it.phase == MovePhase.INSTALLED })
+      // How many items the last finished pass moved (for "moved N downloads"); 0 while a pass runs
+      result.put("lastPassMoved", if (isRunning) 0 else lastStatus?.takeIf { it.lastError == null }?.done ?: 0)
       return result
     }
 
