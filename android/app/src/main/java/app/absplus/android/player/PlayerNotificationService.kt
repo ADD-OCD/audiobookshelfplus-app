@@ -1793,8 +1793,8 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
 
     result.detach()
 
-    // Prevent crashing if app is restarted while browsing
-    if ((parentMediaId != DOWNLOADS_ROOT && parentMediaId != AUTO_MEDIA_ROOT) && !firstLoadDone) {
+    // Prevent crashing if app is restarted while browsing (nodes that need no server data are always served)
+    if (!servableBeforeFirstLoad(parentMediaId) && !firstLoadDone) {
       result.sendResult(null)
       return
     }

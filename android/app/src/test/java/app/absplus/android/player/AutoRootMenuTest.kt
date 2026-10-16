@@ -54,6 +54,20 @@ class AutoRootMenuTest {
     assertEquals(service.provisionalAutoRootItems().map { it.mediaId }, offline)
   }
 
+  @Test fun firstLoadGuardServesOnlyNodesThatNeedNoServer() {
+    // Served before the first load: the root, Downloads and downloaded items (their children come from the device)
+    listOf(AUTO_BROWSE_ROOT, DOWNLOADS_ROOT, "local_c024a975-273a-4d8c-ba30-32ce4bf0e8a2", "local_ep_d4ae900d")
+      .forEach { assertTrue(it, servableBeforeFirstLoad(it)) }
+    // Still refused until the first load: everything that needs server data
+    listOf(CONTINUE_ROOT, RECENTLY_ROOT, LIBRARIES_ROOT, "__RECENTLY__lib1", "__LIBRARY__lib1__SERIES_LIST",
+      "c024a975-273a-4d8c-ba30-32ce4bf0e8a2", "li_legacyid", "")
+      .forEach { assertFalse(it, servableBeforeFirstLoad(it)) }
+  }
+
+  @Test fun everyProvisionalRootEntryPassesTheFirstLoadGuard() {
+    service.provisionalAutoRootItems().forEach { assertTrue(it.mediaId!!, servableBeforeFirstLoad(it.mediaId!!)) }
+  }
+
   @Test fun provisionalItemsAreFreshListsForEachRequest() {
     val first = service.provisionalAutoRootItems()
     first.add(MediaBrowserCompat.MediaItem(first[0].description, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE))

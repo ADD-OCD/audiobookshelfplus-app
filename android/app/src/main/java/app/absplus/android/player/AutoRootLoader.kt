@@ -3,6 +3,15 @@ package app.absplus.android.player
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
+ * Browse nodes that need no server data, served even before the first server load has finished: the root, Downloads
+ * and the downloaded (local) items under it, such as a downloaded podcast's episodes. Their children come from the
+ * device database only (MediaManager.loadLibraryItem / loadPodcastEpisodeMediaBrowserItems for "local" ids).
+ * Every other node still waits for the first load.
+ */
+internal fun servableBeforeFirstLoad(mediaId: String): Boolean =
+  mediaId == AUTO_BROWSE_ROOT || mediaId == DOWNLOADS_ROOT || mediaId.startsWith("local")
+
+/**
  * The Android Auto root's server load, run in the background so the root never waits for it (Discussion #30).
  *
  * The root is answered at once with what needs no server (Downloads). [reload] then runs [load] (server checks,
