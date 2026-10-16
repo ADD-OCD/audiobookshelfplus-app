@@ -88,6 +88,16 @@
       <p class="pl-4">Ask before streaming incomplete series/collections/playlists</p>
     </div>
 
+    <div v-if="isAndroid" class="py-3">
+      <label for="external-media-navigation" class="block mb-2">{{ $strings.LabelExternalMediaControls }}</label>
+      <select id="external-media-navigation" v-model="settings.externalMediaNavigation" class="w-full bg-bg text-fg border border-border rounded px-3 py-2" @change="saveSettings">
+        <option value="time">{{ $strings.LabelExternalMediaTime }}</option>
+        <option value="chapters">{{ $strings.LabelExternalMediaChapters }}</option>
+        <option value="files">{{ $strings.LabelExternalMediaFiles }}</option>
+      </select>
+      <p class="text-sm text-fg-muted mt-2">{{ $strings.MessageExternalMediaControls }}</p>
+    </div>
+
     <!-- Sleep timer settings -->
     <template v-if="!isiOS">
       <p class="uppercase text-xs font-semibold text-fg-muted mb-2 mt-10">{{ $strings.HeaderSleepTimerSettings }}</p>
@@ -311,6 +321,7 @@ export default {
         enableAltView: true,
         allowSeekingOnMediaControls: false,
         jumpForwardTime: 10,
+        externalMediaNavigation: 'time',
         jumpBackwardsTime: 10,
         enableMp3IndexSeeking: false,
         disableShakeToResetSleepTimer: false,
@@ -887,6 +898,7 @@ export default {
       this.settings.allowSeekingOnMediaControls = !!deviceSettings.allowSeekingOnMediaControls
       this.settings.askBeforeStreamingIncomplete = !!deviceSettings.askBeforeStreamingIncomplete
       this.settings.jumpForwardTime = deviceSettings.jumpForwardTime || 10
+      this.settings.externalMediaNavigation = ['chapters', 'files'].includes(deviceSettings.externalMediaNavigation) ? deviceSettings.externalMediaNavigation : 'time'
       this.settings.jumpBackwardsTime = deviceSettings.jumpBackwardsTime || 10
       this.settings.enableMp3IndexSeeking = !!deviceSettings.enableMp3IndexSeeking
 

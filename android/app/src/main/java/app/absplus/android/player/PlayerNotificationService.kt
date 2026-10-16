@@ -486,7 +486,9 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
               override fun getSupportedQueueNavigatorActions(player: Player): Long {
                 return PlaybackStateCompat.ACTION_PLAY_PAUSE or
                         PlaybackStateCompat.ACTION_PLAY or
-                        PlaybackStateCompat.ACTION_PAUSE
+                        PlaybackStateCompat.ACTION_PAUSE or
+                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
               }
 
               override fun getMediaDescription(
@@ -601,7 +603,7 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
     registerReceiver(audioNoisyReceiver, noisyFilter)
 
     // attach player to playerNotificationManager
-    playerNotificationManager.setPlayer(mPlayer)
+    playerNotificationManager.setPlayer(notificationControls(mPlayer))
 
     mediaSessionConnector.setPlayer(mPlayer)
   }
@@ -671,7 +673,7 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
     if (playbackSession.mediaPlayer == PLAYER_CAST) {
       // If cast-player is the first player to be used
       mediaSessionConnector.setPlayer(castPlayer)
-      playerNotificationManager.setPlayer(castPlayer)
+      playerNotificationManager.setPlayer(castPlayer?.let(::notificationControls))
     }
 
     currentPlaybackSession = playbackSession
@@ -796,14 +798,13 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   }
 
   private fun setMediaSessionConnectorCustomActions(playbackSession: PlaybackSession) {
-    val mediaItems = playbackSession.getMediaItems(ctx)
     val customActionProviders =
             mutableListOf(
                     JumpBackwardCustomActionProvider(),
                     JumpForwardCustomActionProvider(),
                     ChangePlaybackSpeedCustomActionProvider() // Will be pushed to far left
             )
-    if (playbackSession.mediaPlayer != PLAYER_CAST && mediaItems.size > 1) {
+    if (playbackSession.mediaPlayer != PLAYER_CAST) {
       customActionProviders.addAll(
               listOf(
                       SkipBackwardCustomActionProvider(),
@@ -1083,13 +1084,13 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
             if (useCastPlayer) {
               DLog.d(tag, "switchToPlayer: Using Cast Player " + castPlayer?.deviceInfo)
               mediaSessionConnector.setPlayer(castPlayer)
-              playerNotificationManager.setPlayer(castPlayer)
+              playerNotificationManager.setPlayer(castPlayer?.let(::notificationControls))
               setMediaSessionToCastVolume()
               castPlayer as CastPlayer
             } else {
               DLog.d(tag, "switchToPlayer: Using ExoPlayer")
               mediaSessionConnector.setPlayer(mPlayer)
-              playerNotificationManager.setPlayer(mPlayer)
+              playerNotificationManager.setPlayer(notificationControls(mPlayer))
               setMediaSessionToLocalVolume()
               mPlayer
             }
@@ -1497,19 +1498,39 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   }
 
   fun skipToPrevious() {
-    currentPlayer.seekToPrevious()
+    navigateExternal(false)
   }
 
   fun skipToNext() {
-    currentPlayer.seekToNext()
+    navigateExternal(true)
+  }
+
+  private fun navigateExternal(forward: Boolean, mode: String? = deviceSettings.externalMediaNavigation) {
+    val session = currentPlaybackSession ?: return
+    if (!this::currentPlayer.isInitialized || currentPlayer.mediaItemCount == 0) return
+    val target = ExternalNavigation.target(mode, forward, session, getCurrentTime(),
+      currentPlayer.currentMediaItemIndex, currentPlayer.mediaItemCount,
+      deviceSettings.jumpForwardTimeMs, deviceSettings.jumpBackwardsTimeMs) ?: return
+    DLog.d(tag, "External navigation mode=${ExternalNavigation.normalize(mode)} forward=$forward target=$target")
+    // Use the established absolute-time seek, including its multi-file mapping and progress callbacks.
+    // Never use seekToNext(): at the end it can leave the current book/episode.
+    seekPlayer(target)
   }
 
   fun jumpForward() {
-    seekForward(deviceSettings.jumpForwardTimeMs)
+    navigateExternal(true, "time")
   }
 
   fun jumpBackward() {
-    seekBackward(deviceSettings.jumpBackwardsTimeMs)
+    navigateExternal(false, "time")
+  }
+
+  /** Notification FF/RW must use current settings, rather than the increments captured at player creation. */
+  internal fun notificationControls(player: Player): Player = object : ForwardingPlayer(player) {
+    override fun seekForward() = jumpForward()
+    override fun seekBack() = jumpBackward()
+    override fun getSeekForwardIncrement(): Long = deviceSettings.jumpForwardTimeMs
+    override fun getSeekBackIncrement(): Long = deviceSettings.jumpBackwardsTimeMs
   }
 
   fun seekForward(amount: Long) {
