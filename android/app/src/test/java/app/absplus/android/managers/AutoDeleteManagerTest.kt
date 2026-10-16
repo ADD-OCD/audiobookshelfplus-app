@@ -208,6 +208,74 @@ class AutoDeleteManagerTest {
     assertNull("the confirmation goes with the book", db.getAutoDeleteConfirmed("b4"))
   }
 
+  // --- R32-H01: a confirmation recorded for one account never authorizes a delete for another ---
+
+  /** Alice ("u") finishes b-id; an online pass confirms it before the delay; then the book becomes due. */
+  private fun confirmedForAlice(id: String): File {
+    val dir = book(id)
+    settings()
+    localProgress(id, true, System.currentTimeMillis())
+    assertEquals(0, AutoDeleteManager.runCleanup(ctx, user(serverProgress(id, true, System.currentTimeMillis()))))
+    assertNotNull("a real confirmation exists", db.getAutoDeleteConfirmed(id))
+    localProgress(id, true, longAgo)
+    db.saveAutoDeleteConfirmed(id, AutoDeletePolicy.Confirmation(AutoDeletePolicy.Identity("cfg", "u", "srv-$id"), longAgo, true))
+    return dir
+  }
+
+  private val bob = ServerConnectionConfig("cfgB", 1, "srv", "https://s", null, "bob", "bob", "token", null)
+
+  @Test
+  fun `an account switch on the same server keeps a book confirmed for the previous account`() {
+    val dir = confirmedForAlice("h1a")
+    DeviceManager.deviceData.serverConnectionConfigs.add(bob)
+    DeviceManager.serverConnectionConfig = bob
+
+    assertEquals(0, AutoDeleteManager.runCleanup(ctx, null))
+    assertTrue(dir.exists())
+    assertNotNull(db.getLocalLibraryItem("h1a"))
+    assertNotNull(db.getLocalMediaProgress("h1a"))
+  }
+
+  @Test
+  fun `a removed server connection keeps its downloads while another connection is active`() {
+    val dir = confirmedForAlice("h1b")
+    DeviceManager.deviceData.serverConnectionConfigs.removeIf { it.id == "cfg" }
+    DeviceManager.deviceData.serverConnectionConfigs.add(bob)
+    DeviceManager.serverConnectionConfig = bob
+
+    assertEquals(0, AutoDeleteManager.runCleanup(ctx, null))
+    assertTrue(dir.exists())
+    assertNotNull(db.getLocalMediaProgress("h1b"))
+  }
+
+  @Test
+  fun `a removed server connection keeps its downloads with no connection active`() {
+    val dir = confirmedForAlice("h1c")
+    DeviceManager.deviceData.serverConnectionConfigs.removeIf { it.id == "cfg" }
+    DeviceManager.serverConnectionConfig = null
+
+    assertEquals(0, AutoDeleteManager.runCleanup(ctx, null))
+    assertTrue(dir.exists())
+  }
+
+  @Test
+  fun `the owner's own confirmation still works offline`() {
+    val dir = confirmedForAlice("h1d")
+    DeviceManager.serverConnectionConfig = null // offline, nobody else active
+
+    assertEquals(1, AutoDeleteManager.runCleanup(ctx, null))
+    assertFalse(dir.exists())
+  }
+
+  @Test
+  fun `inconsistent owners on the item and its progress keep the book`() {
+    val dir = confirmedForAlice("h1e")
+    localProgress("h1e", true, longAgo, owner = "bob")
+
+    assertEquals(0, AutoDeleteManager.runCleanup(ctx, null))
+    assertTrue(dir.exists())
+  }
+
   @Test
   fun `another server is treated as offline`() {
     val dir = book("b5")
