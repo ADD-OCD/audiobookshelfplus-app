@@ -119,8 +119,7 @@ This fork: [github.com/ADD-OCD/audiobookshelfplus-app](https://github.com/ADD-OC
 
 [Official project repo: github.com/advplyr/audiobookshelf](https://github.com/advplyr/audiobookshelf) or the project site [audiobookshelf.org](https://audiobookshelf.org)
 
-Join the official community on [discord](https://discord.gg/pJsjuNCKRq) — this fork is not
-supported there; use this repo's [Discussions](https://github.com/ADD-OCD/audiobookshelfplus-app/discussions)
+For Audiobookshelf+ questions and support, use this repository's [Discussions](https://github.com/ADD-OCD/audiobookshelfplus-app/discussions).
 instead for fork-specific problems.
 
 **Requires an Audiobookshelf server to connect with**
