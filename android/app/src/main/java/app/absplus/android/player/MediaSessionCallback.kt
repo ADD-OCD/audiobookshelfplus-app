@@ -9,6 +9,7 @@ import android.util.Log
 import android.view.KeyEvent
 import app.absplus.android.data.LibraryItemWrapper
 import app.absplus.android.data.PodcastEpisode
+import app.absplus.android.device.DeviceManager
 import java.util.*
 import kotlin.concurrent.schedule
 
@@ -175,10 +176,11 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
       DLog.d(tag, "handleCallMediaButton keyEvent = $keyEvent | action ${keyEvent?.action}")
 
       if (keyEvent != null && navigationKeys.isNavigation(keyEvent.keyCode)) {
-        if (navigationKeys.shouldAct(keyEvent)) {
+        if (navigationKeys.shouldAct(keyEvent, DeviceManager.deviceData.deviceSettings?.externalMediaMultiPressEnabled == true,
+            playerNotificationService.currentPlaybackSession)) {
           when (keyEvent.keyCode) {
-            KeyEvent.KEYCODE_MEDIA_NEXT -> onSkipToNext()
-            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> onSkipToPrevious()
+            KeyEvent.KEYCODE_MEDIA_NEXT -> playerNotificationService.externalNavigationPress(true, keyEvent.downTime > 0L && keyEvent.eventTime > 0L)
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> playerNotificationService.externalNavigationPress(false, keyEvent.downTime > 0L && keyEvent.eventTime > 0L)
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> onFastForward()
             KeyEvent.KEYCODE_MEDIA_REWIND -> onRewind()
           }

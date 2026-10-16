@@ -96,6 +96,19 @@
         <option value="files">{{ $strings.LabelExternalMediaFiles }}</option>
       </select>
       <p class="text-sm text-fg-muted mt-2">{{ $strings.MessageExternalMediaControls }}</p>
+      <label class="flex items-center gap-3 mt-4 py-2" for="external-media-multipress">
+        <input id="external-media-multipress" v-model="settings.externalMediaMultiPressEnabled" type="checkbox" class="w-5 h-5" @change="saveSettings" />
+        <span>{{ $strings.LabelExternalMediaMultiPress }}</span>
+      </label>
+      <template v-if="settings.externalMediaMultiPressEnabled">
+        <p class="text-sm text-fg-muted mb-3">{{ $strings.MessageExternalMediaMultiPress }}</p>
+        <div v-for="binding in externalMediaPressBindings" :key="binding.key" class="py-2">
+          <label :for="binding.key" class="block mb-1">{{ binding.label }}</label>
+          <select :id="binding.key" v-model="settings[binding.key]" class="w-full bg-bg text-fg border border-border rounded px-3 py-2" @change="saveSettings">
+            <option v-for="action in externalMediaActionOptions" :key="action.value" :value="action.value">{{ action.label }}</option>
+          </select>
+        </div>
+      </template>
     </div>
 
     <!-- Sleep timer settings -->
@@ -322,6 +335,13 @@ export default {
         allowSeekingOnMediaControls: false,
         jumpForwardTime: 10,
         externalMediaNavigation: 'time',
+        externalMediaMultiPressEnabled: false,
+        externalMediaForwardSingle: 'skip_forward',
+        externalMediaForwardDouble: 'next_chapter',
+        externalMediaForwardTriple: 'next_file',
+        externalMediaBackwardSingle: 'skip_backward',
+        externalMediaBackwardDouble: 'previous_chapter',
+        externalMediaBackwardTriple: 'previous_file',
         jumpBackwardsTime: 10,
         enableMp3IndexSeeking: false,
         disableShakeToResetSleepTimer: false,
@@ -467,6 +487,28 @@ export default {
     }
   },
   computed: {
+    externalMediaPressBindings() {
+      return [
+        { key: 'externalMediaForwardSingle', label: this.$strings.LabelExternalMediaForwardSingle },
+        { key: 'externalMediaForwardDouble', label: this.$strings.LabelExternalMediaForwardDouble },
+        { key: 'externalMediaForwardTriple', label: this.$strings.LabelExternalMediaForwardTriple },
+        { key: 'externalMediaBackwardSingle', label: this.$strings.LabelExternalMediaBackwardSingle },
+        { key: 'externalMediaBackwardDouble', label: this.$strings.LabelExternalMediaBackwardDouble },
+        { key: 'externalMediaBackwardTriple', label: this.$strings.LabelExternalMediaBackwardTriple }
+      ]
+    },
+    externalMediaActionOptions() {
+      return [
+        { value: 'skip_forward', label: this.$strings.LabelExternalMediaActionSkipForward },
+        { value: 'skip_backward', label: this.$strings.LabelExternalMediaActionSkipBackward },
+        { value: 'next_chapter', label: this.$strings.LabelExternalMediaActionNextChapter },
+        { value: 'previous_chapter', label: this.$strings.LabelExternalMediaActionPreviousChapter },
+        { value: 'next_file', label: this.$strings.LabelExternalMediaActionNextFile },
+        { value: 'previous_file', label: this.$strings.LabelExternalMediaActionPreviousFile },
+        { value: 'play_pause', label: this.$strings.LabelExternalMediaActionPlayPause },
+        { value: 'none', label: this.$strings.LabelExternalMediaActionNone }
+      ]
+    },
     podcastEpisodesOrderBy: {
       get() {
         return this.$store.getters['user/getUserSetting']('podcastEpisodesOrderBy') || 'publishedAt'
@@ -899,6 +941,16 @@ export default {
       this.settings.askBeforeStreamingIncomplete = !!deviceSettings.askBeforeStreamingIncomplete
       this.settings.jumpForwardTime = deviceSettings.jumpForwardTime || 10
       this.settings.externalMediaNavigation = ['chapters', 'files'].includes(deviceSettings.externalMediaNavigation) ? deviceSettings.externalMediaNavigation : 'time'
+      this.settings.externalMediaMultiPressEnabled = !!deviceSettings.externalMediaMultiPressEnabled
+      const defaults = {
+        externalMediaForwardSingle: 'skip_forward', externalMediaForwardDouble: 'next_chapter', externalMediaForwardTriple: 'next_file',
+        externalMediaBackwardSingle: 'skip_backward', externalMediaBackwardDouble: 'previous_chapter', externalMediaBackwardTriple: 'previous_file'
+      }
+      const actions = ['skip_forward', 'skip_backward', 'next_chapter', 'previous_chapter', 'next_file', 'previous_file', 'play_pause', 'none']
+      for (const key of Object.keys(defaults)) {
+        const saved = deviceSettings[key]
+        this.settings[key] = saved == null ? defaults[key] : actions.includes(saved) ? saved : 'none'
+      }
       this.settings.jumpBackwardsTime = deviceSettings.jumpBackwardsTime || 10
       this.settings.enableMp3IndexSeeking = !!deviceSettings.enableMp3IndexSeeking
 

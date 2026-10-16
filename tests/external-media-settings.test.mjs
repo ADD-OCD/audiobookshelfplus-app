@@ -56,3 +56,51 @@ test('saving the selector uses the existing database bridge and preserves unrela
   assert.equal(saved[0].jumpForwardTime, 30)
   assert.equal(page.deviceData.deviceSettings.externalMediaNavigation, 'files')
 })
+
+test('advanced controls default off without changing the retained basic mode or skip intervals', () => {
+  const page = { deviceData: { deviceSettings: { externalMediaNavigation: 'chapters', jumpForwardTime: 30, jumpBackwardsTime: 15 } }, settings: {} }
+  context.page.methods.setDeviceSettings.call(page)
+  assert.equal(page.settings.externalMediaMultiPressEnabled, false)
+  assert.equal(page.settings.externalMediaNavigation, 'chapters')
+  assert.equal(page.settings.jumpForwardTime, 30)
+  assert.equal(page.settings.jumpBackwardsTime, 15)
+  assert.deepEqual([
+    page.settings.externalMediaForwardSingle, page.settings.externalMediaForwardDouble, page.settings.externalMediaForwardTriple,
+    page.settings.externalMediaBackwardSingle, page.settings.externalMediaBackwardDouble, page.settings.externalMediaBackwardTriple
+  ], ['skip_forward', 'next_chapter', 'next_file', 'skip_backward', 'previous_chapter', 'previous_file'])
+})
+
+test('all six mappings independently round-trip through Settings save and the existing bridge', async () => {
+  const keys = ['externalMediaForwardSingle', 'externalMediaForwardDouble', 'externalMediaForwardTriple', 'externalMediaBackwardSingle', 'externalMediaBackwardDouble', 'externalMediaBackwardTriple']
+  const values = ['none', 'play_pause', 'previous_file', 'next_file', 'skip_forward', 'next_chapter']
+  let persisted
+  const settings = { externalMediaMultiPressEnabled: true, externalMediaNavigation: 'files', jumpForwardTime: 30, jumpBackwardsTime: 15, ...Object.fromEntries(keys.map((key, i) => [key, values[i]])) }
+  const page = { settings, $hapticsImpact: async () => {}, $db: { updateDeviceSettings: async (payload) => { persisted = structuredClone(payload); return { deviceSettings: persisted } } }, $store: { commit() {} }, $setLanguageCode() {} }
+  page.setDeviceSettings = () => context.page.methods.setDeviceSettings.call(page)
+  await context.page.methods.saveSettings.call(page)
+  assert.equal(persisted.externalMediaMultiPressEnabled, true)
+  assert.deepEqual(keys.map((key) => page.settings[key]), values)
+  assert.equal(page.settings.externalMediaNavigation, 'files')
+})
+
+test('unknown action strings fail to No action; missing legacy fields use suggested defaults', () => {
+  const page = { deviceData: { deviceSettings: { externalMediaForwardSingle: 'bad', externalMediaBackwardTriple: null } }, settings: {} }
+  context.page.methods.setDeviceSettings.call(page)
+  assert.equal(page.settings.externalMediaForwardSingle, 'none')
+  assert.equal(page.settings.externalMediaBackwardTriple, 'previous_file')
+})
+
+test('each assignment has a label and all eight actions are translated with platform limitations explained', async () => {
+  const strings = JSON.parse(await readFile(new URL('../strings/en-us.json', import.meta.url), 'utf8'))
+  const page = { $strings: strings }
+  const bindings = context.page.computed.externalMediaPressBindings.call(page)
+  const options = context.page.computed.externalMediaActionOptions.call(page)
+  assert.equal(new Set(bindings.map((b) => b.key)).size, 6)
+  for (const item of [...bindings, ...options]) assert.equal(typeof item.label, 'string')
+  assert.deepEqual(Array.from(options, (o) => o.value), ['skip_forward', 'skip_backward', 'next_chapter', 'previous_chapter', 'next_file', 'previous_file', 'play_pause', 'none'])
+  assert.match(template.content, /id="external-media-multipress"[^>]*type="checkbox"/)
+  assert.match(template.content, /v-model="settings\[binding.key\]"/)
+  assert.match(strings.MessageExternalMediaMultiPress, /350 ms/)
+  assert.match(strings.MessageExternalMediaMultiPress, /processed command/)
+  assert.match(strings.MessageExternalMediaMultiPress, /single assignment immediately/)
+})

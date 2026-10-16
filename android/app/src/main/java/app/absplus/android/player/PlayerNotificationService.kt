@@ -138,6 +138,12 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   private var channelName = "Audiobookshelf+ Playback"
 
   var currentPlaybackSession: PlaybackSession? = null
+    set(value) {
+      if (field !== value) cancelExternalPresses()
+      field = value
+    }
+  private var externalMultiPress: ExternalMultiPress? = null
+  internal var externalPressScheduler: ExternalPressScheduler = MainExternalPressScheduler()
   private var initialPlaybackRate: Float? = null
 
   private val metadataScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -322,6 +328,7 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
 
   // detach player
   override fun onDestroy() {
+    cancelExternalPresses()
     try {
       val connectivityManager =
               getSystemService(ConnectivityManager::class.java) as ConnectivityManager
@@ -616,6 +623,7 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
           playWhenReady: Boolean,
           playbackRate: Float?
   ) {
+    cancelExternalPresses()
     mediaSessionConnector.setCustomErrorMessage(null)
     // Native playback entry points (for example Android Auto) can bypass the JS queue setup.
     val queuedItem = playlistQueue.getOrNull(playlistQueueIndex)
@@ -816,6 +824,8 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   }
 
   fun setMediaSessionConnectorPlaybackActions() {
+    // Also called by the settings bridge. Never apply a newly saved mapping to an old gesture.
+    cancelExternalPresses()
     var playbackActions =
             PlaybackStateCompat.ACTION_PLAY_PAUSE or
                     PlaybackStateCompat.ACTION_PLAY or
@@ -1498,19 +1508,56 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   }
 
   fun skipToPrevious() {
-    navigateExternal(false)
+    externalNavigationPress(false, false)
   }
 
   fun skipToNext() {
-    navigateExternal(true)
+    externalNavigationPress(true, false)
   }
 
-  private fun navigateExternal(forward: Boolean, mode: String? = deviceSettings.externalMediaNavigation) {
+  internal fun cancelExternalPresses() { externalMultiPress?.cancel() }
+
+  private fun externalPressContext(): ExternalPressContext? {
+    val session = currentPlaybackSession ?: return null
+    if (isServiceDestroyed || isRestoringPlayback || !this::currentPlayer.isInitialized || currentPlayer.mediaItemCount == 0) return null
+    return ExternalPressContext(session, ExternalPressBindings.from(deviceSettings))
+  }
+
+  internal fun externalNavigationPress(forward: Boolean, identifiedKey: Boolean) {
+    DLog.d(tag, "External navigation input forward=$forward identifiedKey=$identifiedKey advanced=${deviceSettings.externalMediaMultiPressEnabled}")
+    if (!deviceSettings.externalMediaMultiPressEnabled) {
+      cancelExternalPresses()
+      navigateExternal(forward)
+      return
+    }
+    val recognizer = externalMultiPress ?: ExternalMultiPress(externalPressScheduler,
+      ::externalPressContext, ::executeExternalAction).also { externalMultiPress = it }
+    recognizer.press(forward, identifiedKey)
+  }
+
+  private fun executeExternalAction(action: String) {
+    if (externalPressContext() == null) return
+    DLog.d(tag, "External gesture action=$action")
+    when (action) {
+      "skip_forward" -> jumpForward()
+      "skip_backward" -> jumpBackward()
+      "next_chapter" -> navigateExternal(true, "chapters", false)
+      "previous_chapter" -> navigateExternal(false, "chapters", false)
+      "next_file" -> navigateExternal(true, "files", false)
+      "previous_file" -> navigateExternal(false, "files", false)
+      "play_pause" -> playPause()
+      // Includes invalid or unrecognized assignments: never guess a destructive navigation action.
+      else -> Unit
+    }
+  }
+
+  private fun navigateExternal(forward: Boolean, mode: String? = deviceSettings.externalMediaNavigation,
+                               allowTimeFallback: Boolean = true) {
     val session = currentPlaybackSession ?: return
     if (!this::currentPlayer.isInitialized || currentPlayer.mediaItemCount == 0) return
     val target = ExternalNavigation.target(mode, forward, session, getCurrentTime(),
       currentPlayer.currentMediaItemIndex, currentPlayer.mediaItemCount,
-      deviceSettings.jumpForwardTimeMs, deviceSettings.jumpBackwardsTimeMs) ?: return
+      deviceSettings.jumpForwardTimeMs, deviceSettings.jumpBackwardsTimeMs, allowTimeFallback) ?: return
     DLog.d(tag, "External navigation mode=${ExternalNavigation.normalize(mode)} forward=$forward target=$target")
     // Use the established absolute-time seek, including its multi-file mapping and progress callbacks.
     // Never use seekToNext(): at the end it can leave the current book/episode.
@@ -1550,6 +1597,7 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   }
 
   fun closePlayback(calledOnError: Boolean? = false) {
+    cancelExternalPresses()
     playlistQueue = emptyList()
     playlistQueueIndex = -1
     if (LocalItemLocks.clearPlaybackPin()) StorageMoveService.requestReconcile(this)

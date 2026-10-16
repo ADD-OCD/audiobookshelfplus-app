@@ -183,7 +183,14 @@ data class DeviceSettings(
         var autoDownloadIntervalHours: Int = 6,
         var downloadStorage: String = "internal",
         // Nullable for old Paper records, which bypass Kotlin constructor defaults.
-        var externalMediaNavigation: String? = "time"
+        var externalMediaNavigation: String? = "time",
+        var externalMediaMultiPressEnabled: Boolean = false,
+        var externalMediaForwardSingle: String? = "skip_forward",
+        var externalMediaForwardDouble: String? = "next_chapter",
+        var externalMediaForwardTriple: String? = "next_file",
+        var externalMediaBackwardSingle: String? = "skip_backward",
+        var externalMediaBackwardDouble: String? = "previous_chapter",
+        var externalMediaBackwardTriple: String? = "previous_file"
 ) {
   companion object {
     // Static method to get default device settings
