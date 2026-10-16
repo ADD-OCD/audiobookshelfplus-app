@@ -1,7 +1,7 @@
 package app.absplus.android.device
 
 import android.content.Context
-import android.net.Uri
+import androidx.core.net.toUri
 import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import app.absplus.android.data.LocalFolder
@@ -61,13 +61,13 @@ object FolderFileDeletion {
     override fun folderReachable(): Boolean {
       val f = folder ?: return false
       // A file:// folder has no SAF grant to check: it must exist and be writable
-      if (f.contentUrl.startsWith("file:")) return Uri.parse(f.contentUrl).path?.let { File(it) }?.let { it.isDirectory && it.canWrite() } == true
+      if (f.contentUrl.startsWith("file:")) return f.contentUrl.toUri().path?.let { File(it) }?.let { it.isDirectory && it.canWrite() } == true
       return FolderAccess.canWrite(ctx, f)
     }
 
     override fun kind(uri: String): Kind =
             try {
-              val parsed = Uri.parse(uri)
+              val parsed = uri.toUri()
               if (parsed.scheme == "file") {
                 val f = File(parsed.path ?: return Kind.UNKNOWN)
                 when {
@@ -92,7 +92,7 @@ object FolderFileDeletion {
 
     override fun deleteFile(uri: String): Boolean =
             try {
-              val parsed = Uri.parse(uri)
+              val parsed = uri.toUri()
               if (parsed.scheme == "file") {
                 // java.io.File.delete() is not recursive: a folder that took the file's place is not emptied
                 parsed.path?.let { File(it) }?.let { it.isFile && it.delete() } == true
