@@ -181,7 +181,9 @@ data class DeviceSettings(
         var autoDownloadWifiOnly: Boolean = true,
         var autoDownloadChargingOnly: Boolean = false,
         var autoDownloadIntervalHours: Int = 6,
-        var downloadStorage: String = "internal"
+        var downloadStorage: String = "internal",
+        // Nullable for old Paper records, which bypass Kotlin constructor defaults.
+        var externalMediaNavigation: String? = "time"
 ) {
   companion object {
     // Static method to get default device settings
