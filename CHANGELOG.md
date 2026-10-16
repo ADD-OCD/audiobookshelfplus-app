@@ -12,6 +12,11 @@ Merged into `plus`, not yet in a published release.
   to appear only after the connection attempts gave up (about 3 s per saved server, or about 30 s when the server
   answered its ping but then stalled). Downloaded books and podcast episodes can be opened and played right away.
   Continue, Recent and Libraries are added as soon as the server has answered. Fully offline it was already immediate.
+- **Downloads at the Android 15 time limit** (contributed by Stanislav Markin): Android 15 lets an app's downloads run
+  in the background for 6 hours a day. When that time is used up, downloads now pause instead of the app crashing, and
+  Android restarting the download service no longer crashes it again and again. Paused downloads keep what they have
+  downloaded, stay in the list as "Continues when the app is open", and continue from there when the app is opened. A
+  notification says that Android paused them. Background auto download runs continue in their own windows.
 
 ## v0.19.0 — Podcast auto downloads, SD card storage, E-ink and Bluetooth controls
 
