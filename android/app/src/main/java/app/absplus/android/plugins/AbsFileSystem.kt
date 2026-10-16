@@ -21,6 +21,7 @@ import app.absplus.android.device.AndroidStorageIo
 import app.absplus.android.device.NodeKind
 import app.absplus.android.device.DeviceManager
 import app.absplus.android.device.FolderAccess
+import app.absplus.android.device.FolderItemDeleter
 import app.absplus.android.device.FolderScanner
 import app.absplus.android.device.RescanError
 import app.absplus.android.device.RescanGuard
@@ -400,43 +401,28 @@ class AbsFileSystem : Plugin() {
     else call.resolve(JSObject("{\"success\":$success}"))
   }
 
+  // DocumentFile.delete() is recursive and the device folder holds the user's own files: only the registered ones go
   private fun deleteItemFiles(localLibraryItem: LocalLibraryItem): Boolean {
     val absolutePath = localLibraryItem.absolutePath
-
-    val contentUrl = localLibraryItem.contentUrl
-    var subfolderPathToDelete = ""
     val folder = DeviceManager.dbManager.getLocalFolder(localLibraryItem.folderId)
-    folder?.absolutePath?.let { folderPath ->
-      val splitAbsolutePath = absolutePath.split("/")
-      val fullSubDir = splitAbsolutePath.subList(0, splitAbsolutePath.size - 1).joinToString("/")
-      if (fullSubDir != folderPath) {
-        val subdirHasAnItem =
-                DeviceManager.dbManager.getLocalLibraryItems().any { _localLibraryItem ->
-                  if (_localLibraryItem.id == localLibraryItem.id) {
-                    false
-                  } else {
-                    _localLibraryItem.absolutePath.startsWith(fullSubDir)
-                  }
-                }
-        subfolderPathToDelete = if (subdirHasAnItem) "" else fullSubDir
-      }
-    }
-
-    val success: Boolean
-    val docfile = DocumentFileCompat.fromUri(mainActivity, Uri.parse(contentUrl))
-    if (docfile?.exists() == true) {
-      success = docfile.delete() == true
-    } else {
-      Log.d(tag, "Folder $contentUrl doesn't exist")
-      success = true
-    }
-
-    if (subfolderPathToDelete != "") {
-      Log.d(tag, "Deleting empty subfolder at $subfolderPathToDelete")
-      val docfilesub = DocumentFileCompat.fromFullPath(mainActivity, subfolderPathToDelete)
-      docfilesub?.delete()
-    }
-    return success
+    val subfolderPath =
+            folder?.absolutePath?.let { folderPath ->
+              val others = DeviceManager.dbManager.getLocalLibraryItems().filter { it.id != localLibraryItem.id }.map { it.absolutePath }
+              FolderItemDeleter.parentSubfolderToDelete(absolutePath, folderPath, others)
+            }
+    val targets =
+            localLibraryItem.localFiles.map { lf ->
+              FolderItemDeleter.Target(DocumentFileCompat.fromUri(mainActivity, Uri.parse(lf.contentUrl))) {
+                FolderItemDeleter.deleteByUri(mainActivity, lf.contentUrl)
+              }
+            }
+    return FolderItemDeleter.deleteRegistered(
+            DocumentFileCompat.fromUri(mainActivity, Uri.parse(localLibraryItem.contentUrl)),
+            targets,
+            localLibraryItem.localFiles.mapNotNull { it.filename },
+            { subfolderPath?.let { DocumentFileCompat.fromFullPath(mainActivity, it) } },
+            FolderItemDeleter.DeviceLister(mainActivity)
+    )
   }
 
   @PluginMethod
