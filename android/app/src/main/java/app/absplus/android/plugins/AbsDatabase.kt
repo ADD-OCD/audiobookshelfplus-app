@@ -417,7 +417,7 @@ class AbsDatabase : Plugin() {
           episodeId = mediaProgress.episodeId)
 
         Log.d(tag, "syncServerMediaProgressWithLocalMediaProgress: Saving new local media progress $localMediaProgress")
-        DeviceManager.dbManager.saveLocalMediaProgressLocked(localMediaProgress)
+        if (!DeviceManager.dbManager.saveLocalMediaProgressIfItemExists(localMediaProgress)) return call.resolve() // the download was deleted meanwhile; the server keeps its progress
         call.resolve(JSObject(jacksonMapper.writeValueAsString(localMediaProgress)))
       } else {
         Log.e(tag, "syncServerMediaProgressWithLocalMediaProgress: Local library item not found")
@@ -433,7 +433,7 @@ class AbsDatabase : Plugin() {
         MediaEventManager.syncEvent(mediaProgress, "Received from webhook event")
 
         localMediaProgress.updateFromServerMediaProgress(mediaProgress)
-        DeviceManager.dbManager.saveLocalMediaProgressLocked(localMediaProgress)
+        if (!DeviceManager.dbManager.saveLocalMediaProgressIfItemExists(localMediaProgress)) return call.resolve() // the download was deleted meanwhile; the server keeps its progress
         call.resolve(JSObject(jacksonMapper.writeValueAsString(localMediaProgress)))
       }
     }
@@ -502,7 +502,8 @@ class AbsDatabase : Plugin() {
     }
 
     // Save local media progress locally
-    DeviceManager.dbManager.saveLocalMediaProgressLocked(localMediaProgress)
+    // Refused when the download was deleted meanwhile (R32-H02): reported like an item that is already gone
+    if (!DeviceManager.dbManager.saveLocalMediaProgressIfItemExists(localMediaProgress)) return call.resolve(JSObject("{\"error\":\"Library Item not found\"}"))
 
     val lmpstring = jacksonMapper.writeValueAsString(localMediaProgress)
     Log.d(tag, "updateLocalMediaProgressFinished: Local Media Progress String $lmpstring")
@@ -572,7 +573,8 @@ class AbsDatabase : Plugin() {
     }
 
     // Save local media progress locally
-    DeviceManager.dbManager.saveLocalMediaProgressLocked(localMediaProgress)
+    // Refused when the download was deleted meanwhile (R32-H02): reported like an item that is already gone
+    if (!DeviceManager.dbManager.saveLocalMediaProgressIfItemExists(localMediaProgress)) return call.resolve(JSObject("{\"error\":\"Library Item not found\"}"))
 
     val lmpstring = jacksonMapper.writeValueAsString(localMediaProgress)
     Log.d(tag, "updateLocalEbookProgress: Local Media Progress String $lmpstring")
