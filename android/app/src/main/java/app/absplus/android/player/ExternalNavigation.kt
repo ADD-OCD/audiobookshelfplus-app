@@ -66,6 +66,9 @@ internal class ExternalNavigationKeys {
     val action = if (event.keyCode == KeyEvent.KEYCODE_MEDIA_NEXT || event.keyCode == KeyEvent.KEYCODE_MEDIA_PREVIOUS)
       KeyEvent.ACTION_UP else KeyEvent.ACTION_DOWN
     if (event.action != action || event.repeatCount != 0 || event.isCanceled) return false
+    // The home widget's pending intents carry the same KeyEvent(action, code) with no times on every tap:
+    // without an identity they cannot be duplicates of each other, so each one is a press.
+    if (event.downTime == 0L && event.eventTime == 0L) return true
     val key = Delivery(event.keyCode, event.action, event.downTime, event.eventTime, event.deviceId)
     if (key in delivered) return false
     delivered.addLast(key)

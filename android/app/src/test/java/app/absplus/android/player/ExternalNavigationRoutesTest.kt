@@ -189,6 +189,16 @@ class ExternalNavigationRoutesTest {
     assertEquals(80_000, position)
   }
 
+  @Test fun widgetKeysWithoutTimestampsActOnEveryPress() {
+    // MediaButtonReceiver.buildMediaButtonPendingIntent (home widget) sends the same KeyEvent(ACTION_DOWN, code),
+    // with no times, on every tap. Those deliveries cannot be told apart, so each one is a separate press.
+    val widget = { code: Int -> Intent(Intent.ACTION_MEDIA_BUTTON).putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, code)) }
+    repeat(3) { assertTrue(callback.onMediaButtonEvent(widget(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD))) }
+    assertEquals(80_000, position)
+    repeat(2) { callback.onMediaButtonEvent(widget(KeyEvent.KEYCODE_MEDIA_REWIND)) }
+    assertEquals(60_000, position)
+  }
+
   @Test fun settingsPersistAndLegacyNullUnknownModesDefaultToTime() {
     assertEquals("time", DeviceSettings.default().externalMediaNavigation)
     settings.externalMediaNavigation = "chapters"
