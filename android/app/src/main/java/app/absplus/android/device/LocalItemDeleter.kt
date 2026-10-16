@@ -25,14 +25,17 @@ object LocalItemDeleter {
    * Deletes the whole item: files first, then the record once the files are gone. Paths come from the database
    * under the item lock, because what a page sent may predate a move to another storage. In a device folder only
    * the registered files go, then the book's folder and its parent subfolder if they are left empty. With [auto] a
-   * saved link that does not open skips the delete; the manual delete tries the link itself.
+   * saved link that does not open, or a registered entry that is not a regular file, skips the delete; the manual
+   * delete tries the link itself. [stillAllowed] is asked under the item's lock right before any file goes (auto delete
+   * uses it to see that the listening progress it decided on has not changed since).
    */
   fun deleteItem(
           ctx: Context,
           localLibraryItemId: String,
           auto: Boolean,
           probe: VolumeProbe = AndroidVolumeProbe(ctx),
-          io: StorageIo = AndroidStorageIo
+          io: StorageIo = AndroidStorageIo,
+          stillAllowed: (LocalLibraryItem) -> Boolean = { true }
   ): Outcome =
           LocalItemLocks.withItem(localLibraryItemId) {
             val localLibraryItem = DeviceManager.dbManager.getLocalLibraryItem(localLibraryItemId)
@@ -40,6 +43,10 @@ object LocalItemDeleter {
               // Already gone (deleted elsewhere); its app-storage folder, if any, is left to orphan cleanup
               AbsLogger.info(TAG, "deleteItem: local item $localLibraryItemId does not exist")
               return@withItem Outcome.DELETED
+            }
+            if (!stillAllowed(localLibraryItem)) {
+              AbsLogger.info(TAG, "Delete of \"${localLibraryItem.title}\" skipped: its state changed just before")
+              return@withItem Outcome.SKIPPED
             }
             val outcome =
                     try {
@@ -50,6 +57,9 @@ object LocalItemDeleter {
             if (outcome == Outcome.DELETED) {
               DeviceManager.dbManager.removeLocalLibraryItem(localLibraryItemId)
               DeviceManager.dbManager.removeLocalMediaProgressFor(localLibraryItemId)
+              // Auto delete keeps a record per book; it goes with the book whoever deleted it
+              DeviceManager.dbManager.removeAutoDeleteConfirmed(localLibraryItemId)
+              DeviceManager.dbManager.removeAutoDeleteDownloadedAt(localLibraryItemId)
             }
             outcome
           }
@@ -84,6 +94,10 @@ object LocalItemDeleter {
     // A link that does not resolve says nothing about the file: auto delete leaves the item for the next check
     if (auto && (bookDir == null || docs.any { it == null })) {
       AbsLogger.info(TAG, "Auto delete skipped \"${item.title}\": a saved link to its folder or files does not open")
+      return Outcome.SKIPPED
+    }
+    if (auto && FolderItemDeleter.hasNonFile(docs.map { FolderItemDeleter.Target(it) { false } })) {
+      AbsLogger.info(TAG, "Auto delete skipped \"${item.title}\": a registered file is not a regular file")
       return Outcome.SKIPPED
     }
     val targets = item.localFiles.mapIndexed { i, lf -> FolderItemDeleter.Target(docs[i]) { FolderItemDeleter.deleteByUri(ctx, lf.contentUrl) } }

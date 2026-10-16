@@ -251,4 +251,42 @@ class LocalItemDeleterTest {
     assertTrue("nothing of the user's is touched", File(dir, "notes.txt").exists())
     assertNotNull("the record stays", DeviceManager.dbManager.getLocalLibraryItem("local_skip"))
   }
+
+  @Test
+  fun `deleting an item forgets the auto delete records kept for it`() {
+    val dir = itemDir("meta")
+    savedItem("local_meta", "internal-downloads", dir)
+    DeviceManager.dbManager.saveAutoDeleteDownloadedAt("local_meta", 5)
+    DeviceManager.dbManager.saveAutoDeleteConfirmed("local_meta", app.absplus.android.managers.AutoDeletePolicy.Confirmation(app.absplus.android.managers.AutoDeletePolicy.Identity(null, null, null), 1, true))
+
+    assertEquals(LocalItemDeleter.Outcome.DELETED, delete("local_meta", auto = false))
+
+    assertNull(DeviceManager.dbManager.getAutoDeleteDownloadedAt("local_meta"))
+    assertNull(DeviceManager.dbManager.getAutoDeleteConfirmed("local_meta"))
+  }
+
+  @Test
+  fun `a registered path replaced by a folder is kept, auto skips and manual fails`() {
+    val dir = Files.createTempDirectory("saf").toFile()
+    val replaced = File(dir, "a.mp3").apply { mkdirs() }
+    File(replaced, "inside.txt").writeText("mine")
+    folderItem("local_dirfile", dir, replaced)
+
+    assertEquals(LocalItemDeleter.Outcome.SKIPPED, delete("local_dirfile", auto = true))
+    assertTrue(File(replaced, "inside.txt").exists())
+    assertEquals(LocalItemDeleter.Outcome.FAILED, delete("local_dirfile", auto = false))
+    assertTrue(File(replaced, "inside.txt").exists())
+    assertNotNull(DeviceManager.dbManager.getLocalLibraryItem("local_dirfile"))
+  }
+
+  @Test
+  fun `the delete is skipped when the caller no longer allows it under the lock`() {
+    val dir = itemDir("guarded")
+    File(dir, "a.mp3").writeText("abc")
+    savedItem("local_guard", "internal-downloads", dir)
+
+    assertEquals(LocalItemDeleter.Outcome.SKIPPED, LocalItemDeleter.deleteItem(ctx, "local_guard", true, probe) { false })
+    assertTrue(File(dir, "a.mp3").exists())
+    assertNotNull(DeviceManager.dbManager.getLocalLibraryItem("local_guard"))
+  }
 }
