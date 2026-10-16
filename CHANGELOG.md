@@ -7,6 +7,12 @@ Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and d
 
 Merged into `plus`, not yet in a published release.
 
+- **Android Auto without a reachable server** (issue #33, Discussion #30): the Android Auto menu now opens at once
+  with Downloads, instead of waiting for the server checks. With a server that was unreachable or stalled, the menu used
+  to appear only after the connection attempts gave up (about 3 s per saved server, or about 30 s when the server
+  answered its ping but then stalled). Downloaded books and podcast episodes can be opened and played right away.
+  Continue, Recent and Libraries are added as soon as the server has answered. Fully offline it was already immediate.
+
 ## v0.19.0 — Podcast auto downloads, SD card storage, E-ink and Bluetooth controls
 
 **Released 2026-10-15:** versionCode 137, versionName `0.14.2-beta` (upstream base unchanged), `PLUS_VERSION`
