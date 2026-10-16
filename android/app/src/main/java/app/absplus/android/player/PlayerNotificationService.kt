@@ -1695,6 +1695,49 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
     browseTreeInitListeners.clear()
   }
 
+  /**
+   * The Android Auto root before the server load has finished: only entries whose children can be served without
+   * it. That is Downloads (local, allowed before firstLoadDone); Continue, Recent and Libraries are refused until
+   * the first load is done, so they appear with the refreshed root.
+   */
+  internal fun provisionalAutoRootItems(): MutableList<MediaBrowserCompat.MediaItem> =
+    BrowseTree(this, emptyList(), emptyList(), false)[AUTO_MEDIA_ROOT].orEmpty().map { item ->
+      MediaBrowserCompat.MediaItem(item.description, MediaBrowserCompat.MediaItem.FLAG_BROWSABLE)
+    }.toMutableList()
+
+  /** Called by [autoRootLoader] on the load's thread once the server checks and libraries have finished. */
+  private fun onAndroidAutoItemsLoaded() {
+    AbsLogger.info(tag, "onLoadChildren: Loaded Android Auto data, initializing browseTree")
+    browseTree =
+            BrowseTree(
+                    this,
+                    mediaManager.serverItemsInProgress,
+                    mediaManager.serverLibraries,
+                    mediaManager.allLibraryPersonalizationsDone
+            )
+    onBrowseTreeInitialized()
+    firstLoadDone = true
+    if (mediaManager.serverLibraries.isNotEmpty()) {
+      AbsLogger.info(tag, "onLoadChildren: Android Auto fetching personalized data for all libraries")
+      mediaManager.populatePersonalizedDataForAllLibraries {
+        AbsLogger.info(tag, "onLoadChildren: Android Auto loaded personalized data for all libraries")
+        notifyChildrenChanged("/")
+      }
+
+      AbsLogger.info(tag, "onLoadChildren: Android Auto fetching in progress items")
+      mediaManager.initializeInProgressItems {
+        AbsLogger.info(tag, "onLoadChildren: Android Auto loaded in progress items")
+        notifyChildrenChanged("/")
+      }
+    }
+  }
+
+  private val autoRootLoader = AutoRootLoader(
+    load = { onDone -> mediaManager.loadAndroidAutoItems(onDone) },
+    onLoaded = { onAndroidAutoItemsLoaded() },
+    notifyRootChanged = { notifyChildrenChanged(AUTO_MEDIA_ROOT) }
+  )
+
   // Only allowing android auto or similar to access media browser service
   //  normal loading of audiobooks is handled in webview (not natively)
   private fun isValid(packageName: String, uid: Int): Boolean {
@@ -1853,45 +1896,14 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
       result.sendResult(localBrowseItems)
     } else if (parentMediaId == AUTO_MEDIA_ROOT) {
       DLog.d(tag, "Trying to initialize browseTree.")
-      if (!this::browseTree.isInitialized || forceReloadingAndroidAuto) {
+      if (!this::browseTree.isInitialized || forceReloadingAndroidAuto || autoRootLoader.isLoading) {
         forceReloadingAndroidAuto = false
-        AbsLogger.info(tag, "onLoadChildren: Loading Android Auto items")
-        mediaManager.loadAndroidAutoItems {
-          AbsLogger.info(tag, "onLoadChildren: Loaded Android Auto data, initializing browseTree")
-
-          browseTree =
-                  BrowseTree(
-                          this,
-                          mediaManager.serverItemsInProgress,
-                          mediaManager.serverLibraries,
-                          mediaManager.allLibraryPersonalizationsDone
-                  )
-          onBrowseTreeInitialized()
-          val children =
-                  browseTree[parentMediaId]?.map { item ->
-                    DLog.d(tag, "Found top menu item: ${item.description.title}")
-                    MediaBrowserCompat.MediaItem(
-                            item.description,
-                            MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
-                    )
-                  }
-
-          result.sendResult(children as MutableList<MediaBrowserCompat.MediaItem>?)
-          firstLoadDone = true
-          if (mediaManager.serverLibraries.isNotEmpty()) {
-            AbsLogger.info(tag, "onLoadChildren: Android Auto fetching personalized data for all libraries")
-            mediaManager.populatePersonalizedDataForAllLibraries {
-              AbsLogger.info(tag, "onLoadChildren: Android Auto loaded personalized data for all libraries")
-              notifyChildrenChanged("/")
-            }
-
-            AbsLogger.info(tag, "onLoadChildren: Android Auto fetching in progress items")
-            mediaManager.initializeInProgressItems {
-              AbsLogger.info(tag, "onLoadChildren: Android Auto loaded in progress items")
-              notifyChildrenChanged("/")
-            }
-          }
-        }
+        // Answer at once with what needs no server (Downloads), instead of waiting for the server checks, which
+        // can take 3 s per unreachable server or about 30 s for a stalled one (Discussion #30). The full root
+        // follows through notifyChildrenChanged("/") when the load finishes; a load already running is reused.
+        AbsLogger.info(tag, "onLoadChildren: Loading Android Auto items (provisional root sent)")
+        result.sendResult(provisionalAutoRootItems())
+        autoRootLoader.reload()
       } else {
         DLog.d(tag, "Starting browseTree refresh")
         browseTree =
