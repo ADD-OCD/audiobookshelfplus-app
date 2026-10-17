@@ -384,9 +384,10 @@ object DownloadServiceHost {
       pausedBySystem = true
       DownloadService.showPausedBySystem(downloadService)
     }
-    val generation = nextPauseGeneration()
     // A service refused at its start ran nothing: what runs now is a worker's, in its own window
+    // It must not invalidate an owned service's pending pause; only a real resume may supersede that pause.
     if (!owned) return
+    val generation = nextPauseGeneration()
     val m = synchronized(this) { manager } ?: return
     // Off the main thread: onTimeout has seconds to stop. A resume that came meanwhile wins
     scope.launch { synchronized(m) { if (pauseGeneration == generation) m.suspendTransfers() } }
