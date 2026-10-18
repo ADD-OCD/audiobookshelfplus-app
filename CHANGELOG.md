@@ -5,18 +5,33 @@ Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and d
 
 ## Unreleased
 
-Merged into `plus`, not yet in a published release.
+Development changes not yet published. The combined local candidate is still awaiting independent integration review.
 
 - **Android Auto without a reachable server** (issue #33, Discussion #30): the Android Auto menu now opens at once
   with Downloads, instead of waiting for the server checks. With a server that was unreachable or stalled, the menu used
   to appear only after the connection attempts gave up (about 3 s per saved server, or about 30 s when the server
   answered its ping but then stalled). Downloaded books and podcast episodes can be opened and played right away.
   Continue, Recent and Libraries are added as soon as the server has answered. Fully offline it was already immediate.
+- **Listening-history safety:** startup storage checks keep audiobook and podcast identities, listening progress,
+  completion history and bookmarks when files or storage are unavailable. Automatic eviction removes downloaded bytes
+  while retaining those records. Re-downloading an evicted book keeps its identity and existing local progress.
+- **Managed download folders and recovery:** folder selection explains that Audiobookshelf+ manages the selected
+  folder. SAF publication refuses unsafe collisions and does not automatically delete provider documents. Failed
+  downloads with lost folder access offer Choose folder, followed by an explicit Retry.
+- **Paused seeks:** an explicit seek while paused is saved without requiring playback to resume.
+- **Automatic deletion and download budgets** (contributed by Stanislav Markin, PR #32): eligible finished audiobook
+  downloads can be evicted to reclaim space. The download budget is best-effort; unavailable storage and unsupported
+  SAF deletion are deferred, and listening history is retained. Podcast retention remains a separate policy.
 - **Downloads at the Android 15 time limit** (contributed by Stanislav Markin): Android 15 lets an app's downloads run
   in the background for 6 hours a day. When that time is used up, downloads now pause instead of the app crashing, and
   Android restarting the download service no longer crashes it again and again. Paused downloads keep what they have
   downloaded, stay in the list as "Continues when the app is open", and continue from there when the app is opened. A
   notification says that Android paused them. Background auto download runs continue in their own windows.
+- **Long jumps** (Settings → Long jump backwards / forwards time): an optional second jump in each direction, from 15
+  seconds to 30 minutes, Off by default. When on, the full player shows it outside the short jump. The notification,
+  headset, widget and Android Auto keep the short jumps. For everyone, the full player's jump keys are now chevrons
+  centered on Play (the short jumps used circular arrows); the collapsed player keeps the arrows.
+  Narrow layouts reserve space for every enabled control, and seek boundaries remain nonnegative for very short media.
 
 ## v0.19.0 — Podcast auto downloads, SD card storage, E-ink and Bluetooth controls
 

@@ -1486,9 +1486,9 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
     if (timeToSeek < 0) {
       DLog.w(tag, "seekPlayer invalid time $timeToSeek - setting to 0")
       timeToSeek = 0L
-    } else if (timeToSeek > getDuration()) {
+    } else if (timeToSeek >= getDuration()) {
       DLog.w(tag, "seekPlayer invalid time $timeToSeek - setting to MAX - 2000")
-      timeToSeek = getDuration() - 2000L
+      timeToSeek = (getDuration() - 2000L).coerceAtLeast(0L)
     }
 
     if (currentPlayer.mediaItemCount > 1) {
