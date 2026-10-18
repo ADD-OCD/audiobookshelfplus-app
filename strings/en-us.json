@@ -635,6 +635,7 @@
   "MessageSocketConnectedOverUnmeteredWifi": "Socket connected over unmetered wifi",
   "MessageSocketNotConnected": "Socket not connected",
   "MessageStorageAccessDenied": "Access denied",
+  "MessageStorageManagedFolderWarning": "Choose a dedicated download folder. Audiobookshelf+ manages downloaded and temporary files here and may replace or remove them. Do not select a folder containing unrelated or irreplaceable data.",
   "MessageStoragePermissionDenied": "Permission denied",
   "MessageStorageWriteAccessRequired": "You do not have write access to this folder. Would you like to grant access?",
   "MessageUpdateAvailable": "An update is available",

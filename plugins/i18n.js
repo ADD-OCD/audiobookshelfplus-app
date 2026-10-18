@@ -63,7 +63,8 @@ function syncDownloadNotificationStrings() {
     allow: Vue.prototype.$strings.ButtonAllow,
     cancel: Vue.prototype.$strings.ButtonCancel,
     accessDenied: Vue.prototype.$strings.MessageStorageAccessDenied,
-    permissionDenied: Vue.prototype.$strings.MessageStoragePermissionDenied
+    permissionDenied: Vue.prototype.$strings.MessageStoragePermissionDenied,
+    managedFolderWarning: Vue.prototype.$strings.MessageStorageManagedFolderWarning
   }).catch((error) => console.warn('Failed to update folder picker strings', error))
 }
 

@@ -106,6 +106,7 @@ class AbsFileSystem : Plugin() {
             .putString(KEY_CANCEL, call.getString("cancel"))
             .putString(KEY_ACCESS_DENIED, call.getString("accessDenied"))
             .putString(KEY_PERMISSION_DENIED, call.getString("permissionDenied"))
+            .putString(KEY_MANAGED_FOLDER_WARNING, call.getString("managedFolderWarning"))
             .apply()
     call.resolve()
   }
@@ -185,7 +186,18 @@ class AbsFileSystem : Plugin() {
               }
             }
 
-    mainActivity.storage.openFolderPicker(REQUEST_CODE_SELECT_FOLDER)
+    mainActivity.runOnUiThread {
+      AlertDialog.Builder(mainActivity)
+              .setMessage(folderPickerString(KEY_MANAGED_FOLDER_WARNING, DEFAULT_MANAGED_FOLDER_WARNING))
+              .setPositiveButton(folderPickerString(KEY_ALLOW, DEFAULT_ALLOW)) { _, _ ->
+                mainActivity.storage.openFolderPicker(REQUEST_CODE_SELECT_FOLDER)
+              }
+              .setNegativeButton(folderPickerString(KEY_CANCEL, DEFAULT_CANCEL)) { _, _ ->
+                call.resolve(JSObject().put("error", folderPickerString(KEY_CANCEL, DEFAULT_CANCEL)))
+              }
+              .setOnCancelListener { call.resolve(JSObject().put("error", folderPickerString(KEY_CANCEL, DEFAULT_CANCEL))) }
+              .show()
+    }
   }
 
   @RequiresApi(Build.VERSION_CODES.R)
@@ -501,6 +513,9 @@ class AbsFileSystem : Plugin() {
     const val KEY_CANCEL = "cancel"
     const val KEY_ACCESS_DENIED = "access_denied"
     const val KEY_PERMISSION_DENIED = "permission_denied"
+    const val KEY_MANAGED_FOLDER_WARNING = "managed_folder_warning"
+    const val DEFAULT_MANAGED_FOLDER_WARNING =
+            "Choose a dedicated download folder. Audiobookshelf+ manages downloaded and temporary files here and may replace or remove them. Do not select a folder containing unrelated or irreplaceable data."
     const val DEFAULT_WRITE_ACCESS_REQUIRED =
             "You do not have write access to this folder. Would you like to grant access?"
     const val DEFAULT_ALLOW = "Allow"

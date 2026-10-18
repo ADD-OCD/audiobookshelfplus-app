@@ -52,7 +52,7 @@ class AbsDatabase : Plugin() {
 
     secureStorage = SecureStorage(mainActivity)
 
-    // Items first: progress of episodes whose files were found missing now is then cleaned in the same start
+    // Startup preserves media identities and listening history even while their storage is unavailable.
     DeviceManager.dbManager.cleanLocalLibraryItems(mainActivity)
     DeviceManager.dbManager.cleanLocalMediaProgress()
   }

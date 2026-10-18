@@ -264,55 +264,16 @@ class DbManager {
     Paper.book("localMediaProgress").destroy()
   }
 
-  // Make sure all local file ids still exist
+  // Startup observes availability through the playback/storage checks; it cannot authorize deletion.
+  // Keep these entry points for existing callers. No Paper writes means failures or concurrent progress
+  // updates cannot replace serialized history. Explicit user/account removal has separate operations.
+  @Suppress("UNUSED_PARAMETER")
   fun cleanLocalLibraryItems(context: Context) {
-    Paper.book("localLibraryItems").allKeys.forEach { id ->
-      updateLocalLibraryItem(id) { lli ->
-        // Never on removable storage (H02): a file that looks missing there may be on a card that is out, is being
-        // removed while this runs, or is a different card; the records, episodes and their progress are kept. Only an
-        // explicit user deletion removes them.
-        LocalItemCleanup.clean(lli, { it.exists(context) }, skip = lli.folderId.startsWith(AppStorage.APPSD_PREFIX))
-      }
-    }
+    Log.d(tag, "Startup: retaining all local media identities, including unavailable files")
   }
 
-  // Remove any local media progress where the local media item is not found
   fun cleanLocalMediaProgress() {
-    val localMediaProgress = getAllLocalMediaProgress()
-    val localLibraryItems = getLocalLibraryItems()
-    localMediaProgress.forEach {
-      val matchingLLI = localLibraryItems.find { lli -> lli.id == it.localLibraryItemId }
-      if (!it.id.startsWith("local")) {
-        // A bug on the server when syncing local media progress was replacing the media progress id
-        // causing duplicate progress. Remove them.
-        Log.d(
-                tag,
-                "cleanLocalMediaProgress: Invalid local media progress does not start with 'local' (fixed on server 2.0.24)"
-        )
-        Paper.book("localMediaProgress").delete(it.id)
-      } else if (matchingLLI == null) {
-        Log.d(
-                tag,
-                "cleanLocalMediaProgress: No matching local library item for local media progress ${it.id} - removing"
-        )
-        Paper.book("localMediaProgress").delete(it.id)
-      } else if (matchingLLI.isPodcast) {
-        if (it.localEpisodeId.isNullOrEmpty()) {
-          Log.d(tag, "cleanLocalMediaProgress: Podcast media progress has no episode id - removing")
-          Paper.book("localMediaProgress").delete(it.id)
-        } else {
-          val podcast = matchingLLI.media as Podcast
-          val matchingLEp = podcast.episodes?.find { ep -> ep.id == it.localEpisodeId }
-          if (matchingLEp == null) {
-            Log.d(
-                    tag,
-                    "cleanLocalMediaProgress: Podcast media progress for episode ${it.localEpisodeId} not found - removing"
-            )
-            Paper.book("localMediaProgress").delete(it.id)
-          }
-        }
-      }
-    }
+    Log.d(tag, "Startup: retaining listening history independently of local file availability")
   }
 
   fun saveMediaItemHistory(mediaItemHistory: MediaItemHistory) {

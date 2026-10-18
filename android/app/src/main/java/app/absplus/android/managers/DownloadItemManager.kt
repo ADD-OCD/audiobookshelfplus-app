@@ -937,6 +937,10 @@ class DownloadItemManager(
 
   private fun moveDownloadedFile(item: DownloadItem, part: DownloadItemPart) {
     if (part.moved || part.isMoving) return
+    if (part.localFolderUrl != item.localFolder.contentUrl || part.localFolderId != item.localFolder.id) {
+      failFinalization(item, part, "Download destination does not match the selected folder")
+      return
+    }
     if (!hasFolderAccess(item)) {
       failPermissionLost(item, part)
       return
@@ -952,69 +956,26 @@ class DownloadItemManager(
                 throw IllegalStateException("Insufficient storage for SAF copy")
         val folderKey = "${root.uri}/${part.finalDestinationSubfolder}"
         val folderLock = safFolderLocks.computeIfAbsent(folderKey) { Any() }
-        val folder =
-                synchronized(folderLock) { getOrCreateFolder(root, part.finalDestinationSubfolder) }
-                        ?: throw IllegalStateException("Could not create SAF destination folder")
-        val temporaryName = ".${part.filename}.${part.id.hashCode()}.part"
-        folder.findFile(temporaryName)?.delete()
-        val temporary =
-                folder.createFile(mimeTypeFor(part), temporaryName)
-                        ?: throw IllegalStateException("Could not create SAF temporary file")
         val staging = File(part.destinationPath)
-        FileInputStream(staging).use { input ->
-          context.contentResolver.openOutputStream(temporary.uri, "w")?.use { input.copyTo(it) }
-                  ?: throw IllegalStateException("Could not open SAF output stream")
+        check(part.completed && (part.fileSize <= 0L || staging.length() == part.fileSize)) {
+          "Download staging is incomplete"
         }
-        if (temporary.length() != staging.length())
-                throw IllegalStateException("SAF copy size mismatch")
-        // R29-N02: the ownership decision, the replacement and the rename are one step per destination folder
         val destination = synchronized(folderLock) {
-          val backupName = ".${part.filename}.abs-backup"
-          // A backup left by an interrupted finalization may be the only copy: restore it, or keep it aside
-          folder.findFile(backupName)?.let { left ->
-            if (findDocumentByFilename(folder, part) == null) {
-              if (!left.renameTo(part.filename))
-                      throw IllegalStateException("Could not restore the previous copy of this download location")
-            } else if (!left.renameTo(".${part.filename}.abs-preserved-${System.currentTimeMillis()}"))
-                    throw IllegalStateException("Could not set aside an earlier backup of this download location")
-          }
-          val existing = findDocumentByFilename(folder, part)
           val owner = DownloadDestinationGuard.ownerOf(item, part)
           val others = synchronized(this@DownloadItemManager) { finalizationOwners(item, part, part.finalDestinationPath) }
-          val verdict = DownloadDestinationGuard.verdict(owner, others, existing != null)
-          // Another download's file, or a file in the user's folder nobody accounts for: never delete it
-          if (verdict == DownloadDestinationGuard.Verdict.OTHER_OWNER || verdict == DownloadDestinationGuard.Verdict.UNKNOWN_FILE) {
-            temporary.delete()
-            null
-          } else {
-            // The same owner's previous copy is kept as a backup until the new file is in place
-            if (existing != null && !existing.renameTo(backupName))
-                    throw IllegalStateException("Could not protect existing file")
-            if (!temporary.renameTo(part.filename)) {
-              if (existing != null && !existing.renameTo(part.filename))
-                      AbsLogger.error(tag, "Could not restore ${part.filename}; the previous copy is kept as $backupName")
-              throw IllegalStateException("Could not finalize SAF temporary file")
-            }
-            val finalized = findDocumentByFilename(folder, part)
-                    ?: throw IllegalStateException("Could not reopen finalized SAF file")
-            if (existing != null && !existing.delete()) AbsLogger.error(tag, "Could not remove the previous copy $backupName")
-            finalized
+          check(others.all { DownloadDestinationGuard.sameOwner(owner, it) }) {
+            "Download location is used by another file; nothing was replaced"
           }
+          SafDownloadPublisher(context).publish(root, part.finalDestinationSubfolder, part.filename, mimeTypeFor(part), staging)
         }
-        if (destination == null) {
-          synchronized(this@DownloadItemManager) {
-            markTerminalFailure(item, part, "Download location is used by another file; nothing was replaced")
-          }
-          return@launch
-        }
-        if (destination.length() != staging.length())
-                throw IllegalStateException("SAF final size mismatch")
-        if (!staging.delete()) AbsLogger.error(tag, "Could not remove staging file ${staging.name}")
-        part.completedDestinationUri = destination.uri.toString()
+        part.completedDestinationUri = destination.toString()
+        // Persist the actual returned identity before completing or discarding private staging.
+        persist(item, force = true)
         AbsLogger.info(tag, "Move completed for ${part.filename} (selected device folder)")
         completePart(item, part)
+        if (!staging.delete()) AbsLogger.error(tag, "Could not remove private download staging")
       } catch (e: Exception) {
-        failFinalization(item, part, "SAF copy failed: ${e.message}")
+        failFinalization(item, part, "Could not save download: ${e.message}. Staging was kept. Check the selected folder in the system file manager, then Retry; reselect it if access was lost.")
       }
     }
   }
@@ -1024,7 +985,7 @@ class DownloadItemManager(
     AbsLogger.error(tag, message)
     part.isMoving = false
     part.failed = true
-    failOrRetry(item, part, message)
+    markTerminalFailure(item, part, message)
   }
 
   @Synchronized
@@ -1141,24 +1102,15 @@ class DownloadItemManager(
     scope.cancel()
   }
 
-  private fun getOrCreateFolder(root: DocumentFile, relativePath: String): DocumentFile? {
-    var current = root
-    relativePath.split('/').filter { it.isNotBlank() }.forEach { segment ->
-      if (segment == "." || segment == "..") return null
-      current = current.findFile(segment) ?: current.createDirectory(segment) ?: return null
-    }
-    return current
-  }
-
   private fun findSharedStorageFile(part: DownloadItemPart): DocumentFile? {
     if (part.isAppStorage) return null
-    val root = DocumentFile.fromTreeUri(context, Uri.parse(part.localFolderUrl)) ?: return null
-    var folder = root
-    part.finalDestinationSubfolder.split('/').filter { it.isNotBlank() }.forEach { segment ->
-      if (segment == "." || segment == "..") return null
-      folder = folder.findFile(segment) ?: return null
-    }
-    val file = findDocumentByFilename(folder, part) ?: return null
+    // A display name and length cannot identify a successfully published download.
+    // Only this persisted part's actual, previously verified document may be re-observed.
+    val uri = part.completedDestinationUri?.let(Uri::parse) ?: return null
+    val tree = Uri.parse(part.localFolderUrl)
+    if (uri.authority != tree.authority || !android.provider.DocumentsContract.isTreeUri(uri) ||
+            android.provider.DocumentsContract.getTreeDocumentId(uri) != android.provider.DocumentsContract.getTreeDocumentId(tree)) return null
+    val file = DocumentFile.fromSingleUri(context, uri) ?: return null
     if (!file.isFile) return null
     if (part.fileSize > 0L && file.length() != part.fileSize) return null
     if (part.fileSize <= 0L && file.length() <= 0L) return null

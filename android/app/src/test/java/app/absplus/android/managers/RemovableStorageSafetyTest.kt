@@ -173,7 +173,7 @@ class RemovableStorageSafetyTest {
     DeviceManager.dbManager.saveLocalLibraryItem(sdItem)
     DeviceManager.dbManager.saveLocalMediaProgress(progressFor("e1"))
     val before = mapper.writeValueAsString(DeviceManager.dbManager.getLocalLibraryItem(sdItem.id))
-    // Control: an internal item with a really missing file is still cleaned up as before
+    // Missing internal files also retain episode identity and history under the startup preservation policy.
     val internalDir = File(context.filesDir, "downloads/li_int")
     val present = media(internalDir, "present.mp3")
     val internal = podcastLocal("internal-podcast", internalDir, "p" to present, "gone" to File(internalDir, "gone.mp3"))
@@ -187,7 +187,7 @@ class RemovableStorageSafetyTest {
 
     assertEquals("the SD item, its episodes and file records are unchanged", before, mapper.writeValueAsString(DeviceManager.dbManager.getLocalLibraryItem(sdItem.id)))
     assertNotNull("its progress is kept", DeviceManager.dbManager.getLocalMediaProgress("local_$pod-local_ep_e1"))
-    assertEquals(listOf("p"), (DeviceManager.dbManager.getLocalLibraryItem("local_li_int")!!.media as Podcast).episodes!!.map { it.serverEpisodeId })
+    assertEquals(listOf("p", "gone"), (DeviceManager.dbManager.getLocalLibraryItem("local_li_int")!!.media as Podcast).episodes!!.map { it.serverEpisodeId })
   }
 
   // ---- Finalizing downloads on removable storage (H02)
