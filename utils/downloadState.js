@@ -52,7 +52,8 @@ export function downloadState(item) {
   const active = all.some((p) => !p.failed && (p.isMoving || (!p.completed && p.downloadId != null) || (p.completed && !p.moved)))
   if (active) return DownloadState.DOWNLOADING
   if (all.some((p) => p.failed && p.authorizationHold)) return DownloadState.HELD
-  if (all.some((p) => p.failed && p.permissionLost)) return DownloadState.FOLDER_ACCESS
+  // The current-access observation overrides a terminal failure's older permission flag.
+  if (item?.folderAccessLost === true || (item?.folderAccessLost == null && all.some((p) => p.failed && p.permissionLost))) return DownloadState.FOLDER_ACCESS
   if (all.some((p) => p.failed && p.storageUnavailable)) return DownloadState.STORAGE_UNAVAILABLE
   if (all.some((p) => p.failed)) return DownloadState.FAILED
   if (all.some((p) => !p.completed && p.waitingForSpace)) return DownloadState.WAITING_FOR_STORAGE
@@ -108,6 +109,7 @@ export function downloadProgress(item) {
 
 /** The device folder a folder-access failure needs re-selected, from the failed part. */
 export function lostFolder(item) {
+  if (item?.folderAccessLost === true) return item.localFolder || null
   const part = parts(item).find((p) => p.failed && p.permissionLost)
   return part ? { id: part.localFolderId, name: part.localFolderName } : null
 }

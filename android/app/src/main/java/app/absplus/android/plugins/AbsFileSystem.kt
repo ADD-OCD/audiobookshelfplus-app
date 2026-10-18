@@ -119,6 +119,10 @@ class AbsFileSystem : Plugin() {
 
     mainActivity.storage.folderPickerCallback =
             object : FolderPickerCallback {
+              override fun onCanceledByUser(requestCode: Int) {
+                call.resolve(JSObject().put("error", folderPickerString(KEY_CANCEL, DEFAULT_CANCEL)).put("errorCode", "canceled"))
+              }
+
               override fun onFolderSelected(requestCode: Int, folder: DocumentFile) {
                 Log.d(TAG, "ON FOLDER SELECTED ${folder.uri} ${folder.name}")
                 val absolutePath = folder.getAbsolutePath(activity)
@@ -193,9 +197,9 @@ class AbsFileSystem : Plugin() {
                 mainActivity.storage.openFolderPicker(REQUEST_CODE_SELECT_FOLDER)
               }
               .setNegativeButton(folderPickerString(KEY_CANCEL, DEFAULT_CANCEL)) { _, _ ->
-                call.resolve(JSObject().put("error", folderPickerString(KEY_CANCEL, DEFAULT_CANCEL)))
+                call.resolve(JSObject().put("error", folderPickerString(KEY_CANCEL, DEFAULT_CANCEL)).put("errorCode", "canceled"))
               }
-              .setOnCancelListener { call.resolve(JSObject().put("error", folderPickerString(KEY_CANCEL, DEFAULT_CANCEL))) }
+              .setOnCancelListener { call.resolve(JSObject().put("error", folderPickerString(KEY_CANCEL, DEFAULT_CANCEL)).put("errorCode", "canceled")) }
               .show()
     }
   }

@@ -264,14 +264,19 @@ object DownloadServiceHost {
   }
 
   /** Each queued item with why it waits ([DownloadItemManager.waitingReason]) and whether auto download queued it. */
-  data class ItemStatus(val item: DownloadItem, val waitingFor: String?, val isAuto: Boolean)
+  data class ItemStatus(val item: DownloadItem, val waitingFor: String?, val isAuto: Boolean, val folderAccessLost: Boolean)
 
   fun statusSnapshot(context: Context, callback: (List<ItemStatus>) -> Unit) {
     val queue = ensure(context)
     scope.launch {
       restoreJob?.join()
       val items = synchronized(queue) { queue.downloadItemQueue.toList() }
-      callback(items.map { ItemStatus(it, queue.waitingReason(it), queue.isAutoOwned(it)) })
+      callback(items.map {
+        // A held failure can outlive its original reason: a grant may be revoked (or renewed)
+        // later. Observe access without retrying, rewriting the failure or touching its files.
+        ItemStatus(it, queue.waitingReason(it), queue.isAutoOwned(it),
+                it.downloadItemParts.any { part -> part.failed } && queue.foldersWithoutAccess(it.id).isNotEmpty())
+      })
     }
   }
 

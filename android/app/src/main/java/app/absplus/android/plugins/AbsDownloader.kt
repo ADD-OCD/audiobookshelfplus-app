@@ -94,6 +94,7 @@ class AbsDownloader : Plugin() {
       statuses.forEach { status ->
         array.put(JSObject(jacksonMapper.writeValueAsString(status.item))
                 .put("waitingFor", status.waitingFor ?: JSONObject.NULL)
+                .put("folderAccessLost", status.folderAccessLost)
                 .put("isAuto", status.isAuto))
       }
       call.resolve(JSObject().put("items", array))
