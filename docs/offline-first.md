@@ -2,7 +2,32 @@
 
 Design for making Audiobookshelf+ fully usable without a reachable server: everything on the device plays, the whole catalogue is browsable, and progress, "finished" and bookmarks are saved locally and reach the server later.
 
-**Status:** design, nothing implemented yet. Delivered as a series of PRs (see [Releases](#releases)); each PR updates this document when it lands.
+**Status:** delivered as a series of PRs (see [Releases](#releases)); each PR updates its row in [Status](#status) and this document when it lands.
+
+## Status
+
+| Release | PR | What works without the server | Status |
+|---|---|---|---|
+| 0 | 0-doc | This document | This release |
+| 1 | 1-reachability | "Server unreachable" is told apart from "no network"; the app reconnects by itself when the server returns | Planned |
+| 2 | 2a-bookmarks | Bookmarks are created, renamed and deleted offline and sent later | Planned |
+| 2 | 2b-progress | Progress and "finished" are kept offline and sent later; a refused sign-in keeps the data | Planned |
+| 2 | 2c-sessions | Listening time of a stream that lost the server is kept and sent once | Planned |
+| 3 | 3-player | Player: downloaded items never stream, a stream waits for the server instead of failing | Planned |
+| 4 | 4a-library | A copy of the catalog on the phone (no visible change yet) | Planned |
+| 4 | 4a-ui | Library tab | Planned |
+| 4 | 4b-series | Series tab and series pages | Planned |
+| 4 | 4c-authors | Authors tab | Planned |
+| 4 | 4d-collections | Collections tab and collection pages | Planned |
+| 4 | 4e-playlists | Playlists; an offline queue waits for the server at an item that isn't downloaded | Planned |
+| 5 | 5a-native | Home shelves, search and podcast episodes computed from the replica (native side) | Planned |
+| 5 | 5b-ui | Home and search | Planned |
+| 6 | 6-item | Full item details are cached when an item is opened online | Planned |
+| 6 | 6-ui | Book, podcast and episode pages; server-only actions disabled with a reason | Planned |
+| 6 | 6b-awaiting-player | The player opens on the book a queue waits for | Planned |
+| 7 | 7-covers | Covers | Planned |
+| 8 | 8a-auto-replica | Android Auto browses the catalog copy | Planned |
+| 8 | 8b-auto-offline | Android Auto: offline marks, lists that follow changes, cover icons | Planned |
 
 ## Goal
 
@@ -196,7 +221,7 @@ Listening sessions stay in Paper (`playbackSession`) and are sent through `local
 
 ## Releases
 
-Each release is its own PR (release 2 is three, release 4 five): useful on its own, breaks nothing, rolls back without data loss. Each PR adds an entry to `CHANGELOG.md` and, if behaviour on the device changes, items to [device-regression-checklist.md](device-regression-checklist.md).
+Each PR is useful on its own, breaks nothing and rolls back without data loss. Releases 0, 1, 3 and 7 are one PR each; release 2 is three (2a, 2b, 2c), release 4 six (4a-library, 4a-ui, 4b, 4c, 4d, 4e), release 5 two (5a, 5b), release 6 three (6-item, 6-ui, 6b) and release 8 two (8a, 8b); see [Status](#status). Each PR adds an entry to `CHANGELOG.md` and, if behaviour on the device changes, items to [device-regression-checklist.md](device-regression-checklist.md).
 
 | Release | What | Done when |
 |---|---|---|
@@ -206,11 +231,11 @@ Each release is its own PR (release 2 is three, release 4 five): useful on its o
 | 2b | Progress and "finished": one merge rule, `userJson`, playback ticks written to Room, the old progress sync replaced; direct progress requests are gone, everything goes through the outbox; `unauthorized` no longer signs out | "Finished" and progress resets made in airplane mode reach the server and other devices; a revoked session keeps the library, bookmarks and progress, and the queue is sent after sign-in. |
 | 2c | Listening sessions: own uuid for offline stream segments, per-session `local-all` handling, a `progress_patch` when `local-all` doesn't take the position | After a server outage mid-stream the server has both sessions, total listening time matches, and the server session isn't overwritten. |
 | 3 | Player: downloaded copy always wins, "waiting for server", switch to the file after download | A stream that loses the server doesn't close the player and resumes by itself; a book with a local copy is never streamed. |
-| 4a–4e | Catalogue offline: `replica.db`, reconcile, socket events, catalogue reads in `AbsData`/`$absData`; one PR per tab: Library, Series, Authors, Collections, Playlists | Every tab opens in airplane mode with its last state. |
-| 5 | Home and search from the replica | Home and search are identical online and offline. |
-| 6 | Any item page offline: expanded-copy cache, "not available offline" markers, disabled buttons with a reason | An item that isn't downloaded opens offline. |
+| 4 | Catalogue offline: `replica.db`, reconcile, socket events, catalogue reads in `AbsData`/`$absData` (4a-library); then one PR per tab: Library (4a-ui), Series, Authors, Collections, Playlists | Every tab opens in airplane mode with its last state. |
+| 5 | Home and search from the replica: native shelves, search and podcast episodes (5a), then the pages (5b) | Home and search are identical online and offline. |
+| 6 | Any item page offline: expanded-copy cache (6-item), "not available offline" markers and disabled buttons with a reason (6-ui), the player on the item a queue waits for (6b) | An item that isn't downloaded opens offline. |
 | 7 | Covers offline: disk cache | Covers of shelves that were opened are visible offline. |
-| 8 | Android Auto from the replica: `MediaManager` reads Room | Android Auto offline shows the whole catalogue and plays downloaded items. |
+| 8 | Android Auto from the replica: `MediaManager` reads Room (8a); offline marks, lists that follow changes, cover icons (8b) | Android Auto offline shows the whole catalogue and plays downloaded items. |
 
 ## Risks
 
