@@ -237,11 +237,13 @@ class FolderScanner(private val ctx: Context) {
     val result = DownloadItemScanResult(localItem, null)
     // A relinked item keeps its own local progress, re-pointed to the corrected server item, instead of
     // being overwritten by that item's server progress (it may hold listening not yet synced anywhere)
-    val savedProgress = if (keepLocalProgress) DeviceManager.dbManager.getLocalMediaProgress(localItem.id) else null
+    val retainedEvictionHistory = localItem.isInvalid && item.mediaType == "book" &&
+            localItem.serverConnectionConfigId == item.serverConnectionConfigId && localItem.serverUserId == item.serverUserId
+    val savedProgress = if (keepLocalProgress || retainedEvictionHistory) DeviceManager.dbManager.getLocalMediaProgress(localItem.id) else null
     if (savedProgress != null) {
       result.localMediaProgress =
               repointLocalProgress(savedProgress, item.libraryItemId, item.serverConnectionConfigId, item.serverAddress, item.serverUserId)
-      DeviceManager.dbManager.saveLocalMediaProgress(savedProgress)
+      DeviceManager.dbManager.saveLocalMediaProgressLocked(savedProgress)
     } else item.userMediaProgress?.let { progress ->
       val progressId =
               if (item.episodeId.isNullOrEmpty()) localItem.id
@@ -266,7 +268,12 @@ class FolderScanner(private val ctx: Context) {
                       item.libraryItemId,
                       item.episodeId
               )
-      DeviceManager.dbManager.saveLocalMediaProgress(result.localMediaProgress!!)
+      DeviceManager.dbManager.saveLocalMediaProgressLocked(result.localMediaProgress!!)
+    }
+    // A fresh completed transfer can reactivate an evicted record without replacing its identity.
+    // Presence from a partial scan alone does not establish download completion.
+    if (resolved.all { it.second != null } && item.downloadItemParts.all { it.completed && it.moved && !it.failed }) {
+      localItem.isInvalid = false
     }
     DeviceManager.dbManager.saveLocalLibraryItem(localItem)
     callback(result)

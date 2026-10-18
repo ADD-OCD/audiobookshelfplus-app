@@ -19,6 +19,8 @@ import app.absplus.android.server.RefreshResult
 import app.absplus.android.managers.ItemUpdate
 import app.absplus.android.managers.SecureStorage
 import app.absplus.android.widget.WidgetRenderer
+import app.absplus.android.managers.AutoDeleteManager
+import app.absplus.android.managers.AutoDeleteScheduler
 import app.absplus.android.managers.AutoDownloadScheduler
 import app.absplus.android.services.StorageMoveService
 import com.fasterxml.jackson.core.json.JsonReadFeature
@@ -158,7 +160,6 @@ class AbsDatabase : Plugin() {
   fun setCurrentServerConnectionConfig(call:PluginCall) {
     Log.d(tag, "setCurrentServerConnectionConfig called")
     val serverConfigPayload = jacksonMapper.readValue<ServerConnConfigPayload>(call.data.toString())
-    var serverConnectionConfig = DeviceManager.deviceData.serverConnectionConfigs.find { it.id == serverConfigPayload.id }
 
     val userId =  serverConfigPayload.userId
     val username = serverConfigPayload.username
@@ -167,6 +168,8 @@ class AbsDatabase : Plugin() {
     val refreshToken = serverConfigPayload.refreshToken // Refresh only sent after login or refresh
 
     GlobalScope.launch(Dispatchers.IO) {
+      synchronized(DeviceManager.downloadAuthorizationLock) {
+    var serverConnectionConfig = DeviceManager.deviceData.serverConnectionConfigs.find { it.id == serverConfigPayload.id }
       if (serverConnectionConfig == null) { // New Server Connection
         val serverAddress = call.getString("address", "").toString()
 
@@ -190,7 +193,7 @@ class AbsDatabase : Plugin() {
         DeviceManager.dbManager.saveDeviceData(DeviceManager.deviceData)
       } else {
         var shouldSave = false
-        if (serverConnectionConfig?.username != username || serverConnectionConfig?.token != accessToken || serverConnectionConfig?.version != serverVersion) {
+        if (serverConnectionConfig?.userId != userId || serverConnectionConfig?.username != username || serverConnectionConfig?.token != accessToken || serverConnectionConfig?.version != serverVersion) {
           serverConnectionConfig?.userId = userId
           serverConnectionConfig?.username = username
           serverConnectionConfig?.name = "${serverConnectionConfig?.address} (${serverConnectionConfig?.username})"
@@ -218,12 +221,14 @@ class AbsDatabase : Plugin() {
       if (DeviceManager.serverConnectionConfig?.id != serverConnectionConfig?.id) ApiHandler.invalidateAuthRequests()
       DeviceManager.serverConnectionConfig = serverConnectionConfig
       call.resolve(JSObject(jacksonMapper.writeValueAsString(DeviceManager.serverConnectionConfig)))
+      }
     }
   }
 
   @PluginMethod
   fun removeServerConnectionConfig(call:PluginCall) {
     GlobalScope.launch(Dispatchers.IO) {
+      synchronized(DeviceManager.downloadAuthorizationLock) {
       val serverConnectionConfigId = call.getString("serverConnectionConfigId", "").toString()
 
       // Remove refresh token if it exists
@@ -239,6 +244,7 @@ class AbsDatabase : Plugin() {
         ApiHandler.invalidateAuthRequests()
       }
       call.resolve()
+      }
     }
   }
 
@@ -342,7 +348,7 @@ class AbsDatabase : Plugin() {
   @PluginMethod
   fun removeLocalMediaProgress(call:PluginCall) {
     val localMediaProgressId = call.getString("localMediaProgressId", "").toString()
-    DeviceManager.dbManager.removeLocalMediaProgress(localMediaProgressId)
+    DeviceManager.dbManager.removeLocalMediaProgressLocked(localMediaProgressId)
     call.resolve()
   }
 
@@ -415,7 +421,7 @@ class AbsDatabase : Plugin() {
           episodeId = mediaProgress.episodeId)
 
         Log.d(tag, "syncServerMediaProgressWithLocalMediaProgress: Saving new local media progress $localMediaProgress")
-        DeviceManager.dbManager.saveLocalMediaProgress(localMediaProgress)
+        if (!DeviceManager.dbManager.saveLocalMediaProgressIfItemExists(localMediaProgress)) return call.resolve() // the download was deleted meanwhile; the server keeps its progress
         call.resolve(JSObject(jacksonMapper.writeValueAsString(localMediaProgress)))
       } else {
         Log.e(tag, "syncServerMediaProgressWithLocalMediaProgress: Local library item not found")
@@ -431,7 +437,7 @@ class AbsDatabase : Plugin() {
         MediaEventManager.syncEvent(mediaProgress, "Received from webhook event")
 
         localMediaProgress.updateFromServerMediaProgress(mediaProgress)
-        DeviceManager.dbManager.saveLocalMediaProgress(localMediaProgress)
+        if (!DeviceManager.dbManager.saveLocalMediaProgressIfItemExists(localMediaProgress)) return call.resolve() // the download was deleted meanwhile; the server keeps its progress
         call.resolve(JSObject(jacksonMapper.writeValueAsString(localMediaProgress)))
       }
     }
@@ -500,7 +506,8 @@ class AbsDatabase : Plugin() {
     }
 
     // Save local media progress locally
-    DeviceManager.dbManager.saveLocalMediaProgress(localMediaProgress)
+    // Refused when the download was deleted meanwhile (R32-H02): reported like an item that is already gone
+    if (!DeviceManager.dbManager.saveLocalMediaProgressIfItemExists(localMediaProgress)) return call.resolve(JSObject("{\"error\":\"Library Item not found\"}"))
 
     val lmpstring = jacksonMapper.writeValueAsString(localMediaProgress)
     Log.d(tag, "updateLocalMediaProgressFinished: Local Media Progress String $lmpstring")
@@ -570,7 +577,8 @@ class AbsDatabase : Plugin() {
     }
 
     // Save local media progress locally
-    DeviceManager.dbManager.saveLocalMediaProgress(localMediaProgress)
+    // Refused when the download was deleted meanwhile (R32-H02): reported like an item that is already gone
+    if (!DeviceManager.dbManager.saveLocalMediaProgressIfItemExists(localMediaProgress)) return call.resolve(JSObject("{\"error\":\"Library Item not found\"}"))
 
     val lmpstring = jacksonMapper.writeValueAsString(localMediaProgress)
     Log.d(tag, "updateLocalEbookProgress: Local Media Progress String $lmpstring")
@@ -635,7 +643,10 @@ class AbsDatabase : Plugin() {
 
       GlobalScope.launch(Dispatchers.IO) {
         try {
+          // A count left from a pass under a limit that is now off would keep showing in Settings
+          if (newDeviceSettings.downloadsLimitGb == 0) AutoDeleteManager.setSkippedForLimit(mainActivity, 0)
           AutoDownloadScheduler.reschedule(mainActivity)
+          AutoDeleteScheduler.reschedule(mainActivity)
         } catch (e: Exception) {
           Log.e(tag, "Failed to reschedule auto download", e)
         }
