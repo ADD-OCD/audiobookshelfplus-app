@@ -86,12 +86,31 @@ android {
         signingConfig signingConfigs.release
       }
     }
+    // Separate, non-debuggable contributor channel. Signed offline with its own
+    // persistent key; never reads the production signing configuration.
+    contributor {
+      initWith release
+      applicationIdSuffix ".debug"
+      debuggable false
+      signingConfig null
+      matchingFallbacks = ['release']
+      buildConfigField "String", "PLUS_VERSION", "\"0.20.0-dev.1\""
+    }
   }
   testOptions {
     unitTests.includeAndroidResources = true
     unitTests.all {
       // Paper's Kryo serializers reflect into JDK internals, which JDK 17+ only allows when opened
       jvmArgs '--add-opens=java.base/java.util=ALL-UNNAMED', '--add-opens=java.base/java.lang=ALL-UNNAMED'
+    }
+  }
+}
+
+androidComponents {
+  onVariants(selector().withBuildType("contributor")) { variant ->
+    variant.outputs.each { output ->
+      output.versionCode.set(138)
+      output.versionName.set("0.20.0-dev.1")
     }
   }
 }
