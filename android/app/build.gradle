@@ -98,6 +98,11 @@ android {
       buildConfigField "String", "PLUS_VERSION", "\"0.20.0-dev.2\""
     }
   }
+  sourceSets {
+    // Launcher icon with the RED plus. contributor is initWith release, so it does not inherit src/debug
+    debug.res.srcDir "src/devicon/res"
+    contributor.res.srcDir "src/devicon/res"
+  }
   testOptions {
     unitTests.includeAndroidResources = true
     unitTests.all {
