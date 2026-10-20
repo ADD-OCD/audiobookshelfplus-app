@@ -33,7 +33,11 @@ object FolderFileDeletion {
     /** The storage did not delete a file. */
     DELETE_FAILED("deleteFailed"),
     /** Some files were deleted before one could not be. */
-    PARTIAL("partial")
+    PARTIAL("partial"),
+    /** Some files were deleted, then the app's access to the folder was lost. */
+    PARTIAL_ACCESS_LOST("partialFolderAccess"),
+    /** Some files were deleted, then the folder (or its storage) could no longer be found. */
+    PARTIAL_FOLDER_MISSING("partialFolderMissing")
   }
 
   interface Docs {
@@ -63,13 +67,24 @@ object FolderFileDeletion {
       if (kinds[i] == Kind.MISSING) continue
       val removed = guarded { docs.folderReachable() && docs.kind(uri) == Kind.FILE && docs.deleteFile(uri) }
       if (!removed) {
-        if (!docs.folderReachable()) return Result.UNAVAILABLE.also { detail(docs.unavailableDetail()) }
+        if (!docs.folderReachable()) return Result.UNAVAILABLE.also { detail(unavailableAfter(docs, removedAny)) }
         return Result.FAILED.also { detail(if (removedAny) Detail.PARTIAL else Detail.DELETE_FAILED) }
       }
       removedAny = true
     }
-    if (!docs.folderReachable()) return Result.UNAVAILABLE.also { detail(docs.unavailableDetail()) }
+    if (!docs.folderReachable()) return Result.UNAVAILABLE.also { detail(unavailableAfter(docs, removedAny)) }
     return if (targets.all { docs.kind(it) == Kind.MISSING }) Result.DELETED else Result.FAILED.also { detail(Detail.PARTIAL) }
+  }
+
+  /** Why the folder is unreachable; once a file has already been deleted, the reason says so too (the records are still kept). */
+  private fun unavailableAfter(docs: Docs, removedAny: Boolean): Detail {
+    val why = docs.unavailableDetail()
+    if (!removedAny) return why
+    return when (why) {
+      Detail.FOLDER_ACCESS -> Detail.PARTIAL_ACCESS_LOST
+      Detail.FOLDER_MISSING -> Detail.PARTIAL_FOLDER_MISSING
+      else -> Detail.PARTIAL
+    }
   }
 
   /** Queries preserve errors. Unsupported child/type/delete capabilities fail closed. */

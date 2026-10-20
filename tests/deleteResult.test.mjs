@@ -15,6 +15,8 @@ const REASONS = {
   unverified: 'MessageDeleteUnverified',
   deleteFailed: 'MessageDeleteFailed',
   partial: 'MessageDeletePartial',
+  partialFolderAccess: 'MessageDeletePartialAccessLost',
+  partialFolderMissing: 'MessageDeletePartialFolderMissing',
   shared: 'MessageDeleteShared'
 }
 

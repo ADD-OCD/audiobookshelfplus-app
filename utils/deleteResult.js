@@ -10,6 +10,8 @@ const MESSAGES = {
   unverified: 'MessageDeleteUnverified',
   deleteFailed: 'MessageDeleteFailed',
   partial: 'MessageDeletePartial',
+  partialFolderAccess: 'MessageDeletePartialAccessLost', // some files went, then access to the folder was lost
+  partialFolderMissing: 'MessageDeletePartialFolderMissing', // some files went, then the folder or its storage vanished
   shared: 'MessageDeleteShared'
 }
 
