@@ -65,6 +65,7 @@ test('verify-dir needs the provenance stamp and notices changed or incomplete ou
   fs.mkdirSync(path.join(dist, '_nuxt'))
   const bundle = storeKeys().map((k) => `${k.name}:function(e){}`).join(',')
   fs.writeFileSync(path.join(dist, '_nuxt', 'app.js'), bundle)
+  fs.writeFileSync(path.join(dist, '.nojekyll'), '')
   const unstamped = run(['verify-dir', dist])
   assert.notEqual(unstamped.status, 0)
   assert.match(unstamped.stderr, /frontend-provenance\.json/)

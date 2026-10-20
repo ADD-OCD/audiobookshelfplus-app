@@ -130,7 +130,8 @@ function preflight() {
 
 function files(dir) {
   const out = {}
-  for (const f of walk(dir)) if (f !== PROVENANCE) out[f] = sha(fs.readFileSync(path.join(dir, f)))
+  // Android asset packaging drops dot-files (e.g. .nojekyll), so they are not part of what is stamped or verified
+  for (const f of walk(dir)) if (f !== PROVENANCE && !f.split('/').some((s) => s.startsWith('.'))) out[f] = sha(fs.readFileSync(path.join(dir, f)))
   return out
 }
 
