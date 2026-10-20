@@ -7,6 +7,11 @@ Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and d
 
 Development changes not yet published. The combined local candidate is still awaiting independent integration review.
 
+- **Android 7 and partial-delete messages:** on Android 7 the delete message no longer promises a retry that cannot
+  work there (nothing is deleted and the download stays). If access to the folder is lost after some files were already
+  deleted, the message now says so instead of hiding the partial state; the records are kept either way.
+- **Frontend build check:** `npm run generate` now builds in a private `.nuxt` folder and verifies that the bundle matches
+  the checkout (see `docs/release-process.md`).
 - **New launcher icon** (brushed purple disc): the app icon is now a dry-brush purple disc with the white headphones-and-books emblem and
   the original outlined plus, replacing the bronze icon (launcher, round, adaptive, monochrome, in-app logo and widget/notification
   fallback artwork). Release has a purple plus; debug and contributor builds are identical except for a red plus.
