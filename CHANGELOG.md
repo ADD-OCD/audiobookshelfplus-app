@@ -7,7 +7,7 @@ Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and d
 
 Development changes not yet published. The combined local candidate is still awaiting independent integration review.
 
-- **New launcher icon** (purple disc): the app icon is now a flat purple disc with the white headphones-and-books emblem and
+- **New launcher icon** (brushed purple disc): the app icon is now a dry-brush purple disc with the white headphones-and-books emblem and
   the original outlined plus, replacing the bronze icon (launcher, round, adaptive, monochrome, in-app logo and widget/notification
   fallback artwork). Release has a purple plus; debug and contributor builds are identical except for a red plus.
 - **Android Auto without a reachable server** (issue #33, Discussion #30): the Android Auto menu now opens at once
