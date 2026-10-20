@@ -52,6 +52,7 @@ The debug and release builds of Audiobookshelf+ itself are also distinct package
 | --- | --- |
 | Audiobookshelf+ release | `app.absplus.android` |
 | Audiobookshelf+ debug | `app.absplus.android.debug` |
+| Audiobookshelf+ contributor prereleases (from `v0.20.0-dev.2`) | `app.absplus.android.contributor` |
 
 The same rules as above apply between them: Android treats these as two separate apps.
 - A debug build and a release build can be installed on the same device at the same time.

@@ -90,11 +90,12 @@ android {
     // persistent key; never reads the production signing configuration.
     contributor {
       initWith release
-      applicationIdSuffix ".debug"
+      // Its own package (not the debug builds' app.absplus.android.debug), so it never collides with a CI or local debug install
+      applicationIdSuffix ".contributor"
       debuggable false
       signingConfig null
       matchingFallbacks = ['release']
-      buildConfigField "String", "PLUS_VERSION", "\"0.20.0-dev.1\""
+      buildConfigField "String", "PLUS_VERSION", "\"0.20.0-dev.2\""
     }
   }
   testOptions {
@@ -109,8 +110,8 @@ android {
 androidComponents {
   onVariants(selector().withBuildType("contributor")) { variant ->
     variant.outputs.each { output ->
-      output.versionCode.set(138)
-      output.versionName.set("0.20.0-dev.1")
+      output.versionCode.set(139)
+      output.versionName.set("0.20.0-dev.2")
     }
   }
 }

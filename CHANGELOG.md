@@ -18,7 +18,16 @@ Development changes not yet published. The combined local candidate is still awa
 - **Managed download folders and recovery:** folder selection explains that Audiobookshelf+ manages the selected
   folder. SAF publication refuses unsafe collisions and does not automatically delete provider documents. Failed
   downloads with lost folder access offer Choose folder, followed by an explicit Retry.
-- **Paused seeks:** an explicit seek while paused is saved without requiring playback to resume.
+- **Paused seeks:** an explicit seek while paused is saved without requiring playback to resume. When the next item
+  starts (a playlist, series or podcast continuing, Android Auto, media buttons or the widget), the player's seek to that
+  item's start is no longer saved into the previous item, which kept its finished state and position.
+- **Downloads into a taken file name:** a download whose name is already used in the selected folder (for example by
+  files left from a download whose record was lost) is saved under its own alternative name instead of failing; nothing
+  that exists is replaced.
+- **Delete messages:** deleting a download that can't be deleted now says why (folder access lost, folder or storage
+  missing, SD card out, a folder where a file should be, a file that couldn't be deleted, some files deleted) instead of
+  "Failed to delete" or "SD card not available". Deleting downloads in a picked folder now works on Android 8 and 9;
+  on Android 7 the app says to use the file manager.
 - **Automatic deletion and download budgets** (contributed by Stanislav Markin, PR #32): eligible finished audiobook
   downloads can be evicted to reclaim space. The download budget is best-effort; unavailable storage and unsupported
   SAF deletion are deferred, and listening history is retained. Podcast retention remains a separate policy.
