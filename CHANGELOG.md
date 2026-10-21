@@ -5,7 +5,11 @@ Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and d
 
 ## Unreleased
 
-Development changes not yet published. The combined local candidate is still awaiting independent integration review.
+Nothing yet.
+
+## v0.20.0 — Automatic deletion, safer history and progress, long jumps
+
+Published 2026-10-21.
 
 - **Android 7 and partial-delete messages:** on Android 7 the delete message no longer promises a retry that cannot
   work there (nothing is deleted and the download stays). If access to the folder is lost after some files were already
