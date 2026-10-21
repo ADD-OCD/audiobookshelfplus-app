@@ -5,7 +5,9 @@ Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and d
 
 ## Unreleased
 
-Nothing yet.
+- **No buffer bar for downloads** (contributed by Stanislav Markin): the player's seek bars no longer draw the buffered
+  stretch ahead of the position when a downloaded book or episode plays from the device, where it looked like
+  streaming. Streams draw what the player has buffered, as before.
 
 ## v0.20.0 — Automatic deletion, safer history and progress, long jumps
 
