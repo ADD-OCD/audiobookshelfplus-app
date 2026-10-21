@@ -18,3 +18,9 @@ export function downloadsFreeBytes(status) {
   const sd = status.sd
   return sd && sd.mounted === true && sd.uuid === setting.slice(3) && typeof sd.freeBytes === 'number' ? sd.freeBytes : null
 }
+
+// Turning auto delete on starts a cleanup check at once, which can remove files, so only Off -> On asks first.
+// Turning it off, or repeating the current state, never asks.
+export function autoDeleteNeedsConfirmation(current, requested) {
+  return !current && !!requested
+}

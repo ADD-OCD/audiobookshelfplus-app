@@ -216,7 +216,7 @@
       <p class="uppercase text-xs font-semibold text-fg-muted mb-2 mt-10">{{ $strings.HeaderAutoDeleteSettings }}</p>
       <div class="flex items-center py-3">
         <div class="w-10 flex justify-center">
-          <ui-toggle-switch v-model="settings.autoDeleteFinishedBooks" @input="saveSettings" />
+          <ui-toggle-switch :value="settings.autoDeleteFinishedBooks" @input="requestAutoDelete" />
         </div>
         <p class="pl-4">{{ $strings.LabelAutoDeleteBooks }}</p>
       </div>
@@ -336,7 +336,7 @@
 
 <script>
 import { Dialog } from '@capacitor/dialog'
-import { AUTO_DELETE_DELAY_DAYS, DOWNLOADS_LIMIT_GB, downloadsFreeBytes, normalizeDelayDays, normalizeLimitGb } from '@/utils/autoDeleteSettings'
+import { AUTO_DELETE_DELAY_DAYS, autoDeleteNeedsConfirmation, DOWNLOADS_LIMIT_GB, downloadsFreeBytes, normalizeDelayDays, normalizeLimitGb } from '@/utils/autoDeleteSettings'
 import jumpLabelMixin from '@/mixins/jumpLabel'
 import diagnosticLogMixin from '@/mixins/diagnosticLog'
 import { AbsDatabase, AbsDownloader } from '@/plugins/capacitor'
@@ -350,6 +350,7 @@ export default {
       loading: false,
       deviceData: null,
       showMoreMenuDialog: false,
+      confirmingAutoDelete: false,
       showSleepTimerLengthModal: false,
       showAutoSleepTimerRewindLengthModal: false,
       showPodcastEpisodesOrderModal: false,
@@ -794,6 +795,29 @@ export default {
     showAutoDeleteDelayOptions() {
       this.moreMenuSetting = 'autoDeleteDelayDays'
       this.showMoreMenuDialog = true
+    },
+    // Off -> On asks first because enabling runs a cleanup check immediately; cancel changes and saves nothing.
+    async requestAutoDelete(enabled) {
+      if (this.confirmingAutoDelete) return
+      if (!autoDeleteNeedsConfirmation(this.settings.autoDeleteFinishedBooks, enabled)) {
+        this.settings.autoDeleteFinishedBooks = !!enabled
+        this.saveSettings()
+        return
+      }
+      this.confirmingAutoDelete = true
+      try {
+        const { value } = await Dialog.confirm({
+          title: this.$strings.LabelAutoDeleteEnableTitle,
+          message: this.$strings.MessageAutoDeleteEnableConfirm,
+          okButtonTitle: this.$strings.LabelAutoDeleteEnable,
+          cancelButtonTitle: this.$strings.ButtonCancel
+        })
+        if (!value) return
+        this.settings.autoDeleteFinishedBooks = true
+        await this.saveSettings()
+      } finally {
+        this.confirmingAutoDelete = false
+      }
     },
     showDownloadsLimitOptions() {
       this.moreMenuSetting = 'downloadsLimitGb'
