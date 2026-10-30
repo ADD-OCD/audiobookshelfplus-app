@@ -1,3 +1,4 @@
+import { bookshelfTabs, planViewSwitch } from '@/utils/libraryViewState'
 const { BookCoverAspectRatio } = require('../plugins/constants')
 
 export const state = () => ({
@@ -8,7 +9,9 @@ export const state = () => ({
   issues: 0,
   filterData: null,
   numUserPlaylists: 0,
-  ereaderDevices: []
+  ereaderDevices: [],
+  viewState: { owner: null, libraries: {} },
+  viewStateLoaded: false
 })
 
 export const getters = {
@@ -30,6 +33,9 @@ export const getters = {
   },
   getLibraryIsAudiobooksOnly: (state, getters) => {
     return !!getters.getCurrentLibrarySettings?.audiobooksOnly
+  },
+  getBookshelfTabs: (state, getters, rootState, rootGetters) => {
+    return bookshelfTabs({ mediaType: getters.getCurrentLibraryMediaType, hasPlaylists: !!state.numUserPlaylists, isAdmin: !!rootGetters['user/getIsAdminOrUp'] })
   }
 }
 
@@ -42,12 +48,20 @@ export const actions = {
 
     return this.$nativeHttp
       .get(`/api/libraries/${libraryId}?include=filterdata`)
-      .then((data) => {
+      .then(async (data) => {
         const library = data.library
         const filterData = data.filterdata
         const issues = data.issues || 0
         const numUserPlaylists = data.numUserPlaylists || 0
 
+        if (state.viewStateLoaded) {
+          const plan = planViewSwitch(state.viewState, libraryId, rootState.user.settings)
+          if (plan.settingsUpdate) await dispatch('user/updateUserSettings', plan.settingsUpdate, { root: true })
+          if (plan.state !== state.viewState) {
+            commit('setViewState', plan.state)
+            dispatch('saveViewState')
+          }
+        }
         dispatch('user/checkUpdateLibrarySortFilter', library.mediaType, { root: true })
 
         commit('addUpdate', library)
@@ -97,7 +111,15 @@ export const actions = {
         return false
       })
   },
-
+  async loadViewState({ commit }) {
+    commit('setViewState', await this.$localStore.getLibraryViewState())
+    commit('setViewStateLoaded', true)
+  },
+  // Writes only after loading, so an early write can never overwrite the saved memory
+  async saveViewState({ state }) {
+    if (!state.viewStateLoaded) return
+    await this.$localStore.setLibraryViewState(state.viewState)
+  }
 }
 
 export const mutations = {
@@ -181,5 +203,11 @@ export const mutations = {
   },
   setEReaderDevices(state, ereaderDevices) {
     state.ereaderDevices = ereaderDevices
+  },
+  setViewState(state, viewState) {
+    state.viewState = viewState
+  },
+  setViewStateLoaded(state, val) {
+    state.viewStateLoaded = val
   }
 }

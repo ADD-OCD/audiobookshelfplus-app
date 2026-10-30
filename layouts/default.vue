@@ -128,6 +128,7 @@ export default {
       }
 
       await this.$store.dispatch('user/loadUserSettings')
+      await this.$store.dispatch('libraries/loadViewState')
     },
     async attemptConnection() {
       console.warn('[default] attemptConnection')
@@ -386,7 +387,8 @@ export default {
       AbsLogger.info({ tag: 'default', message: `mounted: initializing first load (${this.$platform} v${this.$config.version})` })
       this.$store.commit('setIsFirstLoad', false)
 
-      this.loadSavedSettings()
+      // Before the first libraries/fetch, which saves the sort and filter of the library that owned them
+      await this.loadSavedSettings()
 
       const deviceData = await this.$db.getDeviceData()
       this.$store.commit('setDeviceData', deviceData)
