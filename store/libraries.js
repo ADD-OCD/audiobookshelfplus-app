@@ -1,4 +1,5 @@
-import { bookshelfTabs, planViewSwitch } from '@/utils/libraryViewState'
+import VueRouter from 'vue-router'
+import { bookshelfTabs, planViewSwitch, recordTab, restoreTab } from '@/utils/libraryViewState'
 const { BookCoverAspectRatio } = require('../plugins/constants')
 
 export const state = () => ({
@@ -11,8 +12,19 @@ export const state = () => ({
   numUserPlaylists: 0,
   ereaderDevices: [],
   viewState: { owner: null, libraries: {} },
-  viewStateLoaded: false
+  viewStateLoaded: false,
+  switching: false,
+  tabRecordingSuspended: false
 })
+
+// Duplicate, cancelled and redirected navigations are expected while pages react to library-changed
+async function replaceRoute(router, path) {
+  try {
+    await router.replace(path)
+  } catch (error) {
+    if (!VueRouter.isNavigationFailure(error)) console.error('[libraries] Navigation failed', path, error)
+  }
+}
 
 export const getters = {
   getCurrentLibrary: state => {
@@ -110,6 +122,34 @@ export const actions = {
         commit('set', [])
         return false
       })
+  },
+  // Switch from the library button or the libraries menu: opens the library on its remembered tab
+  async switchLibrary({ state, getters, commit, dispatch }, libraryId) {
+    if (state.switching) return false
+    commit('setSwitching', true)
+    // Pages redirect on library-changed; those intermediate routes must not be remembered for the new library
+    commit('setTabRecordingSuspended', true)
+    try {
+      if (!(await dispatch('fetch', libraryId))) return false
+      // After the fetch: the available tabs depend on the new library's playlists
+      const target = restoreTab(state.viewState, libraryId, getters.getBookshelfTabs)
+      this.$eventBus.$emit('library-changed', libraryId)
+      this.$localStore.setLastLibraryId(libraryId)
+      await replaceRoute(this.$router, target)
+      commit('setTabRecordingSuspended', false)
+      dispatch('rememberTab', this.$router.currentRoute.name)
+      return true
+    } finally {
+      commit('setTabRecordingSuspended', false)
+      commit('setSwitching', false)
+    }
+  },
+  rememberTab({ state, commit, dispatch }, routeName) {
+    if (!state.viewStateLoaded || !state.currentLibraryId) return
+    const next = recordTab(state.viewState, state.currentLibraryId, routeName)
+    if (!next) return
+    commit('setViewState', next)
+    dispatch('saveViewState')
   },
   async loadViewState({ commit }) {
     commit('setViewState', await this.$localStore.getLibraryViewState())
@@ -209,5 +249,11 @@ export const mutations = {
   },
   setViewStateLoaded(state, val) {
     state.viewStateLoaded = val
+  },
+  setSwitching(state, val) {
+    state.switching = val
+  },
+  setTabRecordingSuspended(state, val) {
+    state.tabRecordingSuspended = val
   }
 }
