@@ -79,15 +79,18 @@ export const actions = {
 
         // Library, owner and settings change in the same tick (updateUserSettings commits before its first await), so
         // neither an overlapping fetch nor a bookshelf reloading on user-settings sees them out of step
+        let settingsApplied = null
         if (state.viewStateLoaded) {
           const plan = planViewSwitch(state.viewState, libraryId, rootState.user.settings)
           if (plan.state !== state.viewState) {
             commit('setViewState', plan.state)
             dispatch('saveViewState')
           }
-          if (plan.settingsUpdate) await dispatch('user/updateUserSettings', plan.settingsUpdate, { root: true })
+          if (plan.settingsUpdate) settingsApplied = dispatch('user/updateUserSettings', plan.settingsUpdate, { root: true })
         }
+        // Still in the same tick: after the await another fetch may have made a different library current
         dispatch('user/checkUpdateLibrarySortFilter', library.mediaType, { root: true })
+        await settingsApplied
         return data
       })
       .catch((error) => {
