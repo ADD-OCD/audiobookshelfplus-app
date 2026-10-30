@@ -30,10 +30,16 @@ export default {
       disconnectTime: 0,
       socketDisconnectedTime: 0,
       timeLostFocus: 0,
+      routeChanges: 0,
       currentLang: null
     }
   },
   watch: {
+    routeName(name) {
+      this.routeChanges++
+      const { startupTabRestored, tabRecordingSuspended } = this.$store.state.libraries
+      if (startupTabRestored && !tabRecordingSuspended) this.$store.dispatch('libraries/rememberTab', name)
+    },
     networkConnected: {
       handler(newVal, oldVal) {
         if (!this.hasMounted) {
@@ -233,11 +239,24 @@ export default {
         return
       }
       this.inittingLibraries = true
+      // The remembered tab replaces Home only if nothing navigated away while the library loaded
+      const wasHome = this.routeName === 'bookshelf'
+      const routeChangesBefore = this.routeChanges
+      this.$store.commit('libraries/setStartupRestorePending', true)
       await this.$store.dispatch('libraries/load')
 
       AbsLogger.info({ tag: 'default', message: `initLibraries loading library ${this.currentLibraryName}` })
-      await this.$store.dispatch('libraries/fetch', this.currentLibraryId)
+      const fetched = await this.$store.dispatch('libraries/fetch', this.currentLibraryId)
       this.$eventBus.$emit('library-changed')
+      this.$store.commit('libraries/setStartupRestorePending', false)
+      // Without a library the network watcher calls initLibraries again, and that call restores the tab
+      if (this.currentLibraryId && !this.$store.state.libraries.startupTabRestored) {
+        if (fetched && wasHome && this.routeName === 'bookshelf' && this.routeChanges === routeChangesBefore) {
+          await this.$store.dispatch('libraries/openRememberedTab')
+        }
+        this.$store.commit('libraries/setStartupTabRestored', true)
+        this.$store.dispatch('libraries/rememberTab', this.routeName)
+      }
       this.inittingLibraries = false
     },
     async syncLocalSessions(isFirstSync) {

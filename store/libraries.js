@@ -14,7 +14,10 @@ export const state = () => ({
   viewState: { owner: null, libraries: {} },
   viewStateLoaded: false,
   switching: false,
-  tabRecordingSuspended: false
+  tabRecordingSuspended: false,
+  // Once per process: the start-up library has opened on its remembered tab (or the chance has passed)
+  startupTabRestored: false,
+  startupRestorePending: false
 })
 
 // Duplicate, cancelled and redirected navigations are expected while pages react to library-changed
@@ -81,6 +84,8 @@ export const actions = {
         commit('setLibraryFilterData', filterData)
         commit('setNumUserPlaylists', numUserPlaylists)
         commit('setCurrentLibrary', libraryId)
+        // A library chosen outside start-up (e.g. by opening a book) gets no start-up restore but its tabs are remembered
+        if (!state.startupRestorePending) commit('setStartupTabRestored', true)
         return data
       })
       .catch((error) => {
@@ -143,6 +148,10 @@ export const actions = {
       commit('setTabRecordingSuspended', false)
       commit('setSwitching', false)
     }
+  },
+  async openRememberedTab({ state, getters }) {
+    const target = restoreTab(state.viewState, state.currentLibraryId, getters.getBookshelfTabs)
+    if (target !== '/bookshelf') await replaceRoute(this.$router, target)
   },
   rememberTab({ state, commit, dispatch }, routeName) {
     if (!state.viewStateLoaded || !state.currentLibraryId) return
@@ -255,5 +264,11 @@ export const mutations = {
   },
   setTabRecordingSuspended(state, val) {
     state.tabRecordingSuspended = val
+  },
+  setStartupTabRestored(state, val) {
+    state.startupTabRestored = val
+  },
+  setStartupRestorePending(state, val) {
+    state.startupRestorePending = val
   }
 }
