@@ -69,16 +69,6 @@ export const actions = {
         const issues = data.issues || 0
         const numUserPlaylists = data.numUserPlaylists || 0
 
-        if (state.viewStateLoaded) {
-          const plan = planViewSwitch(state.viewState, libraryId, rootState.user.settings)
-          if (plan.settingsUpdate) await dispatch('user/updateUserSettings', plan.settingsUpdate, { root: true })
-          if (plan.state !== state.viewState) {
-            commit('setViewState', plan.state)
-            dispatch('saveViewState')
-          }
-        }
-        dispatch('user/checkUpdateLibrarySortFilter', library.mediaType, { root: true })
-
         commit('addUpdate', library)
         commit('setLibraryIssues', issues)
         commit('setLibraryFilterData', filterData)
@@ -86,6 +76,18 @@ export const actions = {
         commit('setCurrentLibrary', libraryId)
         // A library chosen outside start-up (e.g. by opening a book) gets no start-up restore but its tabs are remembered
         if (!state.startupRestorePending) commit('setStartupTabRestored', true)
+
+        // Library, owner and settings change in the same tick (updateUserSettings commits before its first await), so
+        // neither an overlapping fetch nor a bookshelf reloading on user-settings sees them out of step
+        if (state.viewStateLoaded) {
+          const plan = planViewSwitch(state.viewState, libraryId, rootState.user.settings)
+          if (plan.state !== state.viewState) {
+            commit('setViewState', plan.state)
+            dispatch('saveViewState')
+          }
+          if (plan.settingsUpdate) await dispatch('user/updateUserSettings', plan.settingsUpdate, { root: true })
+        }
+        dispatch('user/checkUpdateLibrarySortFilter', library.mediaType, { root: true })
         return data
       })
       .catch((error) => {

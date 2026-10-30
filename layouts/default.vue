@@ -255,7 +255,8 @@ export default {
           await this.$store.dispatch('libraries/openRememberedTab')
         }
         this.$store.commit('libraries/setStartupTabRestored', true)
-        this.$store.dispatch('libraries/rememberTab', this.routeName)
+        // After a failed load the app stays on Home only by default; that must not replace the remembered tab
+        if (fetched) this.$store.dispatch('libraries/rememberTab', this.routeName)
       }
       this.inittingLibraries = false
     },
