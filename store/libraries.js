@@ -1,5 +1,5 @@
 import VueRouter from 'vue-router'
-import { activateViewScope, bookshelfTabs, planViewSwitch, recordTab, restoreTab, serializeLibraryViewScopes, viewScopeKey } from '@/utils/libraryViewState'
+import { activateViewScope, bookshelfTabs, emptyViewState, planViewSwitch, recordTab, restoreTab, serializeLibraryViewScopes, viewScopeKey } from '@/utils/libraryViewState'
 const { BookCoverAspectRatio } = require('../plugins/constants')
 
 export const state = () => ({
@@ -173,9 +173,13 @@ export const actions = {
     dispatch('saveViewState')
   },
   async loadViewState({ commit }) {
-    const [scopes, legacy] = await Promise.all([this.$localStore.getLibraryViewScopes(), this.$localStore.getLegacyLibraryViewState()])
+    const [memory, legacy] = await Promise.all([this.$localStore.getLibraryViewScopes(), this.$localStore.getLegacyLibraryViewState()])
     commit('setViewStateLoaded', true)
-    commit('setViewScopes', scopes)
+    commit('setViewScopes', memory.scopes)
+    // The live sort/filter still belong to the account that used the app last: it stays the active one until the account
+    // that signs in is known, and a different account then takes over like after a sign-out (see activateViewScope)
+    commit('setViewScope', memory.active)
+    commit('setViewState', memory.scopes[memory.active] || emptyViewState())
     commit('setLegacyViewState', legacy.owner || Object.keys(legacy.libraries).length ? legacy : null)
   },
   // Makes the memory of the signed-in account the active one. Synchronous on purpose (no await): fetch calls it in the same

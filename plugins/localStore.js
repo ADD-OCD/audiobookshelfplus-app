@@ -1,5 +1,5 @@
 import { Preferences } from '@capacitor/preferences'
-import { emptyViewState, parseLibraryViewScopes, parseLibraryViewState } from '@/utils/libraryViewState'
+import { emptyViewState, parseLibraryViewMemory, parseLibraryViewState } from '@/utils/libraryViewState'
 
 class LocalStorage {
   constructor(vuexStore) {
@@ -136,13 +136,14 @@ class LocalStorage {
     }
   }
 
+  // { scopes, active }: the memory of every account and the account the live sort/filter last belonged to
   async getLibraryViewScopes() {
     try {
       const obj = (await Preferences.get({ key: 'libraryViewScopes' })) || {}
-      return parseLibraryViewScopes(obj.value ?? null)
+      return parseLibraryViewMemory(obj.value ?? null)
     } catch (error) {
       console.error('[LocalStorage] Failed to get library view scopes', error)
-      return {}
+      return { scopes: {}, active: null }
     }
   }
 

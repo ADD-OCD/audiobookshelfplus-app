@@ -107,29 +107,35 @@ export function viewScopeKey(serverConnectionConfigId, userId) {
   return isNonEmptyString(serverConnectionConfigId) && isNonEmptyString(userId) ? `${serverConnectionConfigId}|${userId}` : null
 }
 
-// Stored form: { version: 2, scopes: { [scopeKey]: viewState } }; anything invalid is dropped
-export function parseLibraryViewScopes(raw) {
+// Stored form: { version: 2, active: scopeKey, scopes: { [scopeKey]: viewState } }; anything invalid is dropped. `active` is the
+// account the live sort/filter (user.settings) were last used by: after a restart they still belong to it.
+export function parseLibraryViewMemory(raw) {
   let parsed
   try {
     parsed = JSON.parse(raw)
   } catch (error) {
-    return {}
+    return { scopes: {}, active: null }
   }
   const scopes = {}
-  if (isObject(parsed) && parsed.version === 2 && isObject(parsed.scopes)) {
+  if (!isObject(parsed) || parsed.version !== 2) return { scopes, active: null }
+  if (isObject(parsed.scopes)) {
     for (const [scope, entry] of Object.entries(parsed.scopes)) {
       const state = isObject(entry) ? parseLibraryViewState(JSON.stringify(entry)) : emptyViewState()
       if (scope && hasViewContent(state)) scopes[scope] = state
     }
   }
-  return scopes
+  return { scopes, active: isNonEmptyString(parsed.active) ? parsed.active : null }
 }
 
-// What is written: every other account's memory as it was, and the active one's current memory
+export function parseLibraryViewScopes(raw) {
+  return parseLibraryViewMemory(raw).scopes
+}
+
+// What is written: every other account's memory as it was, the active one's current memory, and who the active one is
 export function serializeLibraryViewScopes(scopes, activeScope, viewState) {
   const all = { ...scopes }
   if (activeScope && hasViewContent(viewState)) all[activeScope] = { owner: viewState.owner, libraries: viewState.libraries }
-  return JSON.stringify({ version: 2, scopes: all })
+  return JSON.stringify({ version: 2, active: activeScope || null, scopes: all })
 }
 
 // Another account (or none) becomes active. The account that is left keeps what it showed (the owner library's sort/filter

@@ -13,7 +13,7 @@
           <p class="text-sm leading-4 ml-2 mt-0.5 max-w-24 truncate">{{ currentLibraryName }}</p>
         </button>
         <!-- The long press is a touch gesture that TalkBack, a keyboard or a switch cannot make: this opens the menu for them. Hidden until it has the keyboard focus; TalkBack still reads it. -->
-        <button v-if="quickSwitchTargetId" type="button" aria-label="Show library menu" class="sr-only focus:not-sr-only focus:ml-1 focus:px-1 focus:py-2 rounded-md" @click="clickShowLibraryModal">
+        <button v-if="quickSwitchTargetId" type="button" aria-label="Show library menu" class="sr-only focus:not-sr-only focus:ml-1 focus:px-1 focus:py-2 focus:bg-bg focus:bg-opacity-30 rounded-md" @click="clickShowLibraryModal">
           <span class="material-symbols text-xl leading-none">expand_more</span>
         </button>
       </div>

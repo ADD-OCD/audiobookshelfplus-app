@@ -87,7 +87,7 @@ test('persistence: serialize/parse round trip, restart, and invalid stored data'
   for (const bad of [null, 'nope', '{}', '[]', '{"version":1,"scopes":{"a":{}}}', '{"version":2,"scopes":[]}', '{"version":2,"scopes":{"a":"x","":{"owner":"L"},"b":{"libraries":{"L":{"tab":"evil"}}}}}']) {
     assert.deepEqual(parseLibraryViewScopes(bad), {}, String(bad))
   }
-  assert.equal(serializeLibraryViewScopes({}, null, emptyViewState()), '{"version":2,"scopes":{}}')
+  assert.equal(serializeLibraryViewScopes({}, null, emptyViewState()), '{"version":2,"active":null,"scopes":{}}')
 })
 
 test('legacy memory goes to one unambiguous account and is otherwise left alone', () => {
@@ -128,4 +128,42 @@ test('the store activates the account memory before it fetches and records tabs 
   const activate = source.slice(source.indexOf('  activateViewScope({'), source.indexOf('  // Writes only after loading'))
   assert.doesNotMatch(activate, /\bawait\b/, 'activation is synchronous (same tick as the library switch)')
   assert.match(activate, /serverConnectionConfigs\?\.length === 1/, 'the legacy memory is claimed only when the account is unambiguous')
+})
+
+// ---- a restart as another account (the live sort/filter still belong to the account that used the app last)
+
+test('a restart as another account does not inherit the previous account\'s sort and filter', () => {
+  const { parseLibraryViewMemory } = util
+  const live = { mobileOrderBy: 'media.duration', mobileOrderDesc: true, mobileFilterBy: 'series.c2VyaWVzQQ' }
+  // account A was active and owns the live settings of L1; this is what the app wrote
+  const raw = serializeLibraryViewScopes({}, 'c1|A', { owner: 'L1', libraries: { L1: { tab: 'bookshelf-library' } } })
+  const memory = parseLibraryViewMemory(raw)
+  assert.equal(memory.active, 'c1|A')
+  // load: the stored active account is the previous one, so signing in as B (another server) is an account switch
+  const restored = { scopes: memory.scopes, scope: memory.active, viewState: memory.scopes[memory.active] || emptyViewState() }
+  const asB = activateViewScope(restored, 'c2|B', live)
+  assert.equal(asB.viewState.resetSettings, true)
+  assert.deepEqual(planViewSwitch(asB.viewState, 'LB', live).settingsUpdate, { mobileFilterBy: 'all' }, 'A\'s series filter would show an empty shelf on B')
+  assert.equal(asB.scopes['c1|A'].libraries.L1.mobileFilterBy, 'series.c2VyaWVzQQ', 'A keeps its own filter')
+  // the same account after a restart changes nothing: its state is already the active one
+  assert.equal(restored.scope, 'c1|A')
+  assert.equal(restored.viewState.owner, 'L1')
+})
+
+test('the stored active account survives without content and bad values are dropped', () => {
+  const { parseLibraryViewMemory } = util
+  assert.equal(serializeLibraryViewScopes({}, 'c|u', emptyViewState()), '{"version":2,"active":"c|u","scopes":{}}')
+  assert.equal(parseLibraryViewMemory('{"version":2,"active":"c|u","scopes":{}}').active, 'c|u')
+  for (const bad of [null, 'x', '{"version":2,"active":7,"scopes":{}}', '{"version":2,"active":"","scopes":{}}', '{"version":1,"active":"c|u","scopes":{}}']) {
+    assert.equal(parseLibraryViewMemory(bad).active, null, String(bad))
+  }
+  assert.deepEqual(parseLibraryViewMemory(serializeLibraryViewScopes({}, null, emptyViewState())), { scopes: {}, active: null })
+})
+
+test('the store starts from the stored active account', async () => {
+  const source = await read('../store/libraries.js')
+  const load = source.slice(source.indexOf('  async loadViewState('), source.indexOf('  // Makes the memory of the signed-in account'))
+  assert.match(load, /setViewScope', memory\.active\)/)
+  assert.match(load, /setViewState', memory\.scopes\[memory\.active\] \|\| emptyViewState\(\)\)/)
+  assert.match(source, /serializeLibraryViewScopes\(state\.viewScopes, state\.viewScope, state\.viewState\)/)
 })
