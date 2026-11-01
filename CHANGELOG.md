@@ -5,7 +5,13 @@ Audiobookshelf+ changes by release. Earlier releases, their `versionCode`s and d
 
 ## Unreleased
 
-Nothing yet.
+- **One-tap library switch** (contributed by Stanislav Markin): with exactly two libraries (for example books and
+  podcasts), a tap on the library button in the top bar opens the other one; a long press opens the libraries menu.
+  With one or three and more libraries a tap opens the menu, as before. Each library remembers its tab, sort and
+  filter, whichever way you switch, and the app reopens the last library on its last tab after a restart.
+- **No buffer bar for downloads** (contributed by Stanislav Markin): the player's seek bars no longer draw the buffered
+  stretch ahead of the position when a downloaded book or episode plays from the device, where it looked like
+  streaming. Streams draw what the player has buffered, as before.
 
 ## v0.20.0 — Automatic deletion, safer history and progress, long jumps
 
