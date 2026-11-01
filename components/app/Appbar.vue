@@ -7,10 +7,14 @@
       <a v-if="showBack" @click="back" aria-label="Back" class="rounded-full h-10 w-10 flex items-center justify-center mr-2 cursor-pointer">
         <span class="material-symbols text-3xl text-fg">arrow_back</span>
       </a>
-      <div v-if="user && currentLibrary">
-        <button type="button" aria-label="Show library modal" class="library-selector pl-1.5 pr-2.5 py-2 bg-bg bg-opacity-30 rounded-md flex items-center" @click="clickLibraryButton" @touchstart.passive="libraryButtonTouchStart" @touchmove.passive="libraryButtonTouchMove" @touchend="cancelLibraryLongPress" @touchcancel="cancelLibraryLongPress" @contextmenu.prevent>
+      <div v-if="user && currentLibrary" class="flex items-center">
+        <button type="button" aria-label="Show library modal" class="library-selector pl-1.5 pr-2.5 py-2 bg-bg bg-opacity-30 rounded-md flex items-center" :aria-description="libraryButtonDescription" @click="clickLibraryButton" @touchstart.passive="libraryButtonTouchStart" @touchmove.passive="libraryButtonTouchMove" @touchend="cancelLibraryLongPress" @touchcancel="cancelLibraryLongPress" @keydown="libraryButtonKeydown" @contextmenu.prevent>
           <ui-library-icon :icon="currentLibraryIcon" :size="4" font-size="base" />
           <p class="text-sm leading-4 ml-2 mt-0.5 max-w-24 truncate">{{ currentLibraryName }}</p>
+        </button>
+        <!-- The long press is a touch gesture that TalkBack, a keyboard or a switch cannot make: this opens the menu for them. Hidden until it has the keyboard focus; TalkBack still reads it. -->
+        <button v-if="quickSwitchTargetId" type="button" aria-label="Show library menu" class="sr-only focus:not-sr-only focus:ml-1 focus:px-1 focus:py-2 rounded-md" @click="clickShowLibraryModal">
+          <span class="material-symbols text-xl leading-none">expand_more</span>
         </button>
       </div>
 
@@ -76,6 +80,12 @@ export default {
     quickSwitchTargetId() {
       return otherLibraryId(this.$store.state.libraries.libraries, this.$store.state.libraries.currentLibraryId)
     },
+    // With two libraries a tap switches, which the fixed name "Show library modal" does not say
+    libraryButtonDescription() {
+      if (!this.quickSwitchTargetId) return undefined
+      const target = this.$store.state.libraries.libraries.find((library) => library.id === this.quickSwitchTargetId)
+      return `Switches to library ${target?.name || ''}. Use Show library menu to choose a library.`
+    },
     showBack() {
       if (!this.$route.name) return true
       return this.$route.name !== 'index' && !this.$route.name.startsWith('bookshelf')
@@ -115,6 +125,14 @@ export default {
       }
       await this.$hapticsImpact()
       this.$store.dispatch('libraries/switchLibrary', this.quickSwitchTargetId)
+    },
+    // Context-menu key or Shift+F10 on the focused button: the keyboard's long press
+    libraryButtonKeydown(event) {
+      if (!this.quickSwitchTargetId) return
+      if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
+        event.preventDefault()
+        this.clickShowLibraryModal()
+      }
     },
     libraryButtonTouchStart(event) {
       // The WebView may not send a click after a long press, so a stale flag must not swallow the next tap
