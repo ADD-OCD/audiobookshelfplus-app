@@ -1,6 +1,6 @@
 // Per-library view memory (bookshelf tab, sort and filter). The global user.settings sort/filter belong to `owner`, the
 // library whose view they currently show; switching to another library snapshots them under the owner and applies the
-// new library's saved view.
+// new library's saved view. Each account (saved server connection + user) has its own memory, kept in `scopes`.
 
 // Add Podcast is an action rather than a section, so it is never restored
 export const REMEMBERED_TABS = ['bookshelf', 'bookshelf-latest', 'bookshelf-library', 'bookshelf-series', 'bookshelf-collections', 'bookshelf-authors', 'bookshelf-playlists']
@@ -66,15 +66,26 @@ export function recordTab(state, libraryId, routeName) {
   return { ...state, libraries: { ...state.libraries, [libraryId]: { ...entry, tab: routeName } } }
 }
 
-export function planViewSwitch(state, libraryId, currentSettings) {
-  // First run with this memory: the current sort/filter are taken as the first fetched library's own
-  if (!state.owner) return { state: { ...state, owner: libraryId }, settingsUpdate: null }
-  if (state.owner === libraryId) return { state, settingsUpdate: null }
-
+// The owner keeps the sort/filter that are currently set
+function snapshotOwner(state, currentSettings) {
   const snapshot = validEntry(Object.fromEntries(VIEW_SETTINGS.map((key) => [key, currentSettings?.[key]])))
   const ownerEntry = { ...state.libraries[state.owner] }
   for (const key of VIEW_SETTINGS) delete ownerEntry[key]
-  const libraries = { ...state.libraries, [state.owner]: { ...ownerEntry, ...snapshot } }
+  return { ...state.libraries, [state.owner]: { ...ownerEntry, ...snapshot } }
+}
+
+export function planViewSwitch(state, libraryId, currentSettings) {
+  if (!state.owner) {
+    const saved = state.libraries[libraryId] || {}
+    const settingsUpdate = Object.fromEntries(VIEW_SETTINGS.filter((key) => key in saved).map((key) => [key, saved[key]]))
+    // Another account's series/author filter would show an empty shelf here
+    if (state.resetSettings && !('mobileFilterBy' in settingsUpdate)) settingsUpdate.mobileFilterBy = 'all'
+    // First run with this memory: the current sort/filter are taken as the first fetched library's own
+    return { state: { owner: libraryId, libraries: state.libraries }, settingsUpdate: Object.keys(settingsUpdate).length ? settingsUpdate : null }
+  }
+  if (state.owner === libraryId) return { state, settingsUpdate: null }
+
+  const libraries = snapshotOwner(state, currentSettings)
 
   const saved = state.libraries[libraryId] || {}
   const settingsUpdate = Object.fromEntries(VIEW_SETTINGS.filter((key) => key in saved).map((key) => [key, saved[key]]))
@@ -86,4 +97,52 @@ export function planViewSwitch(state, libraryId, currentSettings) {
 export function otherLibraryId(libraries, currentId) {
   if (!Array.isArray(libraries) || libraries.length !== 2) return null
   return libraries.find((library) => library.id !== currentId)?.id || null
+}
+
+const hasViewContent = (state) => !!state && (!!state.owner || Object.keys(state.libraries || {}).length > 0)
+
+// One memory per account: the saved server connection plus the user on it. The connection id tells servers (and a saved
+// connection added again) apart, the user id tells accounts on the same server apart. Without both there is no memory.
+export function viewScopeKey(serverConnectionConfigId, userId) {
+  return isNonEmptyString(serverConnectionConfigId) && isNonEmptyString(userId) ? `${serverConnectionConfigId}|${userId}` : null
+}
+
+// Stored form: { version: 2, scopes: { [scopeKey]: viewState } }; anything invalid is dropped
+export function parseLibraryViewScopes(raw) {
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch (error) {
+    return {}
+  }
+  const scopes = {}
+  if (isObject(parsed) && parsed.version === 2 && isObject(parsed.scopes)) {
+    for (const [scope, entry] of Object.entries(parsed.scopes)) {
+      const state = isObject(entry) ? parseLibraryViewState(JSON.stringify(entry)) : emptyViewState()
+      if (scope && hasViewContent(state)) scopes[scope] = state
+    }
+  }
+  return scopes
+}
+
+// What is written: every other account's memory as it was, and the active one's current memory
+export function serializeLibraryViewScopes(scopes, activeScope, viewState) {
+  const all = { ...scopes }
+  if (activeScope && hasViewContent(viewState)) all[activeScope] = { owner: viewState.owner, libraries: viewState.libraries }
+  return JSON.stringify({ version: 2, scopes: all })
+}
+
+// Another account (or none) becomes active. The account that is left keeps what it showed (the owner library's sort/filter
+// are snapshotted) and no longer owns the global settings; the new account gets its own memory. `legacy` is the unscoped
+// memory of the first build with this feature: it goes to the new account only when `claimLegacy` says the account is
+// unambiguous, otherwise it is left alone.
+export function activateViewScope({ scopes, scope, viewState }, nextScope, currentSettings, { legacy = null, claimLegacy = false } = {}) {
+  const next = { ...scopes }
+  const leaving = !!scope && hasViewContent(viewState)
+  if (leaving) next[scope] = { owner: null, libraries: viewState.owner ? snapshotOwner(viewState, currentSettings) : viewState.libraries }
+  if (!nextScope) return { scopes: next, scope: null, viewState: emptyViewState(), legacyClaimed: false }
+  const known = next[nextScope]
+  if (known) return { scopes: next, scope: nextScope, viewState: scope ? { ...known, resetSettings: true } : known, legacyClaimed: false }
+  if (claimLegacy && hasViewContent(legacy)) return { scopes: next, scope: nextScope, viewState: { owner: legacy.owner, libraries: legacy.libraries }, legacyClaimed: true }
+  return { scopes: next, scope: nextScope, viewState: scope ? { ...emptyViewState(), resetSettings: true } : emptyViewState(), legacyClaimed: false }
 }

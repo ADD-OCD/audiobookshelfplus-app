@@ -1,5 +1,5 @@
 import VueRouter from 'vue-router'
-import { bookshelfTabs, planViewSwitch, recordTab, restoreTab } from '@/utils/libraryViewState'
+import { activateViewScope, bookshelfTabs, planViewSwitch, recordTab, restoreTab, serializeLibraryViewScopes, viewScopeKey } from '@/utils/libraryViewState'
 const { BookCoverAspectRatio } = require('../plugins/constants')
 
 export const state = () => ({
@@ -11,7 +11,12 @@ export const state = () => ({
   filterData: null,
   numUserPlaylists: 0,
   ereaderDevices: [],
+  // The memory of the active account (viewScope); the others wait in viewScopes. legacyViewState is the unscoped memory
+  // of the first build with this feature, until one account has taken it over
   viewState: { owner: null, libraries: {} },
+  viewScopes: {},
+  viewScope: null,
+  legacyViewState: null,
   viewStateLoaded: false,
   switching: false,
   tabRecordingSuspended: false,
@@ -60,6 +65,8 @@ export const actions = {
       console.error('libraries/fetch - User not set')
       return false
     }
+    // Before the request: the memory of the account that is signed in (nothing happens when it is already active)
+    dispatch('activateViewScope')
 
     return this.$nativeHttp
       .get(`/api/libraries/${libraryId}?include=filterdata`)
@@ -80,7 +87,7 @@ export const actions = {
         // Library, owner and settings change in the same tick (updateUserSettings commits before its first await), so
         // neither an overlapping fetch nor a bookshelf reloading on user-settings sees them out of step
         let settingsApplied = null
-        if (state.viewStateLoaded) {
+        if (state.viewStateLoaded && state.viewScope) {
           const plan = planViewSwitch(state.viewState, libraryId, rootState.user.settings)
           if (plan.state !== state.viewState) {
             commit('setViewState', plan.state)
@@ -159,20 +166,40 @@ export const actions = {
     if (target !== '/bookshelf') await replaceRoute(this.$router, target)
   },
   rememberTab({ state, commit, dispatch }, routeName) {
-    if (!state.viewStateLoaded || !state.currentLibraryId) return
+    if (!state.viewStateLoaded || !state.viewScope || !state.currentLibraryId) return
     const next = recordTab(state.viewState, state.currentLibraryId, routeName)
     if (!next) return
     commit('setViewState', next)
     dispatch('saveViewState')
   },
   async loadViewState({ commit }) {
-    commit('setViewState', await this.$localStore.getLibraryViewState())
+    const [scopes, legacy] = await Promise.all([this.$localStore.getLibraryViewScopes(), this.$localStore.getLegacyLibraryViewState()])
     commit('setViewStateLoaded', true)
+    commit('setViewScopes', scopes)
+    commit('setLegacyViewState', legacy.owner || Object.keys(legacy.libraries).length ? legacy : null)
+  },
+  // Makes the memory of the signed-in account the active one. Synchronous on purpose (no await): fetch calls it in the same
+  // tick that it applies a library's view.
+  activateViewScope({ state, commit, dispatch, rootState }) {
+    if (!state.viewStateLoaded) return
+    const scope = viewScopeKey(rootState.user.serverConnectionConfig?.id, rootState.user.user?.id)
+    if (scope === state.viewScope) return
+    // The legacy memory goes to an account only when it is the only saved connection on this device
+    const claimLegacy = !!scope && !!state.legacyViewState && rootState.deviceData?.serverConnectionConfigs?.length === 1
+    const next = activateViewScope({ scopes: state.viewScopes, scope: state.viewScope, viewState: state.viewState }, scope, rootState.user.settings, { legacy: state.legacyViewState, claimLegacy })
+    commit('setViewScopes', next.scopes)
+    commit('setViewScope', next.scope)
+    commit('setViewState', next.viewState)
+    if (next.legacyClaimed) {
+      commit('setLegacyViewState', null)
+      this.$localStore.removeLegacyLibraryViewState()
+    }
+    dispatch('saveViewState')
   },
   // Writes only after loading, so an early write can never overwrite the saved memory
   async saveViewState({ state }) {
     if (!state.viewStateLoaded) return
-    await this.$localStore.setLibraryViewState(state.viewState)
+    await this.$localStore.setLibraryViewScopes(serializeLibraryViewScopes(state.viewScopes, state.viewScope, state.viewState))
   }
 }
 
@@ -260,6 +287,15 @@ export const mutations = {
   },
   setViewState(state, viewState) {
     state.viewState = viewState
+  },
+  setViewScopes(state, val) {
+    state.viewScopes = val
+  },
+  setViewScope(state, val) {
+    state.viewScope = val
+  },
+  setLegacyViewState(state, val) {
+    state.legacyViewState = val
   },
   setViewStateLoaded(state, val) {
     state.viewStateLoaded = val
