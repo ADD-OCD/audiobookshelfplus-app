@@ -1,5 +1,6 @@
 package app.absplus.android
 
+import app.absplus.android.media.readSavedPlaybackRate
 import app.absplus.android.diagnostics.DLog
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -49,10 +50,13 @@ class MediaPlayerWidget : AppWidgetProvider() {
  * @param showControls true when there is a live session or a resumable one (Play restores it);
  *   false only when nothing can be played, e.g. after the user explicitly closed playback
  * @param positionMs / durationMs the known position and length for the progress snapshot, when available
+ * @param speed the live player's speed for the snapshot times, when there is one
  */
-internal fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int, playbackSession: PlaybackSession?, isPlaying: Boolean, showControls: Boolean, positionMs: Long? = null, durationMs: Long? = null) {
+internal fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int, playbackSession: PlaybackSession?, isPlaying: Boolean, showControls: Boolean, positionMs: Long? = null, durationMs: Long? = null, speed: Float? = null) {
   DLog.i("MediaPlayerWidget", "updateAppWidget ${playbackSession?.displayTitle ?: "No Title"} isPlaying=$isPlaying showControls=$showControls")
   val position = positionMs ?: playbackSession?.let { (it.currentTime * 1000).toLong() }
   val duration = durationMs ?: playbackSession?.let { (it.duration * 1000).toLong() }
-  WidgetRenderer.update(context, appWidgetManager, appWidgetId, WidgetRenderer.State(playbackSession, isPlaying, showControls, position, duration))
+  // Without a live player, the speed the user last chose
+  val rate = speed ?: readSavedPlaybackRate(context) ?: 1f
+  WidgetRenderer.update(context, appWidgetManager, appWidgetId, WidgetRenderer.State(playbackSession, isPlaying, showControls, position, duration, rate))
 }

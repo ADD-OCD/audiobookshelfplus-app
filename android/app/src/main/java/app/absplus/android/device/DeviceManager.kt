@@ -277,6 +277,7 @@ object DeviceManager {
                 // Progress snapshot for the widget (read only; never throws into the player)
                 val positionMs = if (hasLiveSession) sampledPositionMs ?: runCatching { pns.getCurrentTime() }.getOrNull() else null
                 val durationMs = if (hasLiveSession) runCatching { pns.getDuration() }.getOrNull()?.takeIf { it > 0 } else null
+                val speed = if (hasLiveSession) runCatching { pns.currentPlayer.playbackParameters.speed }.getOrNull() else null
 
                 for (widgetId in ids) {
                   updateAppWidget(
@@ -287,7 +288,8 @@ object DeviceManager {
                           isPlaying,
                           showControls,
                           positionMs,
-                          durationMs
+                          durationMs,
+                          speed
                   )
                 }
               }

@@ -410,8 +410,10 @@ test('Gate F freeze: standard widget layouts, sizing, artwork planning, provider
     // RICE customization: the renderer reads WidgetTheme.look() (layout family + optional RICE palette) instead of
     // WidgetTheme.current() and calls WidgetPaint.apply() once after building; WidgetPaint does nothing without a RICE
     // palette, so built-in widgets render exactly as before. Layouts, ids, actions, sizing and artwork are unchanged.
-    'widget/WidgetRenderer.kt': '82402bced6e5d820b50120dc7e6ad18acaca3ab2f336d31d3ace298a8b0be2d0',
-    'MediaPlayerWidget.kt': '95e635491a752cb9fa734a052fdca99784cd183a9d20da503c845f3974917341'
+    // Speed-aware time: the state carries the playback speed and the snapshot draws listening time at it (the live
+    // player's speed, else the saved one); layouts, ids, actions, sizing and artwork are unchanged.
+    'widget/WidgetRenderer.kt': 'e77fcd394acb83d795000b9244a2da294802fdc5e98d664d61fa11e1c134843a',
+    'MediaPlayerWidget.kt': '526a3826a6760ad4082820aca45474153b53516fe24b6e0aeb6d2a408db44c94'
   }
   for (const [file, hash] of Object.entries(code)) assert.equal(await sha256(WIDGET_SRC + file), hash, `${file} changed`)
 })
